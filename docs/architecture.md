@@ -50,7 +50,7 @@ The resident monitoring agent exposes no command or update interface. The gatewa
 retains the outbound authenticated connection to central Sherlock. Node identity,
 collector identity and gateway server identity have separate roles;
 [enrollment and certificate relay](reference/telemetry/node-identity.md) describe
-current manual steps and the resident-mode relay limitation.
+the manual steps and strict source-mode checks.
 
 GPU/network/event/optical collection and independent heartbeats remain resident
 source work. BMC credentials belong at the head gateway; agent presence does not

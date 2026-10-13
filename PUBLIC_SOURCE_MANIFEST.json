@@ -141,8 +141,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-admin/telemetry.go",
-      "sha256": "2edeeb58e60e0700487baad893074962bd6e54b7ee8023ce9bcfa06f715b389b",
-      "size": 8752
+      "sha256": "45eacc8c6e61552f0fe2591ff655280aa851111f846ee39ce27142b7330a7255",
+      "size": 8747
     },
     {
       "executable": false,
@@ -825,14 +825,14 @@
     {
       "executable": false,
       "path": "docs/README.md",
-      "sha256": "83e24a1e894124049265a128a156316ee5ede7cb36252e73f71795bf04b2c923",
-      "size": 2379
+      "sha256": "6d47bda7f98764a42c567480460e2817534a287e750aff38461ddd1415b5de2e",
+      "size": 2472
     },
     {
       "executable": false,
       "path": "docs/architecture.md",
-      "sha256": "18fa83ab4708d8042800ea909d84faa0e51cb0addad1dfd95621ce6c8e97f761",
-      "size": 3516
+      "sha256": "5b2be5a177c1fbf4312a06d30cebda42a4f21a0769ea568fab095854919f5485",
+      "size": 3503
     },
     {
       "executable": false,
@@ -854,6 +854,12 @@
     },
     {
       "executable": false,
+      "path": "docs/guides/resident-enrollment.md",
+      "sha256": "791ef33e7e22519f69519de0f44cf57213a697a79704937ae5e37cac814532c0",
+      "size": 6595
+    },
+    {
+      "executable": false,
       "path": "docs/guides/source-export.md",
       "sha256": "9ca236682d29270fe4d79bdf9dff5a143bdf3d755d5e6357f71dfc027cd7fa38",
       "size": 4839
@@ -867,14 +873,14 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "3ebda0acaed037ba87830f19082c04d4f30916fe8de14ab398cfff955a958eaa",
-      "size": 5850
+      "sha256": "aab1953334bbf9496dd4f71455c47665d4df68031c4c4c4cc91eb9fd60266086",
+      "size": 6101
     },
     {
       "executable": false,
       "path": "docs/reference/telemetry/gateway-runtime.md",
-      "sha256": "19496aabc0911459918c5fc7a5896d2eab777162d79d688bca59c494ab10dfe5",
-      "size": 4444
+      "sha256": "caa6c12af6f74a9bb1b7f40bc9005b823b1b769525411d12abf79b7e1cdc14dc",
+      "size": 4416
     },
     {
       "executable": false,
@@ -885,8 +891,8 @@
     {
       "executable": false,
       "path": "docs/reference/telemetry/node-identity.md",
-      "sha256": "84ec3077e988ce9e01e1e76006fb1d7e2657e319a393b81db55a19297e04f1ec",
-      "size": 6491
+      "sha256": "c5df50edfbe74e18fc1627b017d4764de3ac86400c44484a727cb466f6db5398",
+      "size": 6569
     },
     {
       "executable": false,
@@ -3549,8 +3555,8 @@
     {
       "executable": false,
       "path": "internal/gatewaytelemetry/identity.go",
-      "sha256": "4b33ccf6a7b4958d0b6a1ea05b3725f89024726adeb3d70216bc0e5915f3d236",
-      "size": 1750
+      "sha256": "694b2e37fef167fab6d173d9276bfa7bdbb7d6ab83f032ef5efdfe7f21e94604",
+      "size": 1846
     },
     {
       "executable": false,
@@ -3567,8 +3573,8 @@
     {
       "executable": false,
       "path": "internal/gatewaytelemetry/service.go",
-      "sha256": "96a1474f47dbf3b171c02de0ce8f03f56ae3f573e8fb328a0ac91c26ecdec284",
-      "size": 11105
+      "sha256": "e0b93db35b8be43316113e5dbf514d860dc8cc68ebaa9c1eb3f9fbd11ee9812c",
+      "size": 11490
     },
     {
       "executable": false,
@@ -5007,8 +5013,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_flow_integration_test.go",
-      "sha256": "22eb644b354aa0ec79cef7180a0aed11efd2169e4be83551b996ce490df85490",
-      "size": 18030
+      "sha256": "6098364716967003d6b99bacd71ac97c8c0ee312e38359efaf0c045d435a13ad",
+      "size": 24749
     },
     {
       "executable": false,
@@ -6357,8 +6363,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "b6e351e94313b59103f183d4495bc1371c81c21b4ac1bdc589bf7c2ecebf96c6",
-      "size": 3812
+      "sha256": "596b371f829778804415575f4f36e697a326aa0514edaf3c7bab81b0495bb2e6",
+      "size": 3932
     },
     {
       "executable": true,
@@ -6369,8 +6375,8 @@
     {
       "executable": false,
       "path": "scripts/build-telemetry-candidate.py",
-      "sha256": "944f707e2a23c5ef5d65c419b4a697f5e174f8bf6b381b7b05b4d6373a6e9b74",
-      "size": 27614
+      "sha256": "3a8c227629a2732e76945d5d967a0413c6cb4af59dd11a9fc04c5f120b25dcc5",
+      "size": 27656
     },
     {
       "executable": true,

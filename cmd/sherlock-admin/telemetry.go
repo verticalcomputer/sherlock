@@ -33,7 +33,7 @@ enrolled. source_profiles binds declared source IDs; omission retains fixture.v1
 Minting a token approves an exact
 node-generated CSR for authenticated gateway relay; it installs nothing and
 grants no hardware/repair authority. The token is never printed.
-Two key epochs maximum; third rotation requires a future ownership-retirement gate.`
+Two key epochs maximum; another rotation requires proven ownership retirement.`
 
 type telemetryAdminCommand struct {
 	Action, Cluster, Collector, ID, Actor, Path, KeyID, Public string

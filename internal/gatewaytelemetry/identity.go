@@ -19,7 +19,7 @@ func RelayIdentity(ctx context.Context, c ServiceConfig, token string, request n
 	for _, id := range c.EnrollmentIDs {
 		approved = approved || id == request.Scope.EnrollmentID
 	}
-	if !approved || !c.FixtureOnly || c.ProtocolVersion != 1 {
+	if !approved || c.FixtureOnly == c.ResidentSources || c.ProtocolVersion != 1 || request.Scope.ClusterID != c.ClusterID {
 		return zero, telemetry.ErrUnauthorized
 	}
 	ca, _, e := readCertificate(c.NodeCAFile)
@@ -35,7 +35,7 @@ func RelayIdentity(ctx context.Context, c ServiceConfig, token string, request n
 	if e != nil {
 		return zero, e
 	}
-	if nodeidentity.ValidateRequestForGrant(request, grant, time.Now(), true) != nil {
+	if !acceptsGrantSources(c, grant) || nodeidentity.ValidateRequestForGrant(request, grant, time.Now(), true) != nil {
 		return zero, telemetry.ErrUnauthorized
 	}
 	bundle, e := cloud.IssueNodeCertificate(ctx, token, request)

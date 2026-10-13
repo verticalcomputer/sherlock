@@ -81,11 +81,14 @@ token can bind the same CSR/SPKI; current cloud authority is checked and no key
 change is inferred. Renew before expiry and qualify the reload/restart procedure;
 VERIFY_ONLY keys receive no new certificate.
 
-The current `relay-identity` helper requires a `fixture_only` gateway
-configuration: `RelayIdentity` rejects `resident_sources` configuration. This is
-a delivery gap for the Linux mode, not a claim that Linux telemetry replay lacks
-mTLS. Close and test that configuration gap before publishing a Linux enrollment
-procedure. Do not switch modes or reuse credentials as an undocumented workaround. An active TLS key can replay sealed batches
+The `relay-identity` helper accepts exactly one configured mode. Fixture-only
+mode admits only fixture grants; resident mode admits the closed known source
+profiles, including Linux host/root. Both modes check current cloud authority,
+exact CSR/key/enrollment scope and the configured node CA before returning a
+bundle. The [manual enrollment guide](../../guides/resident-enrollment.md) explains
+operator steps, retry and import. Neither relay nor import starts a service.
+
+An active TLS key can replay sealed batches
 signed by a separately authorized old key only for its exact known old session.
 Compromise revocation denies ingress and retrieval before deduplication. No
 automatic updates, commands, workload actions or repair authority are introduced.

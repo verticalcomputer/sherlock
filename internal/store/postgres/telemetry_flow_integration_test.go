@@ -11,14 +11,17 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -26,23 +29,35 @@ import (
 
 	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
 	"github.com/verticalcomputer/sherlock/internal/collectorruntime"
+	"github.com/verticalcomputer/sherlock/internal/gatewaytelemetry"
 	"github.com/verticalcomputer/sherlock/internal/nodegateway"
+	"github.com/verticalcomputer/sherlock/internal/nodeidentity"
 	"github.com/verticalcomputer/sherlock/internal/platform"
 	storepg "github.com/verticalcomputer/sherlock/internal/store/postgres"
 	"github.com/verticalcomputer/sherlock/internal/telemetry"
 	"github.com/verticalcomputer/sherlock/internal/telemetryjournal"
 )
 
-// This is synthetic preconfigured PKI, not node bootstrap/CSR issuance or an
-// installation candidate. Both TLS boundaries, durable journals, collector
-// identity authentication and cloud persistence are actual implementations.
+// Synthetic trust roots exercise actual protected CSR issuance/import, both TLS
+// boundaries, durable journals and cloud persistence. This is not installation
+// or native host/workload qualification.
 func TestTelemetryActualTLSJournalsToCloudPersistence(t *testing.T) {
 	for _, profile := range []string{telemetry.FixtureProfile, telemetry.LinuxHostProfile, telemetry.LinuxRootProfile} {
 		t.Run(profile, func(t *testing.T) { telemetryTLSProfileFlow(t, profile) })
 	}
 }
 func telemetryTLSProfileFlow(t *testing.T, profile string) {
-	f := newTelemetryFixture(t)
+	f, initialRequest, nodeIssuer := nodeBootstrapFixture(t)
+	// Obtain the independently configured synthetic node CA, not a trust anchor
+	// learned from a relay response. This local candidate is never admitted.
+	initial, err := nodeIssuer.Issue(initialRequest, time.Now(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeRoots := x509.NewCertPool()
+	if !nodeRoots.AppendCertsFromPEM([]byte(initial.NodeCAPEM)) {
+		t.Fatal("node root")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	caPEM, caKeyPEM := m15TestCA(t, time.Now())
@@ -52,7 +67,7 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 	}
 	gatewayKey, _ := m15CollectorCSR(t)
 	gatewayIdentity := flowLeaf(t, caPEM, caKeyPEM, gatewayKey, nil, true)
-	serverTLS, gatewayPin, err := nodegateway.ServerTLSConfig(gatewayIdentity, roots)
+	serverTLS, gatewayPin, err := nodegateway.ServerTLSConfig(gatewayIdentity, nodeRoots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +77,15 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 		t.Fatal(err)
 	}
 	f.request.EnrollmentID += "-flow"
+	identityDir := t.TempDir()
+	if err := os.Chmod(identityDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	request, err := nodeidentity.CreateIdentityRequest(identityDir, nodeidentity.Scope{ClusterID: string(f.request.ClusterID), NodeID: string(f.request.NodeID), EnrollmentID: f.request.EnrollmentID, KeyID: f.request.KeyID})
+	if err != nil {
+		t.Fatal("local CSR", err)
+	}
+	f.request.PublicKeyBase64 = request.PublicKeyBase64
 	f.request.GatewaySPKISHA256 = gatewayPin
 	if profile != telemetry.FixtureProfile {
 		f.request.SourceProfiles = map[string]string{string(f.request.SourceIDs[0]): profile}
@@ -94,6 +118,10 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	controlServerKey, _ := m15CollectorCSR(t)
+	controlServerIdentity := flowLeaf(t, caPEM, caKeyPEM, controlServerKey, nil, true)
+	var dropIdentity atomic.Bool
+	dropIdentity.Store(true)
 	var dropCloud atomic.Bool
 	dropCloud.Store(true)
 	startCloud := func() (*httptest.Server, *collectorruntime.TelemetryClient) {
@@ -105,8 +133,11 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 		if e = transport.ConfigureTelemetry(storepg.NewTelemetryStore(f.pool)); e != nil {
 			t.Fatal(e)
 		}
-		server := httptest.NewUnstartedServer(flowLostResponse(transport, "/collector/telemetry/v1/batches", &dropCloud))
-		server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}
+		if e = transport.ConfigureNodeIdentity(storepg.NewTelemetryStore(f.pool), nodeIssuer); e != nil {
+			t.Fatal(e)
+		}
+		server := httptest.NewUnstartedServer(flowLostResponse(flowLostResponse(transport, "/collector/telemetry/v1/node-certificates", &dropIdentity), "/collector/telemetry/v1/batches", &dropCloud))
+		server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots, Certificates: []tls.Certificate{controlServerIdentity}}
 		server.StartTLS()
 		httpClient := server.Client()
 		httpTransport := httpClient.Transport.(*http.Transport).Clone()
@@ -142,11 +173,103 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 	if err != nil {
 		t.Fatal("authenticated cloud grant", err)
 	}
-	uri, err := nodegateway.NodeIdentityURI(string(f.request.ClusterID), string(f.request.NodeID), f.request.EnrollmentID, f.request.KeyID)
+	// Relay with the actual selected gateway mode. Neither node listener nor
+	// journal paths are supplied: identity relay must not need/open either.
+	files := t.TempDir()
+	write := func(name string, body []byte) string {
+		path := filepath.Join(files, name)
+		if err := os.WriteFile(path, body, 0600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	cloudPin := sha256.Sum256(cloud.Certificate().RawSubjectPublicKeyInfo)
+	relayConfig := gatewaytelemetry.ServiceConfig{ProtocolVersion: 1, FixtureOnly: profile == telemetry.FixtureProfile, ResidentSources: profile != telemetry.FixtureProfile, ClusterID: grant.ClusterID, CollectorID: grant.GatewayCollectorID, EnrollmentIDs: []string{grant.EnrollmentID}, NodeCAFile: write("node-ca.pem", []byte(initial.NodeCAPEM)), ControlURL: cloud.URL, ControlCAFile: write("control-ca.pem", caPEM), ControlSPKISHA256: hex.EncodeToString(cloudPin[:]), CollectorCertificateFile: write("collector.pem", issued.CertificatePEM), CollectorKeyFile: write("collector-key.pem", pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})), AuthMode: "direct_mtls"}
+	token := mintBootstrap(t, f, request)
+	for _, invalid := range []gatewaytelemetry.ServiceConfig{
+		func() gatewaytelemetry.ServiceConfig {
+			c := relayConfig
+			c.FixtureOnly = false
+			c.ResidentSources = false
+			return c
+		}(),
+		func() gatewaytelemetry.ServiceConfig {
+			c := relayConfig
+			c.FixtureOnly = true
+			c.ResidentSources = true
+			return c
+		}(),
+		func() gatewaytelemetry.ServiceConfig {
+			c := relayConfig
+			c.EnrollmentIDs = []string{"foreign"}
+			return c
+		}(),
+		func() gatewaytelemetry.ServiceConfig { c := relayConfig; c.ClusterID = "foreign"; return c }(),
+	} {
+		if _, err := gatewaytelemetry.RelayIdentity(ctx, invalid, token, request); !errors.Is(err, telemetry.ErrUnauthorized) {
+			t.Fatal("relay scope/mode accepted", err)
+		}
+	}
+	if profile != telemetry.FixtureProfile {
+		fixtureOnly := relayConfig
+		fixtureOnly.FixtureOnly = true
+		fixtureOnly.ResidentSources = false
+		if _, err := gatewaytelemetry.RelayIdentity(ctx, fixtureOnly, token, request); !errors.Is(err, telemetry.ErrUnauthorized) {
+			t.Fatal("fixture relay admitted Linux source", err)
+		}
+	}
+	for _, badRequest := range []nodeidentity.Request{
+		func() nodeidentity.Request { r := request; r.Scope.NodeID = "foreign-node"; return r }(),
+		func() nodeidentity.Request { r := request; r.CSRSHA256 = fmt.Sprintf("%064x", 0); return r }(),
+	} {
+		if _, err := gatewaytelemetry.RelayIdentity(ctx, relayConfig, token, badRequest); !errors.Is(err, telemetry.ErrUnauthorized) {
+			t.Fatal("foreign/tampered request admitted", err)
+		}
+	}
+	badPin := relayConfig
+	badPin.ControlSPKISHA256 = fmt.Sprintf("%064x", 0)
+	if _, err := gatewaytelemetry.RelayIdentity(ctx, badPin, token, request); !errors.Is(err, telemetry.ErrUnavailable) {
+		t.Fatal("incorrect control pin admitted", err)
+	}
+	var beforeIssuance int
+	if err = f.pool.QueryRow(ctx, `SELECT count(*) FROM gp06f_node_identity_audit WHERE enrollment_id=$1 AND action='CERTIFICATE_ISSUED'`, grant.EnrollmentID).Scan(&beforeIssuance); err != nil || beforeIssuance != 0 {
+		t.Fatal("denial consumed token", err, beforeIssuance)
+	}
+	if _, err := gatewaytelemetry.RelayIdentity(ctx, relayConfig, token, request); !errors.Is(err, telemetry.ErrUnavailable) {
+		t.Fatal("issuance response loss not injected", err)
+	}
+	// Restart cloud transport/store after committed issuance and lost response.
+	cloud.Close()
+	cloud, cloudClient = startCloud()
+	relayConfig.ControlURL = cloud.URL
+	bundle, err := gatewaytelemetry.RelayIdentity(ctx, relayConfig, token, request)
+	if err != nil {
+		t.Fatal("resident certificate relay replay", err)
+	}
+	again, err := gatewaytelemetry.RelayIdentity(ctx, relayConfig, token, request)
+	if err != nil || bundle != again {
+		t.Fatal("issuance replay changed", err)
+	}
+	var issuanceCount int
+	if err = f.pool.QueryRow(ctx, `SELECT count(*) FROM gp06f_node_identity_audit WHERE enrollment_id=$1 AND action='CERTIFICATE_ISSUED'`, grant.EnrollmentID).Scan(&issuanceCount); err != nil || issuanceCount != 1 {
+		t.Fatal("issuance not atomic", err, issuanceCount)
+	}
+	if err = nodeidentity.ImportIdentity(identityDir, bundle, nodeIssuer.NodeCAFingerprint(), time.Now()); err != nil {
+		t.Fatal("import issued identity", err)
+	}
+	loaded, nodePrivate, err := nodeidentity.LoadIdentity(identityDir, nodeIssuer.NodeCAFingerprint(), time.Now())
+	if err != nil || loaded != bundle {
+		t.Fatal("load issued identity", err)
+	}
+	f.private = nodePrivate
+	nodeKeyDER, err := x509.MarshalPKCS8PrivateKey(nodePrivate)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodeIdentity := flowLeaf(t, caPEM, caKeyPEM, f.private, uri, false)
+	nodeIdentity, err := tls.X509KeyPair([]byte(bundle.CertificatePEM+bundle.NodeCAPEM), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: nodeKeyDER}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	localVerifier := flowLocalAdmission{grant: grant}
 	scope := telemetryjournal.Scope{ClusterID: grant.ClusterID, NodeID: grant.NodeID, EnrollmentID: grant.EnrollmentID}
 	root := t.TempDir()
@@ -292,8 +415,18 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 			}
 		}
 	}
-	foreignURI, _ := nodegateway.NodeIdentityURI(grant.ClusterID, "foreign-node", grant.EnrollmentID, f.request.KeyID)
-	foreignIdentity := flowLeaf(t, caPEM, caKeyPEM, f.private, foreignURI, false)
+	foreignRequest, err := nodeidentity.NewRequest(nodeidentity.Scope{ClusterID: grant.ClusterID, NodeID: "foreign-node", EnrollmentID: grant.EnrollmentID, KeyID: f.request.KeyID}, f.private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignBundle, err := nodeIssuer.Issue(foreignRequest, time.Now(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignIdentity, err := tls.X509KeyPair([]byte(foreignBundle.CertificatePEM+foreignBundle.NodeCAPEM), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: nodeKeyDER}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	foreignClient, err := nodegateway.NewClient(nodeServer.URL, foreignIdentity, roots, gatewayPin)
 	if err != nil {
 		t.Fatal(err)
@@ -320,7 +453,14 @@ func telemetryTLSProfileFlow(t *testing.T, profile string) {
 	if err = f.pool.QueryRow(ctx, `SELECT count(*) FROM gp06f_telemetry_batches WHERE enrollment_id=$1`, f.request.EnrollmentID).Scan(&batches); err != nil || batches != 1 {
 		t.Fatal("replay/foreign node duplicated history", err)
 	}
-	t.Log("synthetic preconfigured PKI: NODE durability -> real pinned TLS1.3 gateway -> GATEWAY durability -> real collector mTLS/fingerprint -> CLOUD durability -> durable ownership transfer; both lost acknowledgements/restarts preserved exact receipts")
+	relayConfig.ControlURL = cloud.URL
+	if _, err = f.store.RevokeEnrollment(ctx, f.request.ClusterID, f.request.EnrollmentID, 1, "synthetic-flow-operator"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = gatewaytelemetry.RelayIdentity(ctx, relayConfig, token, request); !errors.Is(err, telemetry.ErrUnauthorized) {
+		t.Fatal("revoked issuance replay admitted", err)
+	}
+	t.Log("synthetic roots with real CSR/token/relay/import and lost issuance response: NODE durability -> real pinned TLS1.3 gateway -> GATEWAY durability -> real collector mTLS/fingerprint -> CLOUD durability -> durable ownership transfer; both lost acknowledgements/restarts preserved exact receipts")
 }
 
 func flowLostResponse(handler http.Handler, path string, drop *atomic.Bool) http.Handler {

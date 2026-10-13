@@ -20,7 +20,7 @@ identity, TLS 1.3 mTLS and the approved gateway SPKI. It exposes session and bat
 routes plus three retirement routes (capabilities, releases and completions).
 There is no certificate-renewal listener, remote command, SSH collection, repair
 or update endpoint. Certificate relay is a separate local command; see its
-[current configuration limitation](node-identity.md#files-renewal-and-failure-behavior).
+[manual identity flow](../../guides/resident-enrollment.md).
 
 Startup fetches current grants over the authenticated cloud path before opening
 per-node journals; files cannot restore grant authority. Each journal uses its
