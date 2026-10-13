@@ -63,6 +63,15 @@
       "summary": "Linux host/root profiles, permissions, failure semantics and open gates."
     },
     {
+      "path": "docs/guides/resident-enrollment.md",
+      "kind": "reference",
+      "topics": [
+        "agent",
+        "release"
+      ],
+      "summary": "Manual CSR enrollment, protected token relay, node import, renewal and retry."
+    },
+    {
       "path": "docs/reference/telemetry/overview.md",
       "kind": "contract",
       "topics": [

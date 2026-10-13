@@ -67,6 +67,21 @@ func LoadConfig(path string) (ServiceConfig, error) {
 	}
 	return c, nil
 }
+
+// acceptsGrantSources keeps certificate relay and journal admission within the
+// same explicit source mode. It does not replace current grant validation.
+func acceptsGrantSources(c ServiceConfig, grant telemetry.Grant) bool {
+	if c.FixtureOnly == c.ResidentSources || len(grant.Sources) == 0 {
+		return false
+	}
+	for _, source := range grant.Sources {
+		if !telemetry.KnownProfile(source.ProfileID) || c.FixtureOnly && source.ProfileID != telemetry.FixtureProfile {
+			return false
+		}
+	}
+	return true
+}
+
 func readCertificate(path string) (*x509.Certificate, *x509.CertPool, error) {
 	body, e := telemetrylocal.ReadProtected(path, 64<<10)
 	if e != nil {
@@ -224,14 +239,11 @@ func Serve(ctx context.Context, c ServiceConfig, observer Observer) error {
 		if e != nil {
 			return e
 		}
-		if grant.GatewaySPKISHA256 != pin {
+		if grant.GatewaySPKISHA256 != pin || !acceptsGrantSources(c, grant) {
 			return telemetry.ErrUnauthorized
 		}
 		sources := make([]string, 0, len(grant.Sources))
 		for _, source := range grant.Sources {
-			if !telemetry.KnownProfile(source.ProfileID) || c.FixtureOnly && source.ProfileID != telemetry.FixtureProfile {
-				return telemetry.ErrUnauthorized
-			}
 			sources = append(sources, source.SourceID)
 		}
 		q, e := telemetryjournal.Open(filepath.Join(c.Root, id), telemetryjournal.Options{Role: telemetryjournal.Gateway, Scope: telemetryjournal.Scope{ClusterID: grant.ClusterID, NodeID: grant.NodeID, EnrollmentID: id}, Limits: telemetryjournal.GatewayLimits(), Verifier: admission, SessionVerifier: admission, ReleaseVerifier: admission, PublicKeys: grant.Keys, RequireSessions: true, GatewayBudget: budget, SourceIDs: sources, Now: time.Now})

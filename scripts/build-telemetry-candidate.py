@@ -27,6 +27,7 @@ CONTRACTS = (
     "docs/reference/telemetry/gateway-runtime.md",
     "docs/reference/telemetry/ownership-retirement.md",
     "docs/guides/release-review.md",
+    "docs/guides/resident-enrollment.md",
     "docs/reference/telemetry/linux-sources.md",
 )
 LEGAL_FILES = ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")

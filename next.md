@@ -12,7 +12,7 @@ Statements below distinguish source behavior from release and live qualification
 | Linux collection | Fixed proc reads and local root statistics preserve values, support and missing/error states. [Collector](internal/linuxtelemetry/collect.go); [runtime replay tests](internal/nodetelemetry/linux_test.go). |
 | Durable transport | Node/gateway journals, current enrollment authority, receipt replay and ownership retirement are implemented. [Journal handshake](internal/telemetryjournal/release_handshake.go); [isolated flow tests](internal/store/postgres/telemetry_flow_integration_test.go). |
 | History versus health | Resident batches reach scoped [intake](internal/store/postgres/telemetry_intake.go) and [status readback](internal/store/postgres/telemetry_read.go). They do not feed ordinary metric projections or health evaluators. Existing collector monitoring is a separate path. |
-| Identity | Operator enrollment, CSR-bound issuance, relay and node import exist. [Relay](internal/gatewaytelemetry/identity.go) currently requires a fixture-mode configuration; resident-mode identity delivery needs correction and regression coverage. Automatic certificate renewal is absent. |
+| Identity | Operator enrollment, CSR-bound issuance, relay and node import exist. [Relay](internal/gatewaytelemetry/identity.go) supports explicit fixture/resident modes with source-grant checks. The isolated flow tests cover CSR issuance, lost-response/restart replay, protected import and resulting telemetry mTLS. Automatic certificate renewal is absent. |
 | Cadence and limits | The node collection loop defaults to 30 seconds and uses a soft Go memory target. Independent heartbeat and GPU/network scheduling remain planned; no OS-enforced workload-overhead guarantee is established. [Runtime reference](docs/reference/telemetry/node-runtime.md). |
 
 ## Release state
@@ -28,9 +28,9 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. Correct and test resident-mode identity relay before documenting an end-to-end
-   Linux enrollment flow. Preserve node-bound bootstrap, current authority and
-   explicit source-mode separation.
+1. Complete protected review of the resident identity flow and its exact
+   source/build package. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
+   describes the implemented steps; installation and native canary remain separate.
 2. Continue exact signed-release preparation and remaining resident GPU/network
    adapters, GP-06g events/optics and gateway BMC qualification under the existing
    GP sequence. Keep each source's permissions and failure semantics explicit.

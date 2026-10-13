@@ -10,6 +10,7 @@ checkpoint order; it is not a deployment or acceptance record.
 | Build, test or contribute | [Repository README](../README.md), [contributing](../CONTRIBUTING.md) |
 | Find reliable context or maintain docs | [Development and knowledge](development.md) |
 | Understand the resident agent's permissions | [Resident design](reference/telemetry/overview.md), [Linux sources](reference/telemetry/linux-sources.md) |
+| Enroll or renew a resident identity | [Manual enrollment](guides/resident-enrollment.md) |
 | Integrate telemetry transport | [Protocol](reference/telemetry/protocol.md), [node identity](reference/telemetry/node-identity.md) |
 | Review durability, replay or resource bounds | [Node runtime](reference/telemetry/node-runtime.md), [gateway runtime](reference/telemetry/gateway-runtime.md), [ownership retirement](reference/telemetry/ownership-retirement.md) |
 | Prepare or verify a release | [Candidate review](guides/release-review.md), [signing and verification](guides/release-signing.md) |
