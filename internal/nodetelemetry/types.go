@@ -30,10 +30,15 @@ type LocalScope struct {
 	EnrollmentID        string              `json:"enrollment_id"`
 	InventoryRevisionID string              `json:"inventory_revision_id"`
 	SourceIDs           []string            `json:"source_ids"`
+	SourceProfiles      map[string]string   `json:"source_profiles,omitempty"`
 	AgentVersion        string              `json:"agent_version"`
 	BuildSHA256         string              `json:"build_sha256"`
 	GatewaySPKISHA256   string              `json:"gateway_spki_sha256"`
 	Keys                []telemetry.NodeKey `json:"keys"`
+}
+
+type LinuxCollector interface {
+	Collect(context.Context, string, string, string, string, string, time.Time) (telemetry.SourceFrame, error)
 }
 
 type Gateway interface {
@@ -58,6 +63,8 @@ type Config struct {
 	Interval     time.Duration
 	Now          func() time.Time
 	BootID       func() (string, error)
+	// LinuxSources implements the closed Linux profiles; nil forbids their startup.
+	LinuxSources LinuxCollector
 	// Report receives fixed safe failure codes, never source bodies or key data.
 	Report func(error)
 	limits *telemetryjournal.Limits

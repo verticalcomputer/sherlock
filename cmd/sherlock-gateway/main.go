@@ -33,7 +33,7 @@ func (o observer) Delivery(id, code string) {
 
 const usage = `sherlock-gateway --config <absolute-protected-file> --fixture
 sherlock-gateway relay-identity --config <absolute-protected-file> --request <protected-public-csr-json> --token-file <protected-token> --bundle-output <new-protected-public-bundle>
-Synthetic fixture.v1 only. No service installation or command interface. Tokens and private keys are never printed.`
+Use --fixture for fixture-only scope, or --telemetry with resident_sources=true. No service installation or command interface. Tokens and private keys are never printed.`
 
 func run(ctx context.Context, args []string, out, errs io.Writer) int {
 	if len(args) == 1 && args[0] == "version" {
@@ -45,10 +45,11 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 			source = "UNKNOWN"
 		}
 		if json.NewEncoder(out).Encode(struct {
-			Version string `json:"version"`
-			Source  string `json:"source_sha256"`
-			Profile string `json:"profile"`
-		}{version, source, telemetry.FixtureProfile}) != nil {
+			Version           string   `json:"version"`
+			Source            string   `json:"source_sha256"`
+			Profile           string   `json:"profile"`
+			SupportedProfiles []string `json:"supported_profiles"`
+		}{version, source, telemetry.FixtureProfile, []string{telemetry.FixtureProfile, telemetry.LinuxHostProfile, telemetry.LinuxRootProfile}}) != nil {
 			return 1
 		}
 		return 0
@@ -61,6 +62,7 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 	flags.SetOutput(io.Discard)
 	path := flags.String("config", "", "")
 	fixture := flags.Bool("fixture", false, "")
+	resident := flags.Bool("telemetry", false, "")
 	requestPath, tokenPath, bundlePath := "", "", ""
 	if relay {
 		flags.StringVar(&requestPath, "request", "", "")
@@ -75,12 +77,12 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 		fmt.Fprintln(errs, "gateway arguments invalid")
 		return 2
 	}
-	if flags.NArg() != 0 || *path == "" || !relay && !*fixture || relay && (requestPath == "" || tokenPath == "" || bundlePath == "" || *fixture) {
+	if flags.NArg() != 0 || *path == "" || !relay && *fixture == *resident || relay && (requestPath == "" || tokenPath == "" || bundlePath == "" || *fixture || *resident) {
 		fmt.Fprintln(errs, usage)
 		return 2
 	}
 	cfg, e := gatewaytelemetry.LoadConfig(*path)
-	if e != nil {
+	if e != nil || !relay && (*fixture != cfg.FixtureOnly || *resident != cfg.ResidentSources) {
 		fmt.Fprintln(errs, "gateway configuration invalid")
 		return 2
 	}

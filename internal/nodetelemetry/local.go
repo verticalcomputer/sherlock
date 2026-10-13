@@ -27,9 +27,9 @@ func newLocalVerifier(scope LocalScope, keyID string, key ed25519.PrivateKey) (*
 	at := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
 	g := telemetry.Grant{ProtocolVersion: 1, EnrollmentID: scope.EnrollmentID, EnrollmentRevision: 1, ControlRevision: 1, Status: "ACTIVE", ClusterID: scope.ClusterID, NodeID: scope.NodeID, InventoryRevisionID: scope.InventoryRevisionID, GatewayCollectorID: "local-structure-only", AgentVersion: scope.AgentVersion, BuildSHA256: scope.BuildSHA256, GatewaySPKISHA256: scope.GatewaySPKISHA256, Keys: scope.Keys, NotBefore: at, NotAfter: at.Add(time.Minute)}
 	for _, id := range scope.SourceIDs {
-		g.Sources = append(g.Sources, telemetry.SourceGrant{SourceID: id, SchemaVersion: 1, ProfileID: telemetry.FixtureProfile})
+		g.Sources = append(g.Sources, telemetry.SourceGrant{SourceID: id, SchemaVersion: 1, ProfileID: telemetry.SourceProfile(scope.SourceProfiles, id)})
 	}
-	if telemetry.ValidateGrant(g, at) != nil || len(key) != ed25519.PrivateKeySize {
+	if !telemetry.ValidSourceProfiles(scope.SourceIDs, scope.SourceProfiles) || telemetry.ValidateGrant(g, at) != nil || len(key) != ed25519.PrivateKeySize {
 		return nil, ErrInvalid
 	}
 	v := &localVerifier{scope: scope, keys: map[string]telemetry.NodeKey{}, historical: map[string]telemetry.NodeKey{}}
@@ -118,7 +118,7 @@ func (v *localVerifier) Verify(_ context.Context, wire []byte) (telemetryjournal
 	}
 	env := telemetryjournal.Envelope{Key: b.Key, Digest: b.Digest, CreatedAt: b.CreatedAt, Lane: telemetryjournal.Data, BootID: b.BootID, SigningKeyID: b.SigningKeyID, EnrollmentRevision: b.EnrollmentRevision}
 	for _, s := range b.Sources {
-		if !v.allowed(s.SourceID) {
+		if !v.allowed(s.SourceID) || s.ProfileID != telemetry.SourceProfile(v.scope.SourceProfiles, s.SourceID) {
 			return telemetryjournal.Envelope{}, ErrInvalid
 		}
 		env.Sources = append(env.Sources, s.SourceID)

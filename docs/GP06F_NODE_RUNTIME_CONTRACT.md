@@ -1,5 +1,10 @@
 # GP-06f resident fixture runtime contract
 
+October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 Prepared October 8, 2026 before runtime implementation. This extends
 [the telemetry v1 contract](GP06F_TELEMETRY_V1_CONTRACT.md); it is not installation
 authorization, hardware source qualification or GP-06f acceptance.

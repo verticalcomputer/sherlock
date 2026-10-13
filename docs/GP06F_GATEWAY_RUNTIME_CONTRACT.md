@@ -1,5 +1,10 @@
 # GP-06f gateway runtime foundation
 
+October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 Prepared October 8, 2026 before runtime composition. Extends the
 [telemetry contract](GP06F_TELEMETRY_V1_CONTRACT.md) and
 [node identity contract](GP06F_NODE_IDENTITY_CONTRACT.md).

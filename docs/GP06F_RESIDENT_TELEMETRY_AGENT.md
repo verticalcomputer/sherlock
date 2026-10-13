@@ -1,5 +1,10 @@
 # GP-06f — resident telemetry agent and cluster-local gateway
 
+October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 Status (2026-10-08): **fixture foundation repository-accepted; GP-06f open and not installed**. Step 4 of the
 private implementation history withheld; canary is step 5. Depends on GP-18c,
 GP-02 canonical identity/semantics, GP-03 typed ingestion and GP-23b spooling.

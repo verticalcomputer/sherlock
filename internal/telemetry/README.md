@@ -1,5 +1,10 @@
 # Telemetry protocol v1
 
+October 13 extension: [Linux host/root filesystem sources](../../docs/LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 This package defines unsolicited, signed telemetry. It does not carry collector
 work, leases, diagnostic grants or commands. The only admitted source profile is
 `fixture.v1`; its values are synthetic and must remain separate from hardware

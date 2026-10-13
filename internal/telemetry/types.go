@@ -1,5 +1,5 @@
 // Package telemetry defines unsolicited resident telemetry independently from
-// collector work leases. Its v1 source profile is synthetic; it grants no
+// collector work leases. Closed v1 profiles are history-only; they grant no
 // hardware-health, workload, diagnostic, command or repair authority.
 package telemetry
 

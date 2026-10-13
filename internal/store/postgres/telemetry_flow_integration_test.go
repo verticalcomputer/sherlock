@@ -37,6 +37,11 @@ import (
 // installation candidate. Both TLS boundaries, durable journals, collector
 // identity authentication and cloud persistence are actual implementations.
 func TestTelemetryActualTLSJournalsToCloudPersistence(t *testing.T) {
+	for _, profile := range []string{telemetry.FixtureProfile, telemetry.LinuxHostProfile, telemetry.LinuxRootProfile} {
+		t.Run(profile, func(t *testing.T) { telemetryTLSProfileFlow(t, profile) })
+	}
+}
+func telemetryTLSProfileFlow(t *testing.T, profile string) {
 	f := newTelemetryFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -58,6 +63,9 @@ func TestTelemetryActualTLSJournalsToCloudPersistence(t *testing.T) {
 	}
 	f.request.EnrollmentID += "-flow"
 	f.request.GatewaySPKISHA256 = gatewayPin
+	if profile != telemetry.FixtureProfile {
+		f.request.SourceProfiles = map[string]string{string(f.request.SourceIDs[0]): profile}
+	}
 	if _, err = f.store.CreateEnrollment(ctx, f.request, 0, "synthetic-flow-operator"); err != nil {
 		t.Fatal(err)
 	}
@@ -275,6 +283,9 @@ func TestTelemetryActualTLSJournalsToCloudPersistence(t *testing.T) {
 		t.Fatal("authenticated scoped API history", err)
 	}
 	for _, source := range status.History[0].Sources {
+		if source.ProfileID != profile || profile != telemetry.FixtureProfile && (source.Status != "PARTIAL" || source.Fields[len(source.Fields)-1].Reason != "MISSING") {
+			t.Fatal("profile/partial support lost")
+		}
 		for _, record := range source.Records {
 			if !record.CollectedAt.Equal(f.now) || !record.ObservedAt.Equal(f.now) {
 				t.Fatal("replay refreshed source timestamps")
@@ -290,10 +301,7 @@ func TestTelemetryActualTLSJournalsToCloudPersistence(t *testing.T) {
 	defer foreignClient.Close()
 	foreign := batch
 	foreign.Key.NodeID = "foreign-node"
-	frame, err := telemetry.NewFixtureFrame(grant.Sources[0].SourceID, grant.ClusterID, "foreign-node", "foreign-record", f.now, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	frame := residentFixtureFrame(t, profile, grant.Sources[0].SourceID, grant.ClusterID, "foreign-node", "foreign-record", f.now, 1)
 	foreign.Sources = []telemetry.SourceFrame{frame}
 	if err = telemetry.SignBatch(&foreign, f.private); err != nil {
 		t.Fatal(err)

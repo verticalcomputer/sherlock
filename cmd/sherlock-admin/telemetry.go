@@ -28,7 +28,9 @@ const telemetryAdminUsage = `usage:
   sherlock-admin telemetry mint-node-token --cluster <cluster-id> --collector <gateway-id> --request <absolute-protected-csr-json> --expected-revision <control-revision> --actor <local-operator> --token-output <new-absolute-protected-file>
 
 Actor is supplied local operator attribution, not a verified principal.
-Only fixture.v1 synthetic history is enrolled. Minting a token approves an exact
+Closed fixture.v1, linux.host.v1 and linux.rootfs.v1 history profiles may be
+enrolled. source_profiles binds declared source IDs; omission retains fixture.v1.
+Minting a token approves an exact
 node-generated CSR for authenticated gateway relay; it installs nothing and
 grants no hardware/repair authority. The token is never printed.
 Two key epochs maximum; third rotation requires a future ownership-retirement gate.`

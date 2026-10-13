@@ -1,5 +1,10 @@
 # GP-06f telemetry v1 implementation contract
 
+October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 Prepared October 8, 2026 before stage-4 implementation. This contract extends
 [GP-06f](GP06F_RESIDENT_TELEMETRY_AGENT.md), GP-03 and GP-23b. It is an implementation
 specification, not acceptance or permission to install on client nodes. The
