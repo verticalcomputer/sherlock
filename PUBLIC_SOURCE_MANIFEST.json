@@ -3,8 +3,14 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "3d2f751387466ed50c6d80ce8b4d52e8a2f6b0b96305caaa1e971abf03f32f7c",
-      "size": 2394
+      "sha256": "eb6c42b6a100f2e85c009bd064bc75aad8ece365dc05d8920cdd7bd62266ad60",
+      "size": 2536
+    },
+    {
+      "executable": false,
+      "path": ".github/workflows/prepare-release.yml",
+      "sha256": "30617cd755c48f1f3b380570cfb6a4a668d6a7910957f52bff285f1db319ef56",
+      "size": 2944
     },
     {
       "executable": false,
@@ -33,8 +39,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "0590e585ca7d04e8dbf562542fcd5b370b67d03fd5d90daece17608a54f33af8",
-      "size": 1787
+      "sha256": "15c0b90f4d7f00fa0a3194449f13b0085d62e3ebd61b067f541d29389ebca835",
+      "size": 1862
     },
     {
       "executable": false,
@@ -843,14 +849,14 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "c3206cb8ea09d4df6062aa446db7ae7215715306b71d981f041f6d153f7e4ee6",
-      "size": 11309
+      "sha256": "672eb8bdb465adb416eebe9120eda80ffa2b8bcf8d4834b4460ef129494f9dfb",
+      "size": 13841
     },
     {
       "executable": false,
       "path": "docs/guides/release-signing.md",
-      "sha256": "ef4d5b0e6ff060f90df0ef50dbbffd4e47face51f4b34985567035f15056f894",
-      "size": 8064
+      "sha256": "6faa630da83643284c93f88c486be938d9cfa72de2eb54b3576bb462c7a8818a",
+      "size": 8997
     },
     {
       "executable": false,
@@ -6363,8 +6369,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "596b371f829778804415575f4f36e697a326aa0514edaf3c7bab81b0495bb2e6",
-      "size": 3932
+      "sha256": "c64cf240ea7000f5c5e6980fdd942686598ff7954415df11356ebd7162a5841b",
+      "size": 4272
     },
     {
       "executable": true,
@@ -6434,9 +6440,15 @@
     },
     {
       "executable": false,
+      "path": "scripts/prepare-hosted-release.py",
+      "sha256": "dee8ef5edf5ecb7a4bd99d437bd13a92009b97a87e8cc3fc604663dc625d34a1",
+      "size": 5383
+    },
+    {
+      "executable": false,
       "path": "scripts/prepare-release-review.py",
-      "sha256": "5480f359ab2d11f9d971242c45d7d39c333f738f0c18007a5a2560ea068dc11f",
-      "size": 7506
+      "sha256": "89e56c6cb241c1ce007b83651f360227047402fd3d32c4bfa4d5770f84cebee4",
+      "size": 9554
     },
     {
       "executable": true,
@@ -6494,21 +6506,27 @@
     },
     {
       "executable": false,
+      "path": "scripts/test_prepare_hosted_release.py",
+      "sha256": "31283bfd1a6950c21a78187bb74938c68fdd7c30188c853bd396ce6cf2157cb4",
+      "size": 3424
+    },
+    {
+      "executable": false,
       "path": "scripts/test_prepare_release_review.py",
-      "sha256": "cd3b7765fedb35dfe3981d8763e3c108411e8e52c11321e17bede47dfb36b943",
-      "size": 8408
+      "sha256": "93f730b0de26fba326e7c7007e23f24bf6ff3ad56257077bd6c5d9f262f14bf0",
+      "size": 11950
     },
     {
       "executable": false,
       "path": "scripts/test_release_signing.py",
-      "sha256": "67c23c3476a8218d20e38a8327835c9ee7c9f2fef7feaf061a1cae069e0df733",
-      "size": 13801
+      "sha256": "f7523b5cc3ead611917bd8930e90b4e97c1344f200b2c39545ef7a4d1c3ca3cc",
+      "size": 16645
     },
     {
       "executable": false,
       "path": "scripts/verify-release.py",
-      "sha256": "5a3cf0c52d1236c21d8ff34b191510aaece9863cd9df1967b1128e3eaaa71fac",
-      "size": 11266
+      "sha256": "483fda4d4cf7b01ac0aa23de7da6b40f8bb9f68008e65cbb1498e972d6d2c245",
+      "size": 11772
     },
     {
       "executable": true,

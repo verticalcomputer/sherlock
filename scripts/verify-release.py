@@ -163,7 +163,14 @@ def payload(directory, policy, signed=False):
     require(sums[PROVENANCE] == policy["provenance_sha256"], "unapproved_provenance")
     provenance = object_json(read_regular(directory / PROVENANCE, FILES[PROVENANCE]))
     require(provenance.get("schema_version") == 1
-            and provenance.get("release_approved") is True
+            and (provenance.get("release_approved") is True or (
+                provenance.get("release_approved") is False
+                and provenance.get("approval_mode") == "external_exact_package"
+                and provenance.get("package_state") == "UNSIGNED_REVIEW_ONLY"
+                and provenance.get("signed") is False
+                # Before signing, approval comes only from the protected exact
+                # policy. Client verification instead proves both signatures first.
+                and (policy.get("approved") is True or signed)))
             and provenance.get("repository") == REPOSITORY
             and provenance.get("ref") == policy["ref"]
             and provenance.get("source_commit") == policy["source_commit"]

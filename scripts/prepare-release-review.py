@@ -9,6 +9,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import sys
+import subprocess
 import tarfile
 
 
@@ -24,7 +25,35 @@ exporter = load("exporter", "export-public-candidate.py")
 builder = load("builder", "build-telemetry-candidate.py")
 
 
-def assemble(candidate, expected, output):
+def bind_source(entries, repo, commit, tag):
+    """Bind archived first-party bytes and modes to the exact checked-out commit."""
+    require = release.require
+    require(isinstance(commit, str) and release.COMMIT.fullmatch(commit), "invalid_source_commit")
+    require(isinstance(tag, str) and release.TAG.fullmatch(tag), "invalid_release_tag")
+    def git(*args):
+        return subprocess.check_output(["git", "--no-replace-objects", "-C", str(repo), *args],
+                                       stderr=subprocess.DEVNULL, timeout=30)
+    require(git("rev-parse", "HEAD").decode().strip() == commit, "checkout_wrong_commit")
+    tree = {}
+    for row in git("ls-tree", "-rz", commit).split(b"\0"):
+        if row:
+            metadata, name = row.split(b"\t", 1)
+            mode, kind, oid = metadata.decode().split()
+            tree[name.decode()] = (mode, kind, oid)
+    for name, (body, executable) in entries.items():
+        if not name.startswith("source/"):
+            continue
+        path = name.removeprefix("source/")
+        require(path in tree, "source_not_in_commit")
+        mode, kind, oid = tree[path]
+        require(kind == "blob" and mode == ("100755" if executable else "100644"),
+                "source_mode_mismatch")
+        require(git("cat-file", "blob", oid) == body, "source_commit_bytes_mismatch")
+    return {"ref": "refs/tags/" + tag, "source_commit": commit,
+            "approval_mode": "external_exact_package", "package_state": "UNSIGNED_REVIEW_ONLY"}
+
+
+def assemble(candidate, expected, output, *, repo=None, commit=None, tag=None):
     require = release.require
     require(isinstance(expected, str) and release.HEX.fullmatch(expected), "invalid_candidate_digest")
     sums = release.read_regular(candidate / "SHA256SUMS", 1 << 20)
@@ -93,10 +122,13 @@ def assemble(candidate, expected, output):
                 item = tarfile.TarInfo(name)
                 item.size, item.mode, item.mtime = len(body), 0o755 if executable else 0o644, 0
                 target.addfile(item, io.BytesIO(body))
-    # The exact public Git commit/tag do not exist yet. Never invent them or turn
-    # local review preparation into approved signing provenance.
+    # Local preparation stays unbound. Hosted preparation binds the proposed
+    # tag and exact source bytes without creating a tag or granting approval.
     provenance.update(repository=release.REPOSITORY, ref=None, source_commit=None,
                       package_state="UNSIGNED_REVIEW_ONLY")
+    if any(value is not None for value in (repo, commit, tag)):
+        require(all(value is not None for value in (repo, commit, tag)), "incomplete_source_binding")
+        provenance.update(bind_source(entries, repo, commit, tag))
     payload = dict(binaries, **{"source.tar.gz": archive.getvalue(), "source-files.json": manifest_raw,
                    "sbom.spdx.json": exporter.read_relative(candidate, "sbom.spdx.json"),
                    release.PROVENANCE: exporter.encoded(provenance)})
@@ -118,13 +150,17 @@ def main():
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--candidate-checksums-sha256", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--repo", type=Path)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--release-tag")
     args = parser.parse_args()
-    print(json.dumps(assemble(args.candidate, args.candidate_checksums_sha256, args.output), sort_keys=True))
+    print(json.dumps(assemble(args.candidate, args.candidate_checksums_sha256, args.output,
+                              repo=args.repo, commit=args.source_commit, tag=args.release_tag), sort_keys=True))
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (release.ReleaseError, exporter.ExportError, builder.CandidateError, OSError, ValueError, TypeError, KeyError) as error:
+    except (release.ReleaseError, exporter.ExportError, builder.CandidateError, OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
         sys.exit(str(error) if isinstance(error, (release.ReleaseError, exporter.ExportError, builder.CandidateError))
                  else "release_review_preparation_failed")

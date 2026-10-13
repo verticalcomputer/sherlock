@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import io
 import json
+import subprocess
 from pathlib import Path
 import tarfile
 import tempfile
@@ -44,7 +45,7 @@ class ReleaseReviewTests(unittest.TestCase):
         for name, body in binaries.items():
             self.write("bin/" + name + "-linux-amd64", body)
         hashes = {name: sha(body) for name, body in binaries.items()}
-        self.provenance = {"release_approved": False, "signed": False, "target": "linux/amd64", "version": "fixture.v1",
+        self.provenance = {"schema_version": 1, "release_approved": False, "signed": False, "target": "linux/amd64", "version": "fixture.v1",
                            "source_manifest_sha256": sha(raw), "byte_identical": True,
                            "two_independent_clean_builds": [hashes, hashes]}
         self.write(assembler.release.PROVENANCE, encoded(self.provenance))
@@ -88,6 +89,57 @@ class ReleaseReviewTests(unittest.TestCase):
                   "source_commit": "a" * 40, "ref": "refs/tags/v0.1.0"}
         with self.assertRaisesRegex(assembler.release.ReleaseError, "unapproved_release_provenance"):
             assembler.release.payload(self.output, policy)
+
+    def source_repository(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        for row in self.manifest["files"]:
+            if not row["path"].startswith("source/"):
+                continue
+            target = repo / row["path"].removeprefix("source/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((self.candidate / row["path"]).read_bytes())
+            target.chmod(0o755 if row["executable"] else 0o644)
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=Synthetic Test",
+                        "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false",
+                        "commit", "-qm", "synthetic source"], check=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
+        return repo, commit
+
+    def test_hosted_binding_preserves_unsigned_bytes_and_requires_external_approval(self):
+        repo, commit = self.source_repository()
+        result = assembler.assemble(self.candidate, self.expected, self.output,
+                                    repo=repo, commit=commit, tag="v0.1.0-rc.1")
+        provenance = json.loads((self.output / assembler.release.PROVENANCE).read_bytes())
+        self.assertFalse(provenance["release_approved"])
+        self.assertFalse(provenance["signed"])
+        self.assertEqual(provenance["source_commit"], commit)
+        self.assertEqual(provenance["approval_mode"], "external_exact_package")
+        policy = dict(result, source_commit=commit, ref="refs/tags/v0.1.0-rc.1",
+                      provenance_sha256=sha((self.output / assembler.release.PROVENANCE).read_bytes()))
+        with self.assertRaisesRegex(assembler.release.ReleaseError, "unapproved_release_provenance"):
+            assembler.release.payload(self.output, policy)
+        assembler.release.payload(self.output, dict(policy, approved=True))
+        self.assertEqual(json.loads((self.output / assembler.release.PROVENANCE).read_bytes()), provenance)
+
+    def test_source_binding_rejects_wrong_commit_tag_bytes_mode_and_untracked_file(self):
+        repo, commit = self.source_repository()
+        entries = {row["path"]: ((self.candidate / row["path"]).read_bytes(), row["executable"])
+                   for row in self.manifest["files"]}
+        assembler.bind_source(entries, repo, commit, "v0.1.0-rc.1")
+        cases = [(entries, "b" * 40, "v0.1.0", "checkout_wrong_commit"),
+                 (entries, commit, "v1;echo bad", "invalid_release_tag"),
+                 (dict(entries, **{"source/main.go": (b"changed", False)}), commit, "v0.1.0", "source_commit_bytes_mismatch"),
+                 (dict(entries, **{"source/main.go": (b"package main\n", True)}), commit, "v0.1.0", "source_mode_mismatch"),
+                 (dict(entries, **{"source/extra.go": (b"extra", False)}), commit, "v0.1.0", "source_not_in_commit")]
+        for data, sha_value, tag, error in cases:
+            with self.subTest(error=error), self.assertRaisesRegex(assembler.release.ReleaseError, error):
+                assembler.bind_source(data, repo, sha_value, tag)
+        with self.assertRaisesRegex(assembler.release.ReleaseError, "incomplete_source_binding"):
+            assembler.assemble(self.candidate, self.expected, self.output, commit=commit)
+        self.assertFalse(self.output.exists())
 
     def test_changed_candidate_or_unlisted_private_file_rejected(self):
         self.write("bin/sherlock-gateway-linux-amd64", b"changed")
