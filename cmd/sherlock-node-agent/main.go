@@ -1,4 +1,4 @@
-// sherlock-node-agent runs an explicitly synthetic resident source over pinned
+// sherlock-node-agent runs explicitly selected resident sources over pinned
 // node TLS. It neither installs itself nor has a command or cloud credential.
 package main
 
@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/verticalcomputer/sherlock/internal/linuxtelemetry"
 	"github.com/verticalcomputer/sherlock/internal/nodegateway"
 	"github.com/verticalcomputer/sherlock/internal/nodeidentity"
 	"github.com/verticalcomputer/sherlock/internal/nodetelemetry"
@@ -130,10 +131,11 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 			source = "UNKNOWN"
 		}
 		if json.NewEncoder(out).Encode(struct {
-			Version      string `json:"version"`
-			SourceSHA256 string `json:"source_sha256"`
-			Profile      string `json:"profile"`
-		}{version, source, telemetry.FixtureProfile}) != nil {
+			Version           string   `json:"version"`
+			SourceSHA256      string   `json:"source_sha256"`
+			Profile           string   `json:"profile"`
+			SupportedProfiles []string `json:"supported_profiles"`
+		}{version, source, telemetry.FixtureProfile, []string{telemetry.FixtureProfile, telemetry.LinuxHostProfile, telemetry.LinuxRootProfile}}) != nil {
 			return 1
 		}
 		return 0
@@ -145,20 +147,21 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 	flags.SetOutput(io.Discard)
 	path := flags.String("config", "", "protected local configuration")
 	fixture := flags.Bool("fixture", false, "explicit synthetic source mode")
+	linux := flags.Bool("linux", false, "explicit read-only Linux source mode")
 	if e := flags.Parse(args); e != nil {
 		if errors.Is(e, flag.ErrHelp) {
-			fmt.Fprintln(out, "sherlock-node-agent --fixture --config <protected-local-config>\nSynthetic fixture.v1 only; no installation or hardware collection.")
+			fmt.Fprintln(out, "sherlock-node-agent --fixture --config <protected-local-config>\nSynthetic fixture.v1 only with --fixture; opt-in Linux host/root filesystem with --linux. No service installation.")
 			return 0
 		}
 		fmt.Fprintln(errs, "node telemetry arguments invalid")
 		return 2
 	}
-	if flags.NArg() != 0 || !*fixture || *path == "" {
-		fmt.Fprintln(errs, "node telemetry requires explicit fixture mode and protected configuration")
+	if flags.NArg() != 0 || *fixture == *linux || *path == "" {
+		fmt.Fprintln(errs, "node telemetry requires one explicit source mode and protected configuration")
 		return 2
 	}
 	c, identity, ca, e := loadConfig(*path)
-	if e != nil {
+	if e != nil || !sourceModeAllowed(c, *linux) {
 		fmt.Fprintln(errs, "node telemetry configuration invalid")
 		return 2
 	}
@@ -173,6 +176,9 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 	priorLimit := debug.SetMemoryLimit(128 << 20)
 	defer debug.SetMemoryLimit(priorLimit)
 	runtimeConfig := nodetelemetry.Config{Root: c.Root, Scope: c.Scope, SigningKeyID: c.SigningKeyID, SigningKey: identity.PrivateKey.(ed25519.PrivateKey), Gateway: client, Interval: time.Duration(c.IntervalSeconds) * time.Second, Report: func(error) { fmt.Fprintln(errs, "node telemetry collection or delivery unavailable") }}
+	if *linux {
+		runtimeConfig.LinuxSources = linuxtelemetry.New(time.Now)
+	}
 	if c.FixtureBootID != "" {
 		runtimeConfig.BootID = func() (string, error) { return c.FixtureBootID, nil }
 	}
@@ -187,6 +193,18 @@ func run(ctx context.Context, args []string, out, errs io.Writer) int {
 		return 1
 	}
 	return 0
+}
+func sourceModeAllowed(c nodeConfig, linux bool) bool {
+	if len(c.Scope.SourceIDs) == 0 || !telemetry.ValidSourceProfiles(c.Scope.SourceIDs, c.Scope.SourceProfiles) || linux && c.FixtureBootID != "" {
+		return false
+	}
+	for _, id := range c.Scope.SourceIDs {
+		profile := telemetry.SourceProfile(c.Scope.SourceProfiles, id)
+		if linux && profile != telemetry.LinuxHostProfile && profile != telemetry.LinuxRootProfile || !linux && profile != telemetry.FixtureProfile {
+			return false
+		}
+	}
+	return true
 }
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

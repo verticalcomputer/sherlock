@@ -57,7 +57,7 @@ func ValidateGrant(g Grant, at time.Time) error {
 	}
 	sources := map[string]bool{}
 	for _, s := range g.Sources {
-		if !validID(s.SourceID) || sources[s.SourceID] || s.SchemaVersion != 1 || s.ProfileID != FixtureProfile {
+		if !validID(s.SourceID) || sources[s.SourceID] || s.SchemaVersion != 1 || !KnownProfile(s.ProfileID) {
 			return ErrInvalidBatch
 		}
 		sources[s.SourceID] = true
@@ -97,8 +97,8 @@ func ValidateGrant(g Grant, at time.Time) error {
 
 var fixtureMetrics = []string{"fixture.gauge", "fixture.counter", "fixture.flag", "fixture.state"}
 
-// ValidateNodeBatch is a synthetic-schema check, not node authentication or a
-// hardware support assertion. Fixture records never enter health projections.
+// ValidateNodeBatch checks closed source schemas, not authentication or live
+// qualification. Intake history is separate from ordinary health projections.
 func ValidateNodeBatch(b NodeBatch) error {
 	if b.ProtocolVersion != ProtocolVersion || !validKey(b.Key) || b.EnrollmentRevision != 1 || !validID(b.InventoryRevisionID) || !validID(b.BootID) || !validID(b.SigningKeyID) || !validID(b.AgentVersion) || !validDigest(b.BuildSHA256) || !validInstant(b.CreatedAt) || len(b.Sources) < 1 || len(b.Sources) > MaxSources {
 		return ErrInvalidBatch
@@ -111,13 +111,13 @@ func ValidateNodeBatch(b NodeBatch) error {
 	sources, recordIDs, lossIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	total, lossTotal := 0, 0
 	for _, s := range b.Sources {
-		if !validID(s.SourceID) || sources[s.SourceID] || s.SchemaVersion != 1 || s.AdapterVersion != FixtureProfile || s.ProfileID != FixtureProfile || !validInstant(s.StartedAt) || !validInstant(s.CompletedAt) || s.CompletedAt.Before(s.StartedAt) || s.CompletedAt.After(b.CreatedAt) || len(s.Fields) != 4 || s.Coverage.Expected != 4 || s.Coverage.Returned != int64(len(s.Records)) || len(s.Records) > 4 || len(s.Loss) > MaxLossRanges {
+		if !validID(s.SourceID) || sources[s.SourceID] || s.SchemaVersion != 1 || s.AdapterVersion != s.ProfileID || !KnownProfile(s.ProfileID) || !validInstant(s.StartedAt) || !validInstant(s.CompletedAt) || s.CompletedAt.Before(s.StartedAt) || s.CompletedAt.After(b.CreatedAt) || len(s.Fields) != len(ProfileFields(s.ProfileID)) || s.Coverage.Expected != int64(len(s.Fields)) || s.Coverage.Returned != int64(len(s.Records)) || len(s.Records) > len(s.Fields) || len(s.Loss) > MaxLossRanges {
 			return ErrInvalidBatch
 		}
 		sources[s.SourceID] = true
 		fields := map[string]FieldSupport{}
 		for _, f := range s.Fields {
-			if f.EntityKey != entity || fields[f.Metric].Metric != "" || !fixtureMetric(f.Metric) || !supportState(f.State) || !supportReason(f.Reason) {
+			if f.EntityKey != entity || fields[f.Metric].Metric != "" || !profileMetric(s.ProfileID, f.Metric) || !supportState(f.State) || !supportReason(f.Reason) {
 				return ErrInvalidBatch
 			}
 			if f.State == "SUPPORTED" && f.Reason != "OBSERVED" || f.State == "NOT_SUPPORTED" && f.Reason != "UNSUPPORTED" || f.State == "UNKNOWN" && (f.Reason == "OBSERVED" || f.Reason == "UNSUPPORTED") {
@@ -127,7 +127,7 @@ func ValidateNodeBatch(b NodeBatch) error {
 		}
 		metrics := map[string]bool{}
 		for _, r := range s.Records {
-			if !validID(r.ID) || recordIDs[r.ID] || metrics[r.Metric] || r.EntityKey != entity || fields[r.Metric].State != "SUPPORTED" || !validInstant(r.ObservedAt) || !r.CollectedAt.Equal(s.CompletedAt) || r.ObservedAt.After(r.CollectedAt) || !fixtureRecord(r) {
+			if !validID(r.ID) || recordIDs[r.ID] || metrics[r.Metric] || r.EntityKey != entity || fields[r.Metric].State != "SUPPORTED" || !validInstant(r.ObservedAt) || !r.CollectedAt.Equal(s.CompletedAt) || r.ObservedAt.After(r.CollectedAt) || !profileRecord(s.ProfileID, r) {
 				return ErrInvalidBatch
 			}
 			recordIDs[r.ID] = true
@@ -144,11 +144,11 @@ func ValidateNodeBatch(b NodeBatch) error {
 		}
 		switch s.Status {
 		case "SUCCEEDED":
-			if len(s.Records) != 4 || !s.Coverage.Complete {
+			if len(s.Records) != len(s.Fields) || !s.Coverage.Complete {
 				return ErrInvalidBatch
 			}
 		case "PARTIAL":
-			if len(s.Records) < 1 || len(s.Records) >= 4 || s.Coverage.Complete {
+			if len(s.Records) < 1 || len(s.Records) >= len(s.Fields) || s.Coverage.Complete {
 				return ErrInvalidBatch
 			}
 		case "FAILED", "NO_DATA":
@@ -172,14 +172,6 @@ func ValidateNodeBatch(b NodeBatch) error {
 	return nil
 }
 
-func fixtureMetric(v string) bool {
-	for _, m := range fixtureMetrics {
-		if v == m {
-			return true
-		}
-	}
-	return false
-}
 func supportState(v string) bool { return v == "SUPPORTED" || v == "UNKNOWN" || v == "NOT_SUPPORTED" }
 func supportReason(v string) bool {
 	switch v {

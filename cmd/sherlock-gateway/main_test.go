@@ -19,3 +19,12 @@ func TestGatewayRequiresExplicitModeAndKeepsFailuresClosed(t *testing.T) {
 		t.Fatal(code)
 	}
 }
+
+func TestGatewayModesAreMutuallyExclusive(t *testing.T) {
+	for _, args := range [][]string{{"--fixture", "--telemetry", "--config", "private-path"}, {"relay-identity", "--telemetry", "--config", "private-path"}} {
+		var out, errs bytes.Buffer
+		if code := run(context.Background(), args, &out, &errs); code != 2 || strings.Contains(errs.String(), "private-path") {
+			t.Fatal("ambiguous mode")
+		}
+	}
+}

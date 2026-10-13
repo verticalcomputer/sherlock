@@ -25,6 +25,7 @@ import (
 type ServiceConfig struct {
 	ProtocolVersion          int      `json:"protocol_version"`
 	FixtureOnly              bool     `json:"fixture_only"`
+	ResidentSources          bool     `json:"resident_sources,omitempty"`
 	ClusterID                string   `json:"cluster_id"`
 	CollectorID              string   `json:"collector_id"`
 	EnrollmentIDs            []string `json:"enrollment_ids"`
@@ -48,7 +49,7 @@ func LoadConfig(path string) (ServiceConfig, error) {
 	if e != nil {
 		return c, e
 	}
-	if telemetry.DecodeStrictJSON(body, "", &c) != nil || c.ProtocolVersion != 1 || !c.FixtureOnly || !telemetry.ValidIdentifier(c.ClusterID) || !telemetry.ValidIdentifier(c.CollectorID) || len(c.EnrollmentIDs) == 0 || len(c.EnrollmentIDs) > 4096 || !filepath.IsAbs(c.Root) {
+	if telemetry.DecodeStrictJSON(body, "", &c) != nil || c.ProtocolVersion != 1 || c.FixtureOnly == c.ResidentSources || !telemetry.ValidIdentifier(c.ClusterID) || !telemetry.ValidIdentifier(c.CollectorID) || len(c.EnrollmentIDs) == 0 || len(c.EnrollmentIDs) > 4096 || !filepath.IsAbs(c.Root) {
 		return ServiceConfig{}, telemetry.ErrInvalid
 	}
 	seen := map[string]bool{}
@@ -169,10 +170,10 @@ func cloudTransport(c ServiceConfig, nodeCA *x509.Certificate) (*collectorruntim
 	return cloud, transport, ca, nil
 }
 
-// Serve composes the fixture gateway. It does not install a service or alter
+// Serve composes the explicitly selected telemetry gateway. It does not install a service or alter
 // collector configuration. Current cloud authority is required before listening.
 func Serve(ctx context.Context, c ServiceConfig, observer Observer) error {
-	if c.ProtocolVersion != 1 || !c.FixtureOnly || !filepath.IsAbs(c.Root) {
+	if c.ProtocolVersion != 1 || c.FixtureOnly == c.ResidentSources || !filepath.IsAbs(c.Root) {
 		return telemetry.ErrInvalid
 	}
 	nodeCA, nodeRoots, e := readCertificate(c.NodeCAFile)
@@ -228,7 +229,7 @@ func Serve(ctx context.Context, c ServiceConfig, observer Observer) error {
 		}
 		sources := make([]string, 0, len(grant.Sources))
 		for _, source := range grant.Sources {
-			if source.ProfileID != telemetry.FixtureProfile {
+			if !telemetry.KnownProfile(source.ProfileID) || c.FixtureOnly && source.ProfileID != telemetry.FixtureProfile {
 				return telemetry.ErrUnauthorized
 			}
 			sources = append(sources, source.SourceID)

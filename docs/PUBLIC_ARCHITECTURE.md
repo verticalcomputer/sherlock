@@ -1,5 +1,10 @@
 # Sherlock architecture and qualification boundaries
 
+October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
+adds explicit source profiles and history-only intake. The dated fixture contract
+below retains its original scope; source publication is complete, while signed
+client release, native host/canary and fleet qualification remain open.
+
 The central API and workers use PostgreSQL for durable work, leases, results,
 incident episodes and notification delivery state. The admin UI and API consume
 scoped health projections. Source absence, stale observations and unavailable

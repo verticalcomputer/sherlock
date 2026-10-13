@@ -89,12 +89,9 @@ func (f *telemetryFixture) open(t *testing.T, epoch int) telemetry.SessionMessag
 }
 func (f *telemetryFixture) batch(t *testing.T, epoch, sequence int) telemetry.NodeBatch {
 	t.Helper()
-	frame, err := telemetry.NewFixtureFrame(string(f.request.SourceIDs[0]), string(f.request.ClusterID), string(f.request.NodeID), fmt.Sprintf("record-%d-%d", epoch, sequence), f.now, uint64(sequence))
-	if err != nil {
-		t.Fatal(err)
-	}
+	frame := residentFixtureFrame(t, telemetry.SourceProfile(f.request.SourceProfiles, string(f.request.SourceIDs[0])), string(f.request.SourceIDs[0]), string(f.request.ClusterID), string(f.request.NodeID), fmt.Sprintf("record-%d-%d", epoch, sequence), f.now, uint64(sequence))
 	b := telemetry.NodeBatch{ProtocolVersion: 1, Key: telemetry.BatchKey{ClusterID: string(f.request.ClusterID), NodeID: string(f.request.NodeID), EnrollmentID: f.request.EnrollmentID, SessionEpoch: strconv.Itoa(epoch), SessionID: fmt.Sprintf("session-%d", epoch), Sequence: strconv.Itoa(sequence)}, EnrollmentRevision: 1, InventoryRevisionID: f.request.InventoryRevisionID, BootID: fmt.Sprintf("boot-%d", epoch), SigningKeyID: f.request.KeyID, AgentVersion: f.request.AgentVersion, BuildSHA256: f.request.BuildSHA256, CreatedAt: f.now, Sources: []telemetry.SourceFrame{frame}}
-	if err = telemetry.SignBatch(&b, f.private); err != nil {
+	if err := telemetry.SignBatch(&b, f.private); err != nil {
 		t.Fatal(err)
 	}
 	return b

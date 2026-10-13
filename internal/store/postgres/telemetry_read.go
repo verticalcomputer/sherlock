@@ -134,7 +134,7 @@ func (s *TelemetryStore) Status(ctx context.Context, cluster domain.ClusterID, c
 	if err != nil {
 		return out, err
 	}
-	// Only the fixture schema is readable here. One row is processed at a time;
+	// Closed resident source schemas are readable here, one row at a time;
 	// source coverage/support remains original, records/loss omissions explicit.
 	rows, err = tx.Query(ctx, `SELECT body,stored_at,history_only FROM gp06f_telemetry_batches WHERE enrollment_id=$1 ORDER BY stored_at DESC,session_epoch DESC,sequence DESC LIMIT 17`, id)
 	if err != nil {

@@ -45,8 +45,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "13c17c12079be71d8e90fb2bab22f281ed1f62f3dad00fe9e2456ee56a0bbb93",
-      "size": 3152
+      "sha256": "3a1595e2c52297d3df309f04b2e31827502ef07c401c8c9c23bf0682b26bb18a",
+      "size": 3409
     },
     {
       "executable": false,
@@ -141,8 +141,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-admin/telemetry.go",
-      "sha256": "5550062e6e25175718c647bf665fd2d14a4ef5f1aa1c5d2731d8bfdd0508a266",
-      "size": 8640
+      "sha256": "2edeeb58e60e0700487baad893074962bd6e54b7ee8023ce9bcfa06f715b389b",
+      "size": 8752
     },
     {
       "executable": false,
@@ -345,14 +345,14 @@
     {
       "executable": false,
       "path": "cmd/sherlock-gateway/main.go",
-      "sha256": "26205e54ba2f2e106b772f290e22413da35caaeeac897324e45b97808d18343a",
-      "size": 4044
+      "sha256": "3fec2ee63d997e552cf80b999c89d2caee07500e2e981829873dc23538d16ccb",
+      "size": 4436
     },
     {
       "executable": false,
       "path": "cmd/sherlock-gateway/main_test.go",
-      "sha256": "cd6d75990904e0de7ecec86dc96bf0b2a7e998cbe682de5c85e41a09f876c92f",
-      "size": 906
+      "sha256": "c8a1644f92737c1f5074531c66ccdde5bf7e3021b81857752ba6920e794d261a",
+      "size": 1310
     },
     {
       "executable": false,
@@ -417,14 +417,14 @@
     {
       "executable": false,
       "path": "cmd/sherlock-node-agent/main.go",
-      "sha256": "ef826b2efbff12537f6e6d6038959c4074afd03b154af524590f146ccfae7382",
-      "size": 7959
+      "sha256": "8ebedcbc79ba007264f03f7384650de7c951a5e3621baf52c1e1588406a445b7",
+      "size": 8943
     },
     {
       "executable": false,
       "path": "cmd/sherlock-node-agent/main_test.go",
-      "sha256": "91cb6532fdd967bb91ae71df51ad6e45688ba42288b4eec8125c3baa00b2b5db",
-      "size": 8730
+      "sha256": "dbf86e040c5dd2a040b751a9b6e23b8134325292e9a84152a5e286e3fecc19aa",
+      "size": 9593
     },
     {
       "executable": false,
@@ -825,14 +825,14 @@
     {
       "executable": false,
       "path": "docs/GP06F_CANDIDATE_REVIEW.md",
-      "sha256": "2b04a1e2d9142db2c0d68550ea769323920c60f6ffb6d7547428bd9a508c798e",
-      "size": 11420
+      "sha256": "1347b5d49fd49f187b3e0587ad5209ca0fb9412720431ecb4bd3fd37490b5919",
+      "size": 11740
     },
     {
       "executable": false,
       "path": "docs/GP06F_GATEWAY_RUNTIME_CONTRACT.md",
-      "sha256": "fbef99f4e34ecbcab74298cb48aa65e12ab4a5ba4ecee2b994cffee25f714e41",
-      "size": 3786
+      "sha256": "329f5d02a35da228edb3750488f3dfc012c8a11c6e722d0510bc2987c8c0d2a5",
+      "size": 4106
     },
     {
       "executable": false,
@@ -843,8 +843,8 @@
     {
       "executable": false,
       "path": "docs/GP06F_NODE_RUNTIME_CONTRACT.md",
-      "sha256": "4d949018b8193a0c92e8a023d202354ade526e59f8841dfea83a178ec4318976",
-      "size": 6574
+      "sha256": "a56a04811121b4f3ea705173331655c751e8155b24329551710cbfbc1db4a452",
+      "size": 6894
     },
     {
       "executable": false,
@@ -861,20 +861,32 @@
     {
       "executable": false,
       "path": "docs/GP06F_RESIDENT_TELEMETRY_AGENT.md",
-      "sha256": "6aa611001fa6dd3f01a59dceae74b7c42e30b2047b9a4f29f1b2349cdfa7b242",
-      "size": 9014
+      "sha256": "752cef75ffd685209407228dacd0249c89b8bf9adce0641c5644904bedd3f101",
+      "size": 9334
     },
     {
       "executable": false,
       "path": "docs/GP06F_TELEMETRY_V1_CONTRACT.md",
-      "sha256": "6fb6a1cdfba139e1b3bfd34741b6a992cbf38812bd67fbd3ef9640bb61f7c7da",
-      "size": 14814
+      "sha256": "e84861e34f5040809d71db16fba57c24f61e42e2b5f477554bb6e5b85006bb53",
+      "size": 15134
+    },
+    {
+      "executable": false,
+      "path": "docs/LINUX_RESIDENT_CHECKPOINT_20261013.md",
+      "sha256": "811baf968dfb3407e4b4a5150613862f2805c9894f6cb67fd622cd7a4708ffd5",
+      "size": 3761
+    },
+    {
+      "executable": false,
+      "path": "docs/LINUX_RESIDENT_SOURCES.md",
+      "sha256": "a504b48f1dea112b3f6d03e08107844ce87b4f2e21c77a79b3edce561218c20f",
+      "size": 5484
     },
     {
       "executable": false,
       "path": "docs/PUBLIC_ARCHITECTURE.md",
-      "sha256": "8d535a6fe33b2f9ae82e7698449be735b0a3e74f3ca5f9364d990f3cd5239e1e",
-      "size": 1844
+      "sha256": "9dec6cfb8bc5834cd593d0e1f2e68c1b16795b20511caa0b185258bcd420177a",
+      "size": 2164
     },
     {
       "executable": false,
@@ -893,6 +905,12 @@
       "path": "go.sum",
       "sha256": "7afdb6633fb887059c4e65e1c94fc2daed271ad1b57b39b3f360ba4db3111136",
       "size": 15891
+    },
+    {
+      "executable": false,
+      "path": "implementation.md",
+      "sha256": "ea7fac6464430cf464ea35c69f101b7e0b4f13af49a21852aae27e284c1af215",
+      "size": 2032
     },
     {
       "executable": false,
@@ -3531,8 +3549,8 @@
     {
       "executable": false,
       "path": "internal/gatewaytelemetry/service.go",
-      "sha256": "39c7c38d36b925e27ae296f06183b296c7293c3bc0698bdf5a827cdea73eab7c",
-      "size": 10910
+      "sha256": "96a1474f47dbf3b171c02de0ce8f03f56ae3f573e8fb328a0ac91c26ecdec284",
+      "size": 11105
     },
     {
       "executable": false,
@@ -3743,6 +3761,36 @@
       "path": "internal/investigator/runner_test.go",
       "sha256": "98354db6ce53723bdbffc8c29714233774df527fdfea668deef62f06c61d22ea",
       "size": 14167
+    },
+    {
+      "executable": false,
+      "path": "internal/linuxtelemetry/collect.go",
+      "sha256": "2a4937ce3de4d18bdfa6fe9664dbf8af88e377a925ee9d9f0124a1648693df14",
+      "size": 6371
+    },
+    {
+      "executable": false,
+      "path": "internal/linuxtelemetry/collect_test.go",
+      "sha256": "b4c3d49a9156d8f236c79768a5b959f8b64df9c338327b2ec86506adbb9929b7",
+      "size": 6134
+    },
+    {
+      "executable": false,
+      "path": "internal/linuxtelemetry/read_linux.go",
+      "sha256": "dfde9f7504c21800282b180771477f108e9cb092994d6c7b7795602e5602fee8",
+      "size": 4851
+    },
+    {
+      "executable": false,
+      "path": "internal/linuxtelemetry/read_linux_test.go",
+      "sha256": "211885c7764014f45a4d4b671ef373a3de2444df32fb8cd793f684a685add2d9",
+      "size": 3751
+    },
+    {
+      "executable": false,
+      "path": "internal/linuxtelemetry/read_other.go",
+      "sha256": "343c6b6941eb5606c0a724b981fe0e30067afbc4888944aea4ca10db4f9b2707",
+      "size": 287
     },
     {
       "executable": false,
@@ -3962,9 +4010,15 @@
     },
     {
       "executable": false,
+      "path": "internal/nodetelemetry/linux_test.go",
+      "sha256": "f7641f31b89ce16d01398ae4fc71b87fc8c6d91c266a85838eae206c741c0a88",
+      "size": 2616
+    },
+    {
+      "executable": false,
       "path": "internal/nodetelemetry/local.go",
-      "sha256": "7af08e4d0de230d9b3b96f1f64badde64b20ccf3dbf06f341776ef22fa684ee9",
-      "size": 7107
+      "sha256": "627b4d9d1371ad71be07692b6515c6e71d61a0255444e49c37d8e420df064ac6",
+      "size": 7283
     },
     {
       "executable": false,
@@ -3981,8 +4035,8 @@
     {
       "executable": false,
       "path": "internal/nodetelemetry/runtime.go",
-      "sha256": "8900007db934f168a2ce5c800d1e2a83b812bc43978194564d35a2e64237965f",
-      "size": 19187
+      "sha256": "d55aeeb55fe78306852cd362c46c389470744dc6b2aae0c19a150292bcf08288",
+      "size": 19813
     },
     {
       "executable": false,
@@ -3999,8 +4053,8 @@
     {
       "executable": false,
       "path": "internal/nodetelemetry/types.go",
-      "sha256": "50313ffd34afeceeefe0ad0606e1124bb84551a2a8b587b13c88a06b1983112c",
-      "size": 4682
+      "sha256": "6ee677ab724031c1b6913c5cf972527959a80ff9a0c2d98d809eb33a1c34375f",
+      "size": 5012
     },
     {
       "executable": false,
@@ -4935,8 +4989,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_flow_integration_test.go",
-      "sha256": "6d79f0d306ff3ae93512f347a01ab514ae84710858ea10b6aca5b87b94414393",
-      "size": 17457
+      "sha256": "22eb644b354aa0ec79cef7180a0aed11efd2169e4be83551b996ce490df85490",
+      "size": 18030
     },
     {
       "executable": false,
@@ -4953,14 +5007,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_intake.go",
-      "sha256": "f6c28fd848d24f21f6c58f955d6637e35c40bccd8517b77369715ce4b2e1b9c2",
-      "size": 14176
+      "sha256": "fc3480b84fd0178978d76cce6c7b13f8a1f682491157d97261aff9f0c809c67e",
+      "size": 14186
     },
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_integration_test.go",
-      "sha256": "cf06a7bf2fc93ac7c3e777f5687790cfd5bc317e1e000dee69a17605d4dc9d36",
-      "size": 25506
+      "sha256": "cbf5555591c9662feee64fadcda35ea9c68bde83b420516b1b3b828f9596c448",
+      "size": 25548
     },
     {
       "executable": false,
@@ -4976,9 +5030,15 @@
     },
     {
       "executable": false,
+      "path": "internal/store/postgres/telemetry_linux_integration_test.go",
+      "sha256": "48ec4ddca09839f6614359902e0d595c082213956907f7190dd38ad05558e1c3",
+      "size": 4209
+    },
+    {
+      "executable": false,
       "path": "internal/store/postgres/telemetry_read.go",
-      "sha256": "803233d2b240ccfae50c078724a93c9b374bc2cd24b0fda521a37806570f17b6",
-      "size": 7080
+      "sha256": "e065362ccd5b245d381fa1b3833de6cd0c271c27cb9807b20e5365ee8287a0d1",
+      "size": 7075
     },
     {
       "executable": false,
@@ -5007,8 +5067,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_store.go",
-      "sha256": "15e7fc2a7474e2690a92c23fc80070b632cf41092943064b354836831829b666",
-      "size": 10669
+      "sha256": "7e6e358310501dfd97b4e928b5f51a473afadce81391b9ecc9ce44f1b6846f7d",
+      "size": 10927
     },
     {
       "executable": false,
@@ -5019,8 +5079,8 @@
     {
       "executable": false,
       "path": "internal/telemetry/README.md",
-      "sha256": "0886276796135d8bd56f5add3cd3d1496ce8c128c2d75d32a6e1943d4e3fe121",
-      "size": 5373
+      "sha256": "cee3167f3c6d6c46931eca70e965f648d35b6de89df96259584eaaf16e9247f9",
+      "size": 5704
     },
     {
       "executable": false,
@@ -5063,6 +5123,18 @@
       "path": "internal/telemetry/golden_test.go",
       "sha256": "0142c6ec9e40022a0cbf48a8864f4d899bbe1c09790f5825be83a374fbddc035",
       "size": 2445
+    },
+    {
+      "executable": false,
+      "path": "internal/telemetry/profiles.go",
+      "sha256": "da66be24ebf5acfbd28843aa9e1c409371d4be9f786ac2b93af8875772cc8185",
+      "size": 2643
+    },
+    {
+      "executable": false,
+      "path": "internal/telemetry/profiles_test.go",
+      "sha256": "342982641bf90a7b12f938a68677580cbf82f585f1feae6c6a404878dfb67442",
+      "size": 3067
     },
     {
       "executable": false,
@@ -5121,14 +5193,14 @@
     {
       "executable": false,
       "path": "internal/telemetry/types.go",
-      "sha256": "69535f369e39c4ab45ff7bf9d9f86e03aa6b6c3ee8f3e057b0dca879e6bb08f5",
-      "size": 5674
+      "sha256": "8b793b59576fbacd1b44c3668247dd15be7976b87eab5296ec50f248c0be2e78",
+      "size": 5676
     },
     {
       "executable": false,
       "path": "internal/telemetry/validate.go",
-      "sha256": "cbf7d66b1cdfeffa28b1cf6d8d621b1f0140cf7bd2971e9cee9bc0e84191751e",
-      "size": 10989
+      "sha256": "0949ee48d1e353b2fc8334bb9f19857a612028a6575ff324ce802a4d0508f28a",
+      "size": 10966
     },
     {
       "executable": false,
@@ -6253,6 +6325,24 @@
       "size": 8630
     },
     {
+      "executable": false,
+      "path": "migrations/000080_linux_resident_sources.down.sql",
+      "sha256": "d585c83bf0c8daddbaea5bb770c743c6c194922cca5a1a4ec44d56ef4606a9db",
+      "size": 566
+    },
+    {
+      "executable": false,
+      "path": "migrations/000080_linux_resident_sources.up.sql",
+      "sha256": "7ff06cce7f30582d81efffe3e9dfab8eb940d16ff4acab70b441f3bd77be1133",
+      "size": 337
+    },
+    {
+      "executable": false,
+      "path": "next.md",
+      "sha256": "7caf6ced142bcbd168df80aed6fa2c873bd679a00362d0911bb95aa8cd6e9d0a",
+      "size": 679
+    },
+    {
       "executable": true,
       "path": "scripts/backup-postgres.sh",
       "sha256": "b0b6334e2c0677bc2d54c376d2b187ca62a81dc2b6f89fa6af8d16832e27ea67",
@@ -6261,8 +6351,8 @@
     {
       "executable": false,
       "path": "scripts/build-telemetry-candidate.py",
-      "sha256": "43fa8271455b903d712fd1fe7d6900a82aa4547bc2dbf500b983ca3424ba4102",
-      "size": 27547
+      "sha256": "c3b4030b75116b70033b1827cffa9d5d0778557ee26075cd5716f9c83164f458",
+      "size": 27585
     },
     {
       "executable": true,

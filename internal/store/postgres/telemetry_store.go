@@ -29,6 +29,7 @@ type EnrollmentRequest struct {
 	NodeID              domain.StableNodeID `json:"node_id"`
 	InventoryRevisionID string              `json:"inventory_revision_id"`
 	SourceIDs           []domain.SourceID   `json:"source_ids"`
+	SourceProfiles      map[string]string   `json:"source_profiles,omitempty"`
 	GatewayCollectorID  domain.CollectorID  `json:"gateway_collector_id"`
 	PublicKeyBase64     string              `json:"public_key_base64"`
 	KeyID               string              `json:"key_id"`
@@ -90,11 +91,13 @@ func (s *TelemetryStore) CreateEnrollment(ctx context.Context, request Enrollmen
 		return grant, err
 	}
 	grant = telemetry.Grant{ProtocolVersion: 1, EnrollmentID: request.EnrollmentID, EnrollmentRevision: 1, ControlRevision: 1, Status: "ACTIVE", ClusterID: string(request.ClusterID), NodeID: string(request.NodeID), InventoryRevisionID: request.InventoryRevisionID, GatewayCollectorID: string(request.GatewayCollectorID), AgentVersion: request.AgentVersion, BuildSHA256: request.BuildSHA256, GatewaySPKISHA256: request.GatewaySPKISHA256, NotBefore: at, NotAfter: at.Add(telemetry.GrantLease), Keys: []telemetry.NodeKey{{ID: request.KeyID, Epoch: "1", PublicKeyBase64: request.PublicKeyBase64, State: "ACTIVE"}}}
-	for _, source := range request.SourceIDs {
-		grant.Sources = append(grant.Sources, telemetry.SourceGrant{SourceID: string(source), SchemaVersion: 1, ProfileID: telemetry.FixtureProfile})
+	sourceIDs := make([]string, len(request.SourceIDs))
+	for i, source := range request.SourceIDs {
+		sourceIDs[i] = string(source)
+		grant.Sources = append(grant.Sources, telemetry.SourceGrant{SourceID: string(source), SchemaVersion: 1, ProfileID: telemetry.SourceProfile(request.SourceProfiles, string(source))})
 	}
 	sort.Slice(grant.Sources, func(i, j int) bool { return grant.Sources[i].SourceID < grant.Sources[j].SourceID })
-	if telemetry.ValidateGrant(grant, at) != nil {
+	if !telemetry.ValidSourceProfiles(sourceIDs, request.SourceProfiles) || telemetry.ValidateGrant(grant, at) != nil {
 		return grant, telemetry.ErrInvalid
 	}
 	// Idempotent retry compares immutable scope/key; a revoked ID cannot regain
@@ -137,7 +140,7 @@ func (s *TelemetryStore) CreateEnrollment(ctx context.Context, request Enrollmen
 	if _, err = tx.Exec(ctx, `INSERT INTO gp06f_telemetry_keys(enrollment_id,key_id,key_epoch,public_key,state,created_at) VALUES($1,$2,1,$3,'ACTIVE',$4)`, grant.EnrollmentID, request.KeyID, public, at); err != nil {
 		return grant, err
 	}
-	if err = telemetryAudit(ctx, tx, grant.EnrollmentID, 1, "ENROLLED", actor, map[string]any{"source_count": len(grant.Sources), "profile": telemetry.FixtureProfile}, at); err != nil {
+	if err = telemetryAudit(ctx, tx, grant.EnrollmentID, 1, "ENROLLED", actor, map[string]any{"source_count": len(grant.Sources), "sources": grant.Sources}, at); err != nil {
 		return grant, err
 	}
 	return grant, tx.Commit(ctx)

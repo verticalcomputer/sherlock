@@ -68,6 +68,26 @@ func TestFixtureOptInAndFixedSafeErrors(t *testing.T) {
 	}
 }
 
+func TestExplicitLinuxModeRejectsFixtureBootAndMixedProfiles(t *testing.T) {
+	c := nodeConfig{Scope: nodetelemetry.LocalScope{SourceIDs: []string{"source-a"}, SourceProfiles: map[string]string{"source-a": telemetry.LinuxHostProfile}}}
+	if !sourceModeAllowed(c, true) || sourceModeAllowed(c, false) {
+		t.Fatal("Linux mode binding")
+	}
+	c.FixtureBootID = "synthetic-boot"
+	if sourceModeAllowed(c, true) {
+		t.Fatal("Linux source with synthetic boot identity")
+	}
+	c.FixtureBootID = ""
+	c.Scope.SourceIDs = append(c.Scope.SourceIDs, "omitted-fixture")
+	if sourceModeAllowed(c, true) {
+		t.Fatal("mixed fixture/Linux mode")
+	}
+	var out, errs bytes.Buffer
+	if code := run(context.Background(), []string{"--linux", "--fixture", "--config", "private-path"}, &out, &errs); code != 2 || strings.Contains(errs.String(), "private-path") {
+		t.Fatal("ambiguous mode")
+	}
+}
+
 func TestProtectedStrictConfigurationAndKeyInputs(t *testing.T) {
 	path, c := protectedConfig(t)
 	if parsed, _, _, e := loadConfig(path); e != nil || parsed.Scope.EnrollmentID != c.Scope.EnrollmentID {

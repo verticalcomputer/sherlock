@@ -6,11 +6,14 @@ incident and investigation history. Vertical Computer Inc maintains the code.
 
 This repository publishes reviewed source. No approved signed binary release or client installation qualification is claimed.
 
-The resident node agent and
-cluster-local gateway currently implement the **synthetic `fixture.v1` source**.
-GPU, host, filesystem, network, passive events, optics and workload-progress
-adapters require separate implementation and qualification. Fixture success is
-not measured hardware coverage or workload overhead.
+The resident node agent and cluster-local gateway implement the synthetic
+`fixture.v1` transport and opt-in `linux.host.v1` / `linux.rootfs.v1` sources.
+Linux sources read fixed proc files and local root filesystem statistics; values,
+missing fields and failures are stored as scoped history. They do not yet feed
+health evaluations. GPU, network, passive events, optics and workload-progress
+adapters remain open, as do native-host overhead and client qualification.
+See the [source contract](docs/LINUX_RESIDENT_SOURCES.md) and
+[implementation sequence](implementation.md).
 
 ## Build and check
 
@@ -51,7 +54,7 @@ authoritative for central work, leases, results and incidents.
 The monitoring agent has no remote command interface or automatic updates.
 Default network sampling is ten seconds; GPU/host sampling and heartbeats are
 thirty seconds. Node spooling is bounded at 256 MiB or 24 hours. These are design
-defaults; fixture runtime success does not qualify the missing hardware adapters.
+defaults; source presence does not qualify hardware coverage or workload impact.
 Redfish/BMC collection belongs at the head gateway. Diagnostic and repair
 permissions are separate; monitoring enrollment grants no repair authority.
 

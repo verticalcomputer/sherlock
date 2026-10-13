@@ -290,8 +290,8 @@ func (s *TelemetryStore) acceptBatch(ctx context.Context, cluster domain.Cluster
 	if err = persistTelemetryInterval(ctx, tx, grant.EnrollmentID, batch.Key.SessionEpoch, telemetryInterval{kind: "RECEIVED", from: seq, through: seq}); err != nil {
 		return receipt, err
 	}
-	// The initial fixture profile always remains synthetic history; no intake
-	// receipt establishes physical freshness or feeds a health projection.
+	// All resident profiles remain history-only pending a separately qualified
+	// freshness/evaluator projection. Receipt durability does not establish health.
 	historyOnly := true
 	receipt = telemetry.CloudReceipt{ProtocolVersion: 1, ID: telemetryReceiptID("BATCH", grant.EnrollmentID, batch.Key.SessionEpoch, batch.Key.Sequence, batch.Digest), Key: batch.Key, Digest: batch.Digest, GatewayReceiptID: gatewayReceiptID, StoredAt: at, Durability: "CLOUD", HistoryOnly: historyOnly}
 	if _, err = tx.Exec(ctx, `INSERT INTO gp06f_telemetry_batches(enrollment_id,session_epoch,session_id,sequence,digest,gateway_receipt_id,receipt_id,body,history_only,stored_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, grant.EnrollmentID, batch.Key.SessionEpoch, batch.Key.SessionID, batch.Key.Sequence, batch.Digest, gatewayReceiptID, receipt.ID, body, historyOnly, at); err != nil {

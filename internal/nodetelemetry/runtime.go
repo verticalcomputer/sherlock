@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -43,6 +44,12 @@ func Open(ctx context.Context, c Config) (*Runtime, error) {
 	}
 	if !filepath.IsAbs(c.Root) || filepath.Clean(c.Root) != c.Root || c.Gateway == nil || c.Interval < 10*time.Second || c.Interval > 24*time.Hour {
 		return nil, ErrInvalid
+	}
+	c.Scope.SourceProfiles = maps.Clone(c.Scope.SourceProfiles)
+	for _, id := range c.Scope.SourceIDs {
+		if telemetry.SourceProfile(c.Scope.SourceProfiles, id) != telemetry.FixtureProfile && c.LinuxSources == nil {
+			return nil, ErrInvalid
+		}
 	}
 	c.Scope.SourceIDs = append([]string(nil), c.Scope.SourceIDs...)
 	sort.Strings(c.Scope.SourceIDs)
@@ -336,7 +343,15 @@ func (r *Runtime) CollectOnce(ctx context.Context) error {
 	}
 	b := telemetry.NodeBatch{ProtocolVersion: 1, Key: k, EnrollmentRevision: 1, InventoryRevisionID: r.config.Scope.InventoryRevisionID, BootID: r.boot, SigningKeyID: r.config.SigningKeyID, AgentVersion: r.config.Scope.AgentVersion, BuildSHA256: r.config.Scope.BuildSHA256, CreatedAt: at}
 	for index, id := range r.config.Scope.SourceIDs {
-		frame, err := telemetry.NewFixtureFrame(id, k.ClusterID, k.NodeID, "e"+k.SessionEpoch+"-s"+k.Sequence+"-f"+strconv.Itoa(index), at, seq)
+		prefix := "e" + k.SessionEpoch + "-s" + k.Sequence + "-f" + strconv.Itoa(index)
+		profile := telemetry.SourceProfile(r.config.Scope.SourceProfiles, id)
+		var frame telemetry.SourceFrame
+		var err error
+		if profile == telemetry.FixtureProfile {
+			frame, err = telemetry.NewFixtureFrame(id, k.ClusterID, k.NodeID, prefix, at, seq)
+		} else {
+			frame, err = r.config.LinuxSources.Collect(ctx, profile, id, k.ClusterID, k.NodeID, prefix, at)
+		}
 		if err != nil {
 			return ErrState
 		}
@@ -351,6 +366,11 @@ func (r *Runtime) CollectOnce(ctx context.Context) error {
 		}
 		b.Sources = append(b.Sources, frame)
 	}
+	at, e = r.now()
+	if e != nil {
+		return e
+	}
+	b.CreatedAt = at
 	if e = telemetry.SignBatch(&b, r.config.SigningKey); e != nil {
 		return ErrCapacity
 	}
