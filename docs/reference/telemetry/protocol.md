@@ -1,35 +1,17 @@
-# GP-06f telemetry v1 implementation contract
+# Telemetry v1 protocol (GP-06f, GP-03, GP-23b)
 
-October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
+This reference owns wire identity, signing, bounds and receipt semantics.
+Admitted profiles are `fixture.v1`, `linux.host.v1` and `linux.rootfs.v1`;
+[profile definitions](../../../internal/telemetry/profiles.go) and
+[Linux source semantics](linux-sources.md) define exact fields. All currently
+store scoped history without ordinary health/evaluator projection.
 
-Prepared October 8, 2026 before stage-4 implementation. This contract extends
-[GP-06f](GP06F_RESIDENT_TELEMETRY_AGENT.md), GP-03 and GP-23b. It is an implementation
-specification, not acceptance or permission to install on client nodes. The
-existing collector v1/v2 work, result, lease, identity and diagnostic protocols
-remain distinct. GP-06e acceptance is historical; telemetry grants no command,
-repair, workload, BMC or automatic update authority.
-
-## Repository implementation slices
-
-1. Strict typed protocol, canonical signatures, durable node/gateway journals,
-   cloud enrollment/session/receipt storage and authenticated collector routes.
-   The sole initial source profile is `fixture.v1`, explicitly synthetic. It must
-   never create a physical GPU/host/network health assertion or an application
-   progress claim. Provide scoped receipt/history readback and real fixture flow.
-2. Protected local enrollment tooling, CSR-bound one-use bootstrap, node mTLS,
-   pinned gateway identity, renewal/revocation/key rotation, node/gateway binaries,
-   fair bounded replay and resource enforcement. A functioning library or test
-   harness alone does not satisfy this slice.
-3. Crash/quota/corruption/replay/compatibility qualification and exact release
-   candidate source-audit/build materials. All installation prerequisites in the
-   private operational evidence withheld remain mandatory. Stage 5 separately
-   qualifies actual source adapters and workload overhead.
-
-Each slice records its remaining gates. Do not report GP-06f complete until all
-repository gates and the separately recorded client candidate build gate pass.
+Implementation owners: [validation](../../../internal/telemetry/validate.go),
+[canonical encoding](../../../internal/telemetry/canonical.go),
+[cloud intake](../../../internal/store/postgres/telemetry_intake.go), and
+[journal](../../../internal/telemetryjournal/queue.go). [Current status](../../../next.md)
+owns release/live gates. Existing collector v1/v2 work, result, lease and diagnostic
+protocols remain separate; telemetry grants no command, repair or update authority.
 
 ## Additive transport and authority
 
@@ -84,8 +66,9 @@ Bootstrap lasts at most ten minutes, is single-use, and is bound to the approved
 CSR SPKI hash and node/enrollment identity. Possessing the token alone cannot
 substitute a key. Certificates bind cluster/node/enrollment in their SAN and have
 explicit expiry and renewal. Gateway CA/context plus SPKI pin are both checked.
-Certificate issuance and bootstrap are required delivery work, not implied by a
-valid batch signature or a preconfigured test principal.
+Certificate issuance and bootstrap have explicit operator/relay/import interfaces
+in the [identity reference](node-identity.md); a valid batch signature or test
+principal does not substitute for them. Automated renewal is not implemented.
 
 ## Fixed wire identities and signed evidence
 
@@ -111,9 +94,9 @@ caller arrays while canonicalizing. Gateway and cloud independently recompute.
 Observation IDs and canonical entity identity are stable. Original ObservedAt and
 CollectedAt are preserved. Replay can fill history but cannot become fresh
 because it arrived late; older sessions cannot supersede a higher epoch's live
-projection. Stage 4 keeps synthetic receipt history separate from ordinary metric
-projections and evaluators. Overlapping real sources require a documented stable
-observation/deduplication policy before hardware adapters are admitted.
+projection. Current fixture and Linux receipt histories stay separate from
+ordinary metric projections and evaluators. Overlapping real sources require a
+stable observation/deduplication policy before health projection is enabled.
 
 Session OPEN binds epoch, random session ID, boot and enrolled signing key.
 Process restart retains the same session. A proven new boot durably allocates
@@ -170,19 +153,12 @@ preserve the original journal for review, do not initialize empty or quarantine
 by silently moving away retained authority. Cancellation joins collection/drain
 workers before closing storage.
 
-The first foundation slice retains cloud receipts, session facts and historical
-keys without pruning. Finalized and cloud-covered do not prove the gateway
-recorded its receipts: responses can be lost. `Retired` remains false until an
-authenticated gateway ownership-retirement handshake is implemented and tested.
-The two-key cap therefore safely refuses a third rotation in that slice. This is
-an explicit incomplete capacity/retirement gate, not a production retention
-policy or complete key lifecycle qualification.
-
-The subsequent private operational evidence withheld
-implements the additive [ownership retirement contract](GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md).
-Its separate final source/check results govern that extension; they do not
-retroactively redefine the first foundation acceptance. Schema 3 requires fresh
-fixture journals and preserves/refuses schema 2. Client and fleet gates remain open.
+The implemented [retirement extension](ownership-retirement.md) adds signed
+release/completion handshakes and bounded receipt/session/key reclamation.
+FINALIZE or cloud coverage alone cannot retire ownership. Local journal schema 3
+rejects and preserves initialized schema 1/2 journals; no implicit conversion or
+downgrade is supported. This compatibility rule applies to both fixture and Linux
+profiles and does not revise earlier foundation acceptance.
 
 ## Numeric resource contract
 
@@ -202,9 +178,11 @@ exclusive lifetime lock, bounded SQLite pages/transactions/checkpoints and
 fsync/rename/directory-fsync ordering. Prove physical bounds under failure; a
 payload byte counter or advisory WAL size alone is insufficient.
 
-Defaults: network 10 seconds, GPU/host/contact 30 seconds; one node collection
-pass and one in-flight upload, 128 MiB node memory limit, 32 KiB/s sustained
-transport plus 1 MiB burst. Gateway at most four aggregate uploads and one per
+Implemented runtime defaults: a 30-second collection interval (configurable from
+10 seconds to 24 hours), one node collection pass and one in-flight upload,
+a 128 MiB Go memory target, and 32 KiB/s sustained transport plus 1 MiB burst.
+The memory target is soft, not an OS-enforced RSS limit. Independent heartbeat,
+GPU sampling and ten-second network sampling remain design work. Gateway at most four aggregate uploads and one per
 node; round-robin nodes and one fresh then three oldest backlog turns. Lifecycle
 records precede dependent batches; reserve bounded loss/contact dispatch. Deadlines,
 retry backoff and jitter are bounded. No source reread during replay. CPU/GPU API

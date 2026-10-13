@@ -3,8 +3,8 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "428ded40181e257d7db681320dcf4a999d373e874c05e1f0ed219b9762958058",
-      "size": 2309
+      "sha256": "3d2f751387466ed50c6d80ce8b4d52e8a2f6b0b96305caaa1e971abf03f32f7c",
+      "size": 2394
     },
     {
       "executable": false,
@@ -21,8 +21,8 @@
     {
       "executable": false,
       "path": "CONTRIBUTING.md",
-      "sha256": "f7a0fd70f0be1793c26646bba63267bfb4334986a3fa35dc2178cd52e204d073",
-      "size": 1431
+      "sha256": "0be009d9b44c8b1c1386b614a2bcf579fda533aee8922df8a5175bedece55864",
+      "size": 2008
     },
     {
       "executable": false,
@@ -33,8 +33,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "96fc70fb61c5c59f0cf38c96e98d76bb8c5bb422f9923d5dc4a5882576df4973",
-      "size": 1590
+      "sha256": "0590e585ca7d04e8dbf562542fcd5b370b67d03fd5d90daece17608a54f33af8",
+      "size": 1787
     },
     {
       "executable": false,
@@ -45,14 +45,14 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "3a1595e2c52297d3df309f04b2e31827502ef07c401c8c9c23bf0682b26bb18a",
-      "size": 3409
+      "sha256": "0130740027f02220eba8bd49e102bc08731639a14e95bd1202dc6781eb90f254",
+      "size": 3463
     },
     {
       "executable": false,
       "path": "SECURITY.md",
-      "sha256": "6aaf12de3101465a0b75ea703eb802c01b26bef4b78ba5ad41ea781f16cf4cb8",
-      "size": 723
+      "sha256": "5196b479b53e353fa41c41756e66513a58a399f7b2ad2f854053cf40e72b58df",
+      "size": 763
     },
     {
       "executable": false,
@@ -657,8 +657,8 @@
     {
       "executable": false,
       "path": "deploy/pilot/m15/PILOT_CHECKLIST.md",
-      "sha256": "fee5c5dbed8fad1e824801ff6350b7f4cbf36ece6a4dd8144b3e2aebb2637661",
-      "size": 822
+      "sha256": "d2e4a98dd78baf82c917b56990540ade8cd64fcd102a6199393441883bd41d8d",
+      "size": 1077
     },
     {
       "executable": false,
@@ -824,75 +824,93 @@
     },
     {
       "executable": false,
-      "path": "docs/GP06F_CANDIDATE_REVIEW.md",
-      "sha256": "1347b5d49fd49f187b3e0587ad5209ca0fb9412720431ecb4bd3fd37490b5919",
-      "size": 11740
+      "path": "docs/README.md",
+      "sha256": "83e24a1e894124049265a128a156316ee5ede7cb36252e73f71795bf04b2c923",
+      "size": 2379
     },
     {
       "executable": false,
-      "path": "docs/GP06F_GATEWAY_RUNTIME_CONTRACT.md",
-      "sha256": "329f5d02a35da228edb3750488f3dfc012c8a11c6e722d0510bc2987c8c0d2a5",
-      "size": 4106
+      "path": "docs/architecture.md",
+      "sha256": "18fa83ab4708d8042800ea909d84faa0e51cb0addad1dfd95621ce6c8e97f761",
+      "size": 3516
     },
     {
       "executable": false,
-      "path": "docs/GP06F_NODE_IDENTITY_CONTRACT.md",
-      "sha256": "8b7984682e7164058e571c17d76cd6c6e23ff627544c01f695cb32cf7ee09007",
-      "size": 5917
+      "path": "docs/development.md",
+      "sha256": "bb7429c172c7173e28a095c0c78d3f19c5c9540ddcb7e12245846b50dcaeac94",
+      "size": 4071
     },
     {
       "executable": false,
-      "path": "docs/GP06F_NODE_RUNTIME_CONTRACT.md",
-      "sha256": "a56a04811121b4f3ea705173331655c751e8155b24329551710cbfbc1db4a452",
-      "size": 6894
+      "path": "docs/guides/release-review.md",
+      "sha256": "c3206cb8ea09d4df6062aa446db7ae7215715306b71d981f041f6d153f7e4ee6",
+      "size": 11309
     },
     {
       "executable": false,
-      "path": "docs/GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md",
-      "sha256": "aad9856927675c9284436d1bc53872975e4dfcd02150cba1adef88bdf38ff5ec",
-      "size": 15050
+      "path": "docs/guides/release-signing.md",
+      "sha256": "ef4d5b0e6ff060f90df0ef50dbbffd4e47face51f4b34985567035f15056f894",
+      "size": 8064
     },
     {
       "executable": false,
-      "path": "docs/GP06F_RELEASE_SIGNING.md",
-      "sha256": "4c2ade2fd0810703a2e5549b24ce28f90858a7a9db3b65109cf5a802e81681e0",
-      "size": 7929
+      "path": "docs/guides/source-export.md",
+      "sha256": "9ca236682d29270fe4d79bdf9dff5a143bdf3d755d5e6357f71dfc027cd7fa38",
+      "size": 4839
     },
     {
       "executable": false,
-      "path": "docs/GP06F_RESIDENT_TELEMETRY_AGENT.md",
-      "sha256": "752cef75ffd685209407228dacd0249c89b8bf9adce0641c5644904bedd3f101",
-      "size": 9334
+      "path": "docs/history/LINUX_RESIDENT_CHECKPOINT_20261013.md",
+      "sha256": "d67a23d067f16610dae6d63c5166e2d8459804a9eb72b1cd7db30d1f1294f5e1",
+      "size": 3778
     },
     {
       "executable": false,
-      "path": "docs/GP06F_TELEMETRY_V1_CONTRACT.md",
-      "sha256": "e84861e34f5040809d71db16fba57c24f61e42e2b5f477554bb6e5b85006bb53",
-      "size": 15134
+      "path": "docs/knowledge.json",
+      "sha256": "3ebda0acaed037ba87830f19082c04d4f30916fe8de14ab398cfff955a958eaa",
+      "size": 5850
     },
     {
       "executable": false,
-      "path": "docs/LINUX_RESIDENT_CHECKPOINT_20261013.md",
-      "sha256": "811baf968dfb3407e4b4a5150613862f2805c9894f6cb67fd622cd7a4708ffd5",
-      "size": 3761
+      "path": "docs/reference/telemetry/gateway-runtime.md",
+      "sha256": "19496aabc0911459918c5fc7a5896d2eab777162d79d688bca59c494ab10dfe5",
+      "size": 4444
     },
     {
       "executable": false,
-      "path": "docs/LINUX_RESIDENT_SOURCES.md",
-      "sha256": "a504b48f1dea112b3f6d03e08107844ce87b4f2e21c77a79b3edce561218c20f",
-      "size": 5484
+      "path": "docs/reference/telemetry/linux-sources.md",
+      "sha256": "291caddd08946a503cb3d54da643f7b3a9c3c23ec72ec7b3f934a64ad8081019",
+      "size": 5887
     },
     {
       "executable": false,
-      "path": "docs/PUBLIC_ARCHITECTURE.md",
-      "sha256": "9dec6cfb8bc5834cd593d0e1f2e68c1b16795b20511caa0b185258bcd420177a",
-      "size": 2164
+      "path": "docs/reference/telemetry/node-identity.md",
+      "sha256": "84ec3077e988ce9e01e1e76006fb1d7e2657e319a393b81db55a19297e04f1ec",
+      "size": 6491
     },
     {
       "executable": false,
-      "path": "docs/PUBLIC_SOURCE_EXPORT.md",
-      "sha256": "562c401c7b667d7f75c729235f6f4705a733bcc623baf96d6558bceb19b6536c",
-      "size": 4606
+      "path": "docs/reference/telemetry/node-runtime.md",
+      "sha256": "0d4425c9296890a46ba66fa72378e9ead60e99261d89706b3b34fd62eba17b7c",
+      "size": 6428
+    },
+    {
+      "executable": false,
+      "path": "docs/reference/telemetry/overview.md",
+      "sha256": "725db2b5f9d5534d8074d479668a7f4328afa4901bcb38a2694fcc52923cc80d",
+      "size": 9216
+    },
+    {
+      "executable": false,
+      "path": "docs/reference/telemetry/ownership-retirement.md",
+      "sha256": "f40fb25f07f709ef7d6ae1402ab7ed1211e0b2242590fdf4cf4a93945f3b4a0a",
+      "size": 15142
+    },
+    {
+      "executable": false,
+      "path": "docs/reference/telemetry/protocol.md",
+      "sha256": "73398e0deae18c6377a9d6e74d6809b948e8664e8aa17362562436a653ed5835",
+      "size": 13856
     },
     {
       "executable": false,
@@ -909,8 +927,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "ea7fac6464430cf464ea35c69f101b7e0b4f13af49a21852aae27e284c1af215",
-      "size": 2032
+      "sha256": "26ea7d68b33d329bce73234be592b447471dd5c837f122ce447634bd31becbea",
+      "size": 2248
     },
     {
       "executable": false,
@@ -3615,8 +3633,8 @@
     {
       "executable": false,
       "path": "internal/investigationcontext/README.md",
-      "sha256": "024852841031b680f5ca46c13e27d6bc3cc21f8556ea30e29f9558a72815c7f4",
-      "size": 3031
+      "sha256": "63e9c314ebf1ec7b50c212c25cf2e76bf75c0048cba7510b9f2e9bd3f47281c6",
+      "size": 3153
     },
     {
       "executable": false,
@@ -5079,8 +5097,8 @@
     {
       "executable": false,
       "path": "internal/telemetry/README.md",
-      "sha256": "cee3167f3c6d6c46931eca70e965f648d35b6de89df96259584eaaf16e9247f9",
-      "size": 5704
+      "sha256": "f4e0cfb71d26f8094e49410346ffdcd8f74b1a1bc46767cc4e91f7a96733d91b",
+      "size": 5695
     },
     {
       "executable": false,
@@ -5211,8 +5229,8 @@
     {
       "executable": false,
       "path": "internal/telemetryjournal/README.md",
-      "sha256": "0bad6369313a02b6e37ac877e8c04767f807bac70fe86a71dc8b16fe7afa4ecb",
-      "size": 6697
+      "sha256": "6c51e4e642d08231041fb8d576e069bfb4e4a21fca90059c4e442cddd6157f12",
+      "size": 6758
     },
     {
       "executable": false,
@@ -6339,8 +6357,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "7caf6ced142bcbd168df80aed6fa2c873bd679a00362d0911bb95aa8cd6e9d0a",
-      "size": 679
+      "sha256": "b6e351e94313b59103f183d4495bc1371c81c21b4ac1bdc589bf7c2ecebf96c6",
+      "size": 3812
     },
     {
       "executable": true,
@@ -6351,8 +6369,8 @@
     {
       "executable": false,
       "path": "scripts/build-telemetry-candidate.py",
-      "sha256": "c3b4030b75116b70033b1827cffa9d5d0778557ee26075cd5716f9c83164f458",
-      "size": 27585
+      "sha256": "944f707e2a23c5ef5d65c419b4a697f5e174f8bf6b381b7b05b4d6373a6e9b74",
+      "size": 27614
     },
     {
       "executable": true,
@@ -6377,6 +6395,12 @@
       "path": "scripts/grafana_xid_recent.py",
       "sha256": "0075b566e37e6c4761609ed21b7e60f3693c441d6dca8117bee15f025b01d535",
       "size": 2805
+    },
+    {
+      "executable": false,
+      "path": "scripts/knowledge.py",
+      "sha256": "dff21e98dd194764a45cea61a6bf6794d0f5c877207d91d6183ccfeb8ae152ef",
+      "size": 6387
     },
     {
       "executable": true,
@@ -6455,6 +6479,12 @@
       "path": "scripts/test_grafana_xid_recent.py",
       "sha256": "013de65bd177307aa040e384b3fe33b91242df0072923e54017c09d5eacb7a1c",
       "size": 1723
+    },
+    {
+      "executable": false,
+      "path": "scripts/test_knowledge.py",
+      "sha256": "3948de0186d3ca68933b96dc88002e9634737a8d3ba09bcc9031dd96eda4932c",
+      "size": 4031
     },
     {
       "executable": false,

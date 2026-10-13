@@ -1,7 +1,10 @@
 # Public source and unsigned release review
 
-This procedure extends the existing source-audit/build gate. Preparation does
-not approve disclosure, signing, publication or client installation.
+Use this procedure when selecting material from a private tree for public
+publication or assembling an unsigned review package. The Sherlock public source
+repository already exists; normal contributions use its PR workflow and do not
+require a fresh export. New disclosures still require explicit source review.
+The tools here do not approve disclosure, signing or client installation.
 
 ## Exact source selection
 
@@ -76,7 +79,7 @@ commit. The signer **rejects** it. Preparation cannot invent the future public
 Git commit, release tag, hosted artifact ID or owner approval. Once the exact
 public tree and publication route are approved, build/review an exact package
 bound to the actual public commit/tag and follow the
-[protected signing contract](GP06F_RELEASE_SIGNING.md). Keep original private
+[protected signing contract](release-signing.md). Keep original private
 history and dated candidate evidence intact.
 
 Source availability, dependency/archive-asset rights, vulnerability applicability,

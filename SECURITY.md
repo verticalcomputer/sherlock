@@ -10,7 +10,7 @@ unreported vulnerability details, secrets or customer telemetry in public issues
 
 ## Release status
 
-Sherlock is currently preparing its first reviewed open-source release. Private
-fixture builds are not approved client releases. A supported-version policy will
+Sherlock source is public under Apache-2.0. A source checkout or unsigned preview
+build is not an approved signed client release. See [current release status](next.md). A supported-version policy will
 be published with the first approved release; no maintenance or response-time
 commitment is stated here.

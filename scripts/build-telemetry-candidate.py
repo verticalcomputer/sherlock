@@ -20,14 +20,14 @@ import zipfile
 TARGETS = ("sherlock-node-agent", "sherlock-gateway")
 VERSION = "fixture.v1"
 CONTRACTS = (
-    "docs/GP06F_RESIDENT_TELEMETRY_AGENT.md",
-    "docs/GP06F_TELEMETRY_V1_CONTRACT.md",
-    "docs/GP06F_NODE_IDENTITY_CONTRACT.md",
-    "docs/GP06F_NODE_RUNTIME_CONTRACT.md",
-    "docs/GP06F_GATEWAY_RUNTIME_CONTRACT.md",
-    "docs/GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md",
-    "docs/GP06F_CANDIDATE_REVIEW.md",
-    "docs/LINUX_RESIDENT_SOURCES.md",
+    "docs/reference/telemetry/overview.md",
+    "docs/reference/telemetry/protocol.md",
+    "docs/reference/telemetry/node-identity.md",
+    "docs/reference/telemetry/node-runtime.md",
+    "docs/reference/telemetry/gateway-runtime.md",
+    "docs/reference/telemetry/ownership-retirement.md",
+    "docs/guides/release-review.md",
+    "docs/reference/telemetry/linux-sources.md",
 )
 LEGAL_FILES = ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
 SOURCE_FIELDS = ("GoFiles", "CgoFiles", "SFiles", "HFiles", "CFiles", "CXXFiles",

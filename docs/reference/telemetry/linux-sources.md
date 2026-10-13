@@ -1,12 +1,17 @@
 # GP-06f Linux host and root filesystem source contract
 
-Prepared October 13, 2026 before implementation. This extends telemetry v1;
-GP-06f, GP-06g and R1 qualification remain open. Public PR #1 is merged.
+This extends [telemetry v1](protocol.md) with opt-in host/root collection.
+Code owners: [profile schema](../../../internal/telemetry/profiles.go),
+[collector](../../../internal/linuxtelemetry/collect.go),
+[Linux reads](../../../internal/linuxtelemetry/read_linux.go), and
+[scoped cloud readback](../../../internal/store/postgres/telemetry_read.go).
+See [current status](../../../next.md) for remaining release and live gates.
 
 ## Interface and scope
 
-Two closed profiles are added: `linux.host.v1` and `linux.rootfs.v1`, schema and
-adapter version 1. Enrollment and local scope may specify `source_profiles`, a
+The closed profiles are `linux.host.v1` and `linux.rootfs.v1`, with
+`schema_version: 1` and `adapter_version` equal to the exact profile string.
+Enrollment and local scope may specify `source_profiles`, a
 map from an already declared source ID to its exact profile. Omitted entries
 retain `fixture.v1`; extra IDs and unknown profiles are rejected. Profiles are
 immutable enrollment and allocator scope. A profile change needs new enrollment
@@ -30,7 +35,8 @@ The version output retains `profile` as the legacy fixture default and exposes
 
 Records bind the enrolled node entity; root metrics describe only the root mount
 slot in the agent's mount namespace, not a device identity or all mounts. This
-profile requires native host deployment, not a container. No process names,
+profile requires native host deployment to interpret values as host telemetry;
+the reader itself does not prove it is outside a container. No process names,
 commands, user directories, file contents, remote paths or arbitrary labels leave
 the node. Root reads are restricted to ext2/3/4, XFS and Btrfs. Overlay, network,
 FUSE and unrecognized roots are explicitly unsupported. The root descriptor is pinned with O_PATH; bounded proc fdinfo mount identity

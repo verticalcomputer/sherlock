@@ -12,8 +12,10 @@ Linux sources read fixed proc files and local root filesystem statistics; values
 missing fields and failures are stored as scoped history. They do not yet feed
 health evaluations. GPU, network, passive events, optics and workload-progress
 adapters remain open, as do native-host overhead and client qualification.
-See the [source contract](docs/LINUX_RESIDENT_SOURCES.md) and
-[implementation sequence](implementation.md).
+See [current status](next.md) for implementation and release gaps.
+
+Start with the [documentation index](docs/README.md) for architecture, task guides,
+interface references and contributor context.
 
 ## Build and check
 
@@ -32,7 +34,7 @@ production database. Network enrollment tests use the synthetic fixture under
 `test/fixtures`; the fixed topology is an experimental fixture profile, not
 fleet-wide monitoring acceptance.
 
-Build the fixture binaries with the reviewed candidate builder:
+Prepare unsigned preview binaries with the candidate builder:
 
 ```sh
 python3 scripts/build-telemetry-candidate.py --help
@@ -40,7 +42,7 @@ python3 scripts/build-telemetry-candidate.py --help
 
 The builder performs two clean offline Linux/amd64 builds after resolving pinned
 modules. It produces private review evidence, not an approved release. Use the
-[release signing contract](docs/GP06F_RELEASE_SIGNING.md) for exact package and
+[release signing contract](docs/guides/release-signing.md) for exact package and
 client-verification requirements. Keep the review receipt and build working
 directories private; distribute only an explicitly approved package.
 
@@ -52,14 +54,14 @@ ownership and acknowledgements preserve replay and explicit gaps. PostgreSQL is
 authoritative for central work, leases, results and incidents.
 
 The monitoring agent has no remote command interface or automatic updates.
-Default network sampling is ten seconds; GPU/host sampling and heartbeats are
-thirty seconds. Node spooling is bounded at 256 MiB or 24 hours. These are design
-defaults; source presence does not qualify hardware coverage or workload impact.
-Redfish/BMC collection belongs at the head gateway. Diagnostic and repair
+Fixture/Linux collection defaults to thirty seconds. Node spooling is bounded at
+256 MiB or 24 hours; gateway-owned data has no TTL deletion. Network/GPU source
+scheduling and independent heartbeats remain planned. Redfish/BMC collection
+belongs at the head gateway. Diagnostic and repair
 permissions are separate; monitoring enrollment grants no repair authority.
 
-See [architecture](docs/PUBLIC_ARCHITECTURE.md), [agent scope and permission
-contract](docs/GP06F_RESIDENT_TELEMETRY_AGENT.md), and [contribution instructions](CONTRIBUTING.md).
+See [architecture](docs/architecture.md), [agent scope and permission
+contract](docs/reference/telemetry/overview.md), and [contribution instructions](CONTRIBUTING.md).
 
 ## License and reporting
 

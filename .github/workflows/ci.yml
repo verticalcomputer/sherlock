@@ -20,6 +20,8 @@ jobs:
       - run: go mod download
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
+      - name: Check documentation index and local links
+        run: make check-docs
       - name: Check release signing policy without credentials
         run: python3 -m unittest discover -s scripts -p test_release_signing.py
       - name: Check public export boundaries with synthetic data

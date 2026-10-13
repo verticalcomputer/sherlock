@@ -1,20 +1,16 @@
-# GP-06f resident fixture runtime contract
+# Node runtime reference (GP-06f)
 
-October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
+The node binary requires exactly one explicit source mode: `--fixture` for
+synthetic records, or `--linux` for the [host/root profiles](linux-sources.md).
+It reads the Linux boot identity unless fixture mode explicitly supplies a
+synthetic boot ID. There is no SSH, command, diagnostic or update execution.
+Node TLS credentials authenticate to the pinned cluster-local gateway and grant
+no cloud credential. See [current status](../../../next.md) for qualification.
 
-Prepared October 8, 2026 before runtime implementation. This extends
-[the telemetry v1 contract](GP06F_TELEMETRY_V1_CONTRACT.md); it is not installation
-authorization, hardware source qualification or GP-06f acceptance.
-
-The initial node binary requires explicit synthetic fixture mode. It reads the
-Linux boot identity and creates fixture.v1 records only. It never runs SSH,
-commands, diagnostics, updates or workload operations. Node TLS credentials
-authenticate only to the pinned cluster-local gateway; there is no cloud
-credential. Bootstrap/certificate issuance and renewal remain separate delivery
-gates. Gateway/cloud current authority checks remain mandatory before receipts.
+Code owners: [entrypoint](../../../cmd/sherlock-node-agent/main.go),
+[runtime](../../../internal/nodetelemetry/runtime.go),
+[allocator persistence](../../../internal/nodetelemetry/local.go), and
+[retirement](../../../internal/nodetelemetry/retirement.go).
 
 The owner-only allocator shares the queue's physical budget. Its atomic 0600
 replacement is bounded to 1 MiB and fsyncs the file and parent directory. It binds
@@ -30,9 +26,8 @@ deliberate ACTIVE key rotation allocates exactly the next epoch after recording
 the prior terminal sequence. OPEN is persisted locally before upstream delivery.
 No session is retired from contact, finalization or coverage alone; the eight
 session cap backpressures without the separately negotiated ownership-retirement
-extension. The private operational evidence withheld
-records its implementation/verification scope under the
-[retirement contract](GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md). Allocator version 2
+extension. The implemented [retirement protocol](ownership-retirement.md)
+provides that handshake. Allocator version 2
 uses an explicit retired epoch and durable pending release/completion; earlier
 allocator bytes are refused and preserved rather than silently converted.
 
@@ -88,10 +83,9 @@ Runtime config may use `identity_dir` plus `node_ca_sha256` instead of raw
 Imported certificate scope and local signing keys must match exact configured
 node/enrollment/key. Neither local command issues enrollment or certificates.
 
-At this fixture stage, configured version/build digest are approved synthetic
-metadata, not evidence that the running executable was compiled from that source
-candidate. Exact embedded candidate source digest/version, externally verified
-binary SHA-256, reproducible builds and source audit are required build gates.
+Configured version/build labels alone do not prove which executable is running.
+Exact embedded source identity, externally verified binary SHA-256, reproducible
+builds and source review are distinct release checks.
 Release builds expose `version` with linker-bound `releaseVersion` and
 `releaseSourceSHA256`. When that source digest is embedded, configured version and
 digest must match before local runtime startup. Development builds expose

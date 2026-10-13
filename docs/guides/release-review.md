@@ -1,19 +1,16 @@
-# GP-06f private candidate review and client control templates
+# Review an unsigned agent/gateway candidate
 
-October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
+This guide prepares review evidence; it does not approve a signed binary or client
+installation. Public source is licensed under [Apache-2.0](../../LICENSE), with
+[Vertical Computer Inc attribution](../../NOTICE). See [current status](../../next.md)
+for release state and [signing](release-signing.md) for the protected signing gate.
 
-Prepared October 8, 2026. This is release preparation, not a release approval,
-installation procedure, source disclosure approval or public license grant.
-It extends the [telemetry contract](GP06F_TELEMETRY_V1_CONTRACT.md),
-[node identity contract](GP06F_NODE_IDENTITY_CONTRACT.md),
-[node runtime](GP06F_NODE_RUNTIME_CONTRACT.md) and
-[gateway runtime](GP06F_GATEWAY_RUNTIME_CONTRACT.md).
-The [ownership retirement contract](GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md)
-defines the separately versioned release/completion routes and persistence
-compatibility that a retirement candidate must also include.
+The [candidate builder](../../scripts/build-telemetry-candidate.py) and its
+[tests](../../scripts/test_build_telemetry_candidate.py) own the package format.
+Review the [protocol](../reference/telemetry/protocol.md),
+[identity](../reference/telemetry/node-identity.md),
+[Linux sources](../reference/telemetry/linux-sources.md) and
+[ownership retirement](../reference/telemetry/ownership-retirement.md) before use.
 
 ## Candidate preparation
 
@@ -70,12 +67,15 @@ and [Go build command documentation](https://pkg.go.dev/cmd/go).
 
 ## Reviewable permissions, payload and endpoints
 
-The initial profile is only `fixture.v1`: a synthetic gauge (unit1), exact uint64
-counter (count), boolean flag (unit1) and OK/FAULT/UNKNOWN enum. Explicit field
-support, source coverage, sample times, signed loss declarations and immutable
-cluster/node/enrollment/session/sequence identity accompany the values. This
-profile makes no GPU, thermal, host, filesystem, network or workload claim.
-Stage5 must separately qualify actual adapters and their permissions/payloads.
+The builder still stamps preview version `fixture.v1`; that version label is not
+the list of source capabilities. The binary's `supported_profiles` includes
+synthetic `fixture.v1` and opt-in `linux.host.v1` / `linux.rootfs.v1`.
+Fixture fields are synthetic gauge/counter/flag/state values. Linux payloads,
+permissions, support states and namespace limits are defined in the
+[Linux reference](../reference/telemetry/linux-sources.md). All profiles include
+signed identity, observation times, coverage and explicit loss. No current
+resident profile feeds ordinary health/evaluator projections. Native source and
+workload-overhead qualification remain separate gates.
 
 The node needs its owned protected identity/configuration and bounded spool
 directories, an approved gateway CA/SPKI and outbound TLS to the cluster-local
@@ -94,7 +94,7 @@ reviewing platform/service settings.
 
 | Boundary | Approved route family | Authentication and data |
 | --- | --- | --- |
-| Node→local gateway | POST `/node-telemetry/v1/sessions`, `/node-telemetry/v1/batches` | Required node mTLS plus node signature and current enrollment; synthetic source payload/loss and lifecycle only |
+| Node→local gateway | POST `/node-telemetry/v1/sessions`, `/node-telemetry/v1/batches` | Required node mTLS plus node signature and current enrollment; enrolled fixture or Linux source payload/loss and lifecycle |
 | Gateway→cloud | GET `/collector/telemetry/v1/enrollments/{id}/grant`, `.../status`; POST `/collector/telemetry/v1/sessions`, `.../batches` | Existing authenticated collector boundary, exact cluster/gateway/enrollment authority, signed node data and durable receipts |
 | Node→local gateway retirement | POST `/node-telemetry/v1/retirement/capabilities`, `.../releases`, `.../completions` | Same node mTLS/current authority, separate retirement version, signed ownership proof and signed local completion; pending is backpressure |
 | Gateway→cloud retirement | GET `/collector/telemetry/v1/enrollments/{id}/retirement-capabilities`; POST `/collector/telemetry/v1/retirement/prepare`, `.../commit`, `.../complete` | Existing collector authentication; exact signed request and immutable phase bindings; no health or repair authority |
@@ -144,22 +144,17 @@ production capacity or seven-day soak evidence.
    If owned unacknowledged bytes remain, preserve them and record the gap;
    removal is not proof of cloud receipt or physical health.
 
-## Open gates
+## Review boundaries
 
-Apache-2.0, Vertical Computer Inc, the public module/repository
-`github.com/verticalcomputer/sherlock`, security contact `akash@vertical.computer`,
-and keyless Sigstore signing through the reviewed GitHub OIDC identity are selected.
-The three historical scanner locations have evidence-based dispositions: an
-executable digest, a noncredential idempotency identifier, and a synthetic local
-authentication-test fixture. These dispositions do not approve the full history,
-source tree, candidate, dependency rights or publication. Private audit artifacts
-and customer/operational evidence are withheld from this public source candidate.
-Exact owner publication approval and actual authorized signatures remain open.
+Publication of this public source does not approve a candidate binary. Review
+exact source, compilation dependencies, notices, current vulnerability/secret
+scan results and permitted payloads for each candidate. Previous scan dispositions
+apply only to their exact inputs; they are not a reusable approval of future code.
+Keep original scan output, review receipts and customer evidence private.
 
-An actual approved release signing identity/signatures, independent source and
-dependency review, maintained exact-candidate scans, client source availability,
-native Linux verification, platform permissions/resource qualification, bounded
-retention/ownership-retirement acceptance, outage/renewal/backup/restore, hardware
-source canary and fleet soak remain required. Current capacity limits and the
-exact candidate's retirement qualification limits must be visible to reviewers. This private
-unsigned fixture candidate is **not approved for client installation or publication**.
+Unsigned preview outputs require exact package review and actual authorized
+signatures before client distribution. Native Linux behavior, permissions,
+resource/retention capacity, outage/renewal/backup/restore and hardware canary
+remain separate from reproducibility. Use [current status](../../next.md) for the
+remaining implementation and release gaps. Never upload the whole private builder
+directory or relabel its receipt as release approval.
