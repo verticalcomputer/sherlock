@@ -1,0 +1,21 @@
+{
+  "schema_version": "sherlock.investigation-pilot-closeout/v1",
+  "pilot_id": "pilot-20260821-01",
+  "run_sha256": "3000d1715ed6f880b1e184995bad4620c8ebb9f31ac2532730b519ddd1823d23",
+  "passed": true,
+  "checks": [
+    {"name":"run_identity","passed":true,"detail":"versioned pilot and investigation identity"},
+    {"name":"live_provider","passed":true,"detail":"non-fixture deployment, region, and model attribution"},
+    {"name":"bounded_scope","passed":true,"detail":"bounded entity and time scope"},
+    {"name":"action_novelty","passed":true,"detail":"distinct read-only unprivileged evidence-class actions"},
+    {"name":"evidence_provenance","passed":true,"detail":"typed source, target, status, and time coverage"},
+    {"name":"cited_report","passed":true,"detail":"cited observation and hypothesis plus recommendation"},
+    {"name":"usage_audit","passed":true,"detail":"successful unique model calls reconcile usage within approved ceilings"},
+    {"name":"release_exports","passed":true,"detail":"supplied investigation, model-audit, and evidence exports match SHA-256"},
+    {"name":"terminal_semantics","passed":true,"detail":"terminal outcome and reason agree with evidence coverage"},
+    {"name":"safety_assertions","passed":true,"detail":"all required no-mutation and no-exposure assertions"},
+    {"name":"immutable_review","passed":true,"detail":"operator review references the exact run SHA-256"},
+    {"name":"operator_acceptance","passed":true,"detail":"named operator accepted usefulness, evidence, terminal, safety, and usability"},
+    {"name":"named_approvals","passed":true,"detail":"admin security, data governance, and operations approvals"}
+  ]
+}

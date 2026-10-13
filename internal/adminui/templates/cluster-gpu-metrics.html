@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Record.DisplayName}} · {{.TabTitle}} · Sherlock</title>
+  <link rel="stylesheet" href="/admin/assets/dashboard.css">
+  <script src="/admin/assets/dashboard.js" defer></script>
+</head>
+<body class="cluster-detail-page">
+  {{template "site-header" .Page}}
+  <main class="page-shell">
+    <a class="back-link" href="/admin/clusters">← All clusters</a>
+    <div class="cluster-heading">
+      <div><p class="eyebrow">Cluster</p><h1>{{.Record.DisplayName}}</h1><p class="cluster-subline"><span class="mono">{{.Record.ID}}</span> · expanded DCGM field evidence</p></div>
+      <div class="heading-actions"><a class="button secondary" href="/admin/clusters/{{.Record.ID | urlquery}}/edit">Edit cluster</a></div>
+    </div>
+    {{if .Error}}<div class="notice danger" role="alert">{{.Error}}</div>{{end}}
+
+    <nav class="tabs" aria-label="Cluster views">
+      <a href="/admin/clusters/{{.Record.ID | urlquery}}">Summary</a>
+      <a href="/admin/clusters/{{.Record.ID | urlquery}}/gates">Recovery gates</a>
+      <a href="/admin/clusters/{{.Record.ID | urlquery}}/investigations">Investigations</a>
+      <a href="/admin/clusters/{{.Record.ID | urlquery}}/health">Health signals</a>
+      <a aria-current="page" href="/admin/clusters/{{.Record.ID | urlquery}}/gpu-metrics">GPU metrics</a>
+    </nav>
+
+    {{if .Available}}
+    <section class="panel" aria-labelledby="operations-title">
+      <div class="section-title"><h2 id="operations-title">Expanded DCGM operations</h2><p>Projected {{localTime .GeneratedAt}} · enrollment, the newest committed run and field support are separate facts</p></div>
+      {{if .Metrics.Sources}}
+      {{range .Metrics.Sources}}
+      <h3 class="subhead">{{if .DisplayName}}{{.DisplayName}}{{else}}Prometheus source{{end}} <span class="mono">{{.SourceID}}</span>{{if .Primary}} <span class="tag neutral">INVENTORY SOURCE</span>{{end}}</h3>
+      <div class="scope-table-wrap"><table class="scope-table">
+        <thead><tr><th>Operation</th><th>Enrollment</th><th>Interval</th><th>Last run</th><th>Freshness</th><th>Field support</th></tr></thead>
+        <tbody>
+        {{range .Operations}}
+        <tr>
+          <td><span class="mono">{{.OperationID}}</span></td>
+          <td><span class="badge {{.EnrollmentClass}}">{{.EnrollmentLabel}}</span>{{if .Enrolled}}<br><small>{{.Mode}} · revision {{.Revision}}</small>{{end}}</td>
+          <td>{{.IntervalLabel}}</td>
+          <td>{{if .HasRun}}<span class="status {{statusClass .RunStatus}}">{{.RunStatus}}</span><br><small>{{localTime .CompletedAt}}</small><br><small>coverage {{if .CoverageComplete}}complete{{else}}incomplete{{end}}</small>{{else}}<small>No committed run</small>{{end}}</td>
+          <td><span class="badge {{.FreshnessClass}}">{{.FreshnessBadge}}</span><br><small>window {{.FreshWindowSeconds}}s</small><br><small>{{.FreshnessDetail}}</small></td>
+          <td>{{range .Fields}}<div class="field-support"><span class="mono">{{.Field}}</span> <span class="badge {{.DominantClass}}">{{.DominantBadge}}</span> <small>{{.CountsLabel}}</small> <small class="denominator">{{.DenominatorLabel}}</small></div>{{end}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table></div>
+      {{end}}
+      {{else}}<div class="empty-state">No Prometheus source is configured for this cluster, so no expanded DCGM evidence can exist.</div>{{end}}
+    </section>
+
+    <section class="panel" aria-labelledby="inventory-title">
+      <div class="section-title"><h2 id="inventory-title">Inventory coverage</h2><p>Governed by source <span class="mono">{{.Metrics.GoverningSource}}</span> · expected inventory is operator-seeded per source; observed targets are a never-pruned collection cache, so only a fresh observation counts as covered</p></div>
+      {{with .Metrics.Inventory}}
+      <p><span class="badge {{.CoverageClass}}">{{.CoverageLabel}}</span> <small>{{.WindowLabel}}</small></p>
+      {{if .HasExpectedRevision}}
+      <p>Expected revision <span class="mono">{{.RevisionID}}</span>{{with .EffectiveAt}} · effective {{localTime .}}{{end}}{{with .ObservedAt}} · observed {{localTime .}}{{end}}</p>
+      {{else}}
+      <div class="notice warning" role="status">No expected inventory revision. Coverage cannot be asserted, and missing GPUs are not a health claim.</div>
+      {{end}}
+      <div class="resource-grid" aria-label="Inventory coverage counts">
+        <div><span>Expected nodes</span><strong>{{.ExpectedNodes}}</strong></div>
+        <div><span>Expected GPUs</span><strong>{{.ExpectedGPUs}}</strong></div>
+        <div><span>Observed nodes (cached)</span><strong>{{.ObservedNodes}}</strong></div>
+        <div><span>Observed GPUs (cached)</span><strong>{{.ObservedGPUs}}</strong></div>
+        <div><span>Freshly observed GPUs</span><strong>{{.FreshObservedGPUs}}</strong></div>
+        <div><span>Stale observed GPUs</span><strong>{{.StaleObservedGPUs}}</strong></div>
+        <div><span>Covered expected GPUs</span><strong>{{.CoveredGPUs}}</strong></div>
+        <div><span>Expected MIG entities</span><strong>{{.MIGCount}}</strong></div>
+      </div>
+      <div class="chart-row">
+        <section><h3 class="subhead">Missing telemetry <span class="badge unavailable">MISSING TELEMETRY</span></h3>
+          {{if .ExpectedNotObserved}}<ul class="integrity-list">{{range .ExpectedNotObserved}}<li><span class="mono">{{.Label}}</span> <span class="badge {{.BadgeClass}}">{{.Badge}}</span></li>{{end}}</ul>
+          {{else}}<p class="chart-empty">{{if .HasExpectedRevision}}Every expected entity has a fresh observed target.{{else}}No expected inventory revision to compare.{{end}}</p>{{end}}
+        </section>
+        <section><h3 class="subhead">Unexpected targets <span class="badge stale">NOT IN EXPECTED INVENTORY</span></h3>
+          {{if .ObservedNotExpected}}<ul class="integrity-list">{{range .ObservedNotExpected}}<li><span class="mono">{{.Label}}</span> <span class="badge {{.BadgeClass}}">{{.Badge}}</span></li>{{end}}</ul>
+          {{else}}<p class="chart-empty">No observed target is outside the expected revision.</p>{{end}}
+        </section>
+      </div>
+      {{if .Truncated}}<p class="chart-note">Inventory lists are bounded to {{$.RowLimit}} entries; the remainder is not shown and is not assessed.</p>{{end}}
+      {{end}}
+    </section>
+
+    <section class="panel" aria-labelledby="gpu-table-title">
+      <div class="section-title"><h2 id="gpu-table-title">Per-GPU field evidence · source <span class="mono">{{.Metrics.GoverningSource}}</span></h2><p>{{len .Metrics.GPUs}} rows from the governing source only · a value is shown only for a fresh supported observation</p></div>
+      <p class="chart-note">GPU conditions use the same evidence and health policy as the GPU API. Each field separately shows support and freshness for its collection operation; collection coverage does not establish healthy hardware.</p>
+      {{if .Metrics.OtherSourceNote}}<div class="notice warning" role="status">{{.Metrics.OtherSourceNote}}</div>{{end}}
+      {{if .Metrics.BoundsNote}}<div class="notice warning" role="status">{{.Metrics.BoundsNote}}</div>{{end}}
+      {{if .Metrics.GPUs}}
+      <div class="scope-table-wrap"><table class="scope-table gpu-metrics-table">
+        <thead><tr><th>Node</th><th>GPU</th><th>Inventory</th><th>GPU conditions</th>{{range .Metrics.Fields}}<th title="{{.Name}} · {{.Unit}} · {{.Semantics}}">{{.Name}}</th>{{end}}</tr></thead>
+        <tbody>
+        {{range .Metrics.GPUs}}
+        <tr>
+          <td><span class="mono">{{.NodeID}}</span></td>
+          <td><span class="mono" title="{{.GPUUUID}}">{{.ShortUUID}}</span>{{if .MIG}}<br><small class="mono">MIG {{.MIGIdentity}}</small>{{end}}</td>
+          <td>{{if .Expected}}<span class="tag healthy">EXPECTED</span>{{else}}<span class="tag stale">NOT EXPECTED</span>{{end}}
+            {{if .MIG}}<span class="tag no-data">AMBIGUOUS MIG</span>
+            {{else}}<span class="tag {{.ObservedClass}}">{{.ObservedBadge}}</span>{{if .ObservedAge}}<br><small>{{.ObservedAge}}</small>{{end}}{{end}}</td>
+          <td>{{range .ConditionViews}}<span class="badge {{.Class}}" title="{{.Detail}}">{{.Label}}</span> {{else}}<span class="badge no-data">UNMEASURED</span>{{end}}</td>
+          {{range .Cells}}
+          <td class="metric-cell" title="{{.Title}}">
+            {{if .Supported}}<strong>{{.Display}}</strong>{{if .Age}} <small>· {{.Age}}</small>{{end}}{{if and .Counter .ResetObserved}} <span class="tag stale">RESET OBSERVED</span>{{end}}
+            {{else}}<span class="badge {{.Class}}">{{.Badge}}</span>{{end}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+        </tbody>
+      </table></div>
+      {{else}}<div class="empty-state">No GPU is known from the expected inventory revision or the observed target cache. Absence of rows is not evidence of a healthy fleet.</div>{{end}}
+    </section>
+    {{end}}
+    {{template "site-footer"}}
+  </main>
+</body>
+</html>

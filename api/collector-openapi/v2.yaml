@@ -1,0 +1,1506 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sherlock Typed Collector Control API",
+    "version": "2.0.0",
+    "description": "Typed collection uses the existing durable work and attempt authority. Identity enrollment and heartbeats remain v1. These routes require protocol header 2 and authenticated collection identity; they confer no diagnostic/repair execution permission. Claims filter by compatible protocol, operation capability and locally configured source identifiers. Routes return 503 if no durable typed backend is configured."
+  },
+  "servers": [
+    {
+      "url": "https://control.internal/collector/v2"
+    }
+  ],
+  "security": [
+    {
+      "collectorMTLS": []
+    }
+  ],
+  "paths": {
+    "/work/claim": {
+      "get": {
+        "operationId": "claimTypedCollectionWork",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolVersion"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationID"
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": true,
+            "description": "Locally configured source instances; repeat the query parameter for each source. This filter does not grant cluster authority.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+            }
+          },
+          {
+            "name": "wait_seconds",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30,
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing durable work and attempt leased with its typed plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypedClaimResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No compatible work within requested wait."
+          },
+          "400": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/work/{work_id}/attempts/{attempt}/start": {
+      "post": {
+        "operationId": "startTypedCollectionWork",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolVersion"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationID"
+          },
+          {
+            "$ref": "#/components/parameters/WorkID"
+          },
+          {
+            "$ref": "#/components/parameters/Attempt"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Existing durable attempt started."
+          },
+          "400": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/work/{work_id}/attempts/{attempt}/renew": {
+      "post": {
+        "operationId": "renewTypedCollectionLease",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolVersion"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationID"
+          },
+          {
+            "$ref": "#/components/parameters/WorkID"
+          },
+          {
+            "$ref": "#/components/parameters/Attempt"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewLeaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Existing durable lease renewed."
+          },
+          "400": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/work/{work_id}/attempts/{attempt}/results": {
+      "post": {
+        "operationId": "submitTypedCollectionResult",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolVersion"
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationID"
+          },
+          {
+            "$ref": "#/components/parameters/WorkID"
+          },
+          {
+            "$ref": "#/components/parameters/Attempt"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypedResultRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomically committed or idempotent replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Safe protocol error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "collectorMTLS": {
+        "type": "mutualTLS"
+      }
+    },
+    "parameters": {
+      "ProtocolVersion": {
+        "name": "X-Sherlock-Protocol-Version",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "const": 2
+        }
+      },
+      "CorrelationID": {
+        "name": "X-Correlation-ID",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "WorkID": {
+        "name": "work_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Attempt": {
+        "name": "attempt",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "schemas": {
+      "CollectionScope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nodes"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        }
+      },
+      "CollectionInterval": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "start",
+          "end"
+        ],
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "step_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600
+          }
+        }
+      },
+      "CollectionLimits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_records",
+          "max_bytes"
+        ],
+        "properties": {
+          "max_records": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          }
+        }
+      },
+      "CollectionPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "run_id",
+          "cluster_id",
+          "source_id",
+          "source_kind",
+          "operation",
+          "payload_schema",
+          "scope",
+          "scheduled_for",
+          "deadline",
+          "limits",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 2,
+            "type": "integer"
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "cluster_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "prometheus",
+              "slurm"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "prometheus.source_health.v1",
+              "prometheus.gpu_identity.v1",
+              "prometheus.gpu_utilization.v1",
+              "prometheus.gpu_temperature.v1",
+              "prometheus.gpu_power.v1",
+              "prometheus.gpu_memory.v1",
+              "prometheus.gpu_ecc.v1",
+              "prometheus.gpu_xid.v1",
+              "slurm.inventory.v1",
+              "slurm.snapshot.v1",
+              "slurm.allocation.v1",
+              "slurm.events.v1"
+            ]
+          },
+          "payload_schema": {
+            "type": "string",
+            "enum": [
+              "sherlock.collection.metrics.v1",
+              "sherlock.collection.inventory.v1",
+              "sherlock.collection.allocation.v1",
+              "sherlock.collection.events.v1"
+              ,"sherlock.collection.slurm_snapshot.v1"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/CollectionScope"
+          },
+          "interval": {
+            "$ref": "#/components/schemas/CollectionInterval"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "scheduled_for": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CollectionLimits"
+          },
+          "inventory_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "interval"
+            ],
+            "not": {
+              "required": [
+                "cursor"
+              ]
+            }
+          },
+          {
+            "required": [
+              "cursor"
+            ],
+            "not": {
+              "required": [
+                "interval"
+              ]
+            }
+          }
+        ],
+        "description": "Reviewed operation/source/schema combinations are enforced by the closed domain registry. Intervals and execution windows are bounded to 24 hours. Nodes are finite stable IDs, never selectors or command text."
+      },
+      "TypedClaimResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "work_id",
+          "attempt",
+          "lease_token",
+          "lease_expires_at",
+          "work_expires_at",
+          "plan"
+        ],
+        "properties": {
+          "work_id": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lease_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          },
+          "lease_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "work_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/CollectionPlan"
+          }
+        }
+      },
+      "EntityIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ClusterID",
+          "Kind",
+          "NodeID",
+          "PhysicalGPUUUID",
+          "MIGIdentity"
+        ],
+        "properties": {
+          "ClusterID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "Kind": {
+            "type": "string",
+            "enum": [
+              "NODE",
+              "GPU",
+              "MIG"
+            ]
+          },
+          "NodeID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "PhysicalGPUUUID": {
+            "type": "string"
+          },
+          "MIGIdentity": {
+            "type": "string"
+          }
+        }
+      },
+      "JobIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "SchedulerNamespace",
+          "JobID",
+          "SubmitAt",
+          "Attempt"
+        ],
+        "properties": {
+          "SchedulerNamespace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "JobID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SubmitAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "Attempt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "InventoryRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "SchemaVersion",
+          "ClusterID",
+          "SourceID",
+          "ID",
+          "SourceAt",
+          "EffectiveAt",
+          "ObservedAt",
+          "Entities"
+        ],
+        "properties": {
+          "SchemaVersion": {
+            "const": 1,
+            "type": "integer"
+          },
+          "ClusterID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SourceID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SourceAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "EffectiveAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "Entities": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EntityIdentity"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "AllocationSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "SchemaVersion",
+          "ClusterID",
+          "SourceID",
+          "Job",
+          "State",
+          "SourceAt",
+          "EffectiveAt",
+          "ObservedAt",
+          "Entities"
+        ],
+        "properties": {
+          "SchemaVersion": {
+            "const": 1,
+            "type": "integer"
+          },
+          "ClusterID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SourceID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "Job": {
+            "$ref": "#/components/schemas/JobIdentity"
+          },
+          "State": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "PENDING",
+              "RUNNING",
+              "SUSPENDED",
+              "COMPLETING",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "UNSUPPORTED"
+            ]
+          },
+          "SourceAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "EffectiveAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "Entities": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EntityIdentity"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "SourceCoverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "SchemaVersion",
+          "ClusterID",
+          "SourceID",
+          "Scope",
+          "State",
+          "Expected",
+          "Observed",
+          "SourceAt",
+          "EffectiveAt",
+          "ObservedAt"
+        ],
+        "properties": {
+          "SchemaVersion": {
+            "const": 1,
+            "type": "integer"
+          },
+          "ClusterID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SourceID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "Scope": {
+            "type": "string",
+            "enum": [
+              "INVENTORY",
+              "ALLOCATIONS",
+              "METRICS",
+              "EVENTS"
+            ]
+          },
+          "State": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "COMPLETE",
+              "PARTIAL",
+              "UNAVAILABLE",
+              "UNSUPPORTED"
+            ]
+          },
+          "Expected": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "Observed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "SourceAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "EffectiveAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Label": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "Value"
+        ],
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Value": {
+            "type": "string"
+          }
+        }
+      },
+      "Observation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ID",
+          "SchemaVersion",
+          "ClusterID",
+          "SourceID",
+          "Kind",
+          "EntityKey",
+          "Metric",
+          "Labels",
+          "Value",
+          "Unit",
+          "ObservedAt",
+          "CollectedAt",
+          "SourceReference"
+        ],
+        "properties": {
+          "ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SchemaVersion": {
+            "const": 1,
+            "type": "integer"
+          },
+          "ClusterID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "SourceID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "Kind": {
+            "type": "string"
+          },
+          "EntityKey": {
+            "type": "string"
+          },
+          "Metric": {
+            "type": "string"
+          },
+          "Labels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Label"
+            },
+            "maxItems": 10000
+          },
+          "Value": {
+            "type": "number"
+          },
+          "Unit": {
+            "type": "string"
+          },
+          "ObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "CollectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "SourceReference": {
+            "type": "string"
+          }
+        }
+      },
+      "CollectionFailure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "Code",
+          "Retryable",
+          "Target",
+          "Message"
+        ],
+        "properties": {
+          "Code": {
+            "type": "string",
+            "enum": [
+              "SOURCE_UNAVAILABLE",
+              "DEADLINE_EXCEEDED",
+              "MALFORMED_RESPONSE",
+              "RESULT_LIMIT_EXCEEDED",
+              "UNAUTHORIZED",
+              "INVALID_ARGUMENT",
+              "PARTIAL_DATA",
+              "COLLECTOR_UNAVAILABLE",
+              "INTERNAL"
+            ]
+          },
+          "Retryable": {
+            "type": "boolean"
+          },
+          "Target": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "Message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      },
+      "CollectionEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "node_id",
+          "job",
+          "state",
+          "occurred_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobIdentity"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "PENDING",
+              "RUNNING",
+              "SUSPENDED",
+              "COMPLETING",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "UNSUPPORTED"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+    "MetricsPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observations"
+        ],
+        "properties": {
+          "observations": {
+            "type": [
+              "array",
+              "null"
+            ],
+          "items": {
+            "$ref": "#/components/schemas/CollectionMetric"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "InventoryPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revisions"
+        ],
+        "properties": {
+          "revisions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/InventoryRevision"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "AllocationPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "snapshots"
+        ],
+        "properties": {
+          "snapshots": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AllocationSnapshot"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "EventsPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CollectionEvent"
+            },
+            "maxItems": 10000
+          }
+        }
+      },
+      "SlurmSourceObservation": {
+        "type": "object", "additionalProperties": false,
+        "required":["kind","schema_support","reported_errors","reported_warnings","bytes_read","source_at"],
+        "properties": {
+          "kind": {"type":"string"}, "data_parser_version": {"type":"string"}, "slurm_version": {"type":"string"},
+          "schema_support": {"type":"string","enum":["SUPPORTED","UNSUPPORTED","UNKNOWN"]},
+          "reported_errors": {"type":"integer","minimum":0}, "reported_warnings": {"type":"integer","minimum":0},
+          "bytes_read": {"type":"integer","minimum":0}, "window_start": {"type":"string","format":"date-time"},
+          "window_end": {"type":"string","format":"date-time"}, "source_at": {"type":"string","format":"date-time"}
+        }
+      },
+      "SlurmNormalizationIssue": {
+        "type":"object", "additionalProperties":false,
+        "required":["code"],
+        "properties": {"code":{"type":"string"},"record_kind":{"type":"string"},"record_id":{"type":"string"},"field":{"type":"string"},"quality":{"type":"string","enum":["PRESENT","MISSING","UNSUPPORTED","UNSET","INFINITE","MALFORMED"]}}
+      },
+      "SlurmAllocationFact": {
+        "type":"object", "additionalProperties":false,
+        "required":["record_identity","snapshot"],
+        "properties":{"record_identity":{"type":"string"},"snapshot":{"$ref":"#/components/schemas/AllocationSnapshot"}}
+      },
+      "SlurmJobLifecycle": {
+        "type":"object", "additionalProperties":false,
+        "required":["cluster_id","source_id","record_identity","job","raw_state","submit_quality","start_quality","end_quality","node_ids","origin"],
+        "properties":{
+          "cluster_id":{"type":"string"},"source_id":{"type":"string"},"record_identity":{"type":"string"},"job":{"$ref":"#/components/schemas/JobIdentity"},
+          "raw_state":{"type":"string"},"submit_quality":{"type":"string"},"start_at":{"type":"string","format":"date-time"},"start_quality":{"type":"string"},
+          "end_at":{"type":"string","format":"date-time"},"end_quality":{"type":"string"},"node_ids":{"type":["array","null"],"items":{"type":"string"}},"origin":{"type":"string","enum":["CURRENT","ACCOUNTING"]}
+        }
+      },
+      "SlurmAccountingProvenance": {
+        "type":"object", "additionalProperties":false,
+        "required":["window_start","window_end","source_at","observed_at"],
+        "properties":{"window_start":{"type":"string","format":"date-time"},"window_end":{"type":"string","format":"date-time"},"source_at":{"type":"string","format":"date-time"},"observed_at":{"type":"string","format":"date-time"}}
+      },
+      "SlurmUnresolvedAccounting": {
+        "type":"object", "additionalProperties":false,
+        "required":["cluster_id","source_id","record_identity","scheduler_namespace","job_id","submit_at","submit_quality","scheduler_cluster","raw_state","start_quality","end_quality","node_ids","membership_quality","membership_digest","attempt_quality","provenance"],
+        "properties":{
+          "cluster_id":{"type":"string"},"source_id":{"type":"string"},"record_identity":{"type":"string"},"scheduler_namespace":{"type":"string"},"job_id":{"type":"string"},
+          "submit_at":{"type":"string","format":"date-time"},"submit_quality":{"type":"string"},"scheduler_cluster":{"type":"string"},"raw_state":{"type":"string"},
+          "start_at":{"type":"string","format":"date-time"},"start_quality":{"type":"string"},"end_at":{"type":"string","format":"date-time"},"end_quality":{"type":"string"},
+          "node_ids":{"type":["array","null"],"items":{"type":"string"}},"membership_quality":{"type":"string"},"membership_digest":{"type":"string"},"attempt_quality":{"type":"string"},
+          "provenance":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmAccountingProvenance"}}
+        }
+      },
+      "SlurmSnapshotPayload": {
+        "type":"object", "additionalProperties":false,
+        "required":["allocations","lifecycles","unresolved_accounting","issues","sources","inventory_coverage","allocation_coverage","valid_empty_jobs","valid_empty_accounting"],
+        "properties":{
+          "inventory":{"$ref":"#/components/schemas/InventoryRevision"},"allocations":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmAllocationFact"}},
+          "lifecycles":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmJobLifecycle"}},"unresolved_accounting":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmUnresolvedAccounting"}},
+          "issues":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmNormalizationIssue"}},"sources":{"type":["array","null"],"items":{"$ref":"#/components/schemas/SlurmSourceObservation"}},
+          "inventory_coverage":{"$ref":"#/components/schemas/SourceCoverage"},"allocation_coverage":{"$ref":"#/components/schemas/SourceCoverage"},"valid_empty_jobs":{"type":"boolean"},"valid_empty_accounting":{"type":"boolean"}
+        }
+      },
+      "CollectionPayload": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "metrics"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "metrics"
+              },
+              "metrics": {
+                "$ref": "#/components/schemas/MetricsPayload"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "inventory"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "inventory"
+              },
+              "inventory": {
+                "$ref": "#/components/schemas/InventoryPayload"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "allocation"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "allocation"
+              },
+              "allocation": {
+                "$ref": "#/components/schemas/AllocationPayload"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "events"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "events"
+              },
+              "events": {
+                "$ref": "#/components/schemas/EventsPayload"
+              }
+            }
+          },
+          {
+            "type":"object", "additionalProperties":false,
+            "required":["kind","slurm_snapshot"],
+            "properties":{"kind":{"type":"string","const":"slurm_snapshot"},"slurm_snapshot":{"$ref":"#/components/schemas/SlurmSnapshotPayload"}}
+          }
+        ]
+      },
+      "TypedCollectorResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "work_id",
+          "attempt",
+          "plan",
+          "status",
+          "started_at",
+          "completed_at",
+          "coverage",
+          "payload",
+          "failures"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 2
+          },
+          "work_id": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plan": {
+            "$ref": "#/components/schemas/CollectionPlan"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "NO_DATA",
+              "PARTIAL",
+              "FAILED"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/SourceCoverage"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CollectionPayload"
+          },
+          "failures": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CollectionFailure"
+            },
+            "maxItems": 10000
+          },
+          "next_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "description": "Canonical compact Go JSON encoding, exactly as produced by EncodeTypedCollectorResult. Unknown fields, duplicate/noncanonical encodings and trailing bytes are refused. The embedded plan must match the authenticated durable leased plan. Payload facts intentionally preserve GP-02 PascalCase field names. Whole document bytes must not exceed plan.limits.max_bytes; records and nested entities are bounded. Next cursor is only a proposal; it advances after atomic durable commit."
+      },
+      "TypedResultRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lease_token",
+          "document",
+          "sha256"
+        ],
+        "properties": {
+          "lease_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          },
+          "document": {
+            "$ref": "#/components/schemas/TypedCollectorResult"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "description": "SHA-256 of exact canonical document bytes, excluding the request wrapper. Body limit is 10 MiB plus 4096 wrapper bytes."
+      },
+      "StartRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lease_token"
+        ],
+        "properties": {
+          "lease_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          }
+        }
+      },
+      "RenewLeaseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lease_token",
+          "duration_seconds"
+        ],
+        "properties": {
+          "lease_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        }
+      },
+      "ResultResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "status",
+          "sha256",
+          "previously_finalized"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "NO_DATA",
+              "PARTIAL",
+              "FAILED"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "previously_finalized": {
+            "type": "boolean"
+          }
+        }
+      },
+    "CollectionMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "observation"],
+      "properties": {
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "observation": {"$ref": "#/components/schemas/Observation"}
+      }
+    },
+    "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

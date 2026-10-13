@@ -1,0 +1,48 @@
+{{define "site-header"}}
+<a class="skip-link" href="#workspace">Skip to content</a>
+<header class="site-header">
+  <a class="wordmark" href="/admin/operations"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">sherlock</span><span class="brand-tag">workspace</span></a>
+  <nav class="nav-links" aria-label="Workspace navigation">
+    <p class="nav-caption">Workspace</p>
+    <a {{if eq . "operations"}}class="active" aria-current="page"{{end}} href="/admin/operations"><span class="nav-index" aria-hidden="true">01</span>Overview</a>
+    <a {{if eq . "clusters"}}class="active" aria-current="page"{{end}} href="/admin/clusters"><span class="nav-index" aria-hidden="true">02</span>Clusters</a>
+    <p class="nav-caption">Autonomy</p>
+    <a {{if eq . "incidents"}}class="active" aria-current="page"{{end}} href="/admin/incidents"><span class="nav-index" aria-hidden="true">03</span>Incidents</a>
+    <a {{if eq . "investigations"}}class="active" aria-current="page"{{end}} href="/admin/investigations"><span class="nav-index" aria-hidden="true">04</span>Investigations</a>
+    <a {{if eq . "repairs"}}class="active" aria-current="page"{{end}} href="/admin/repairs"><span class="nav-index" aria-hidden="true">05</span>Repairs</a>
+  </nav>
+  <div class="sidebar-bottom"><span class="workspace-label"><span class="live-dot" aria-hidden="true"></span>Private workspace</span><a class="sign-out" href="/cdn-cgi/access/logout">Sign out ↗</a></div>
+</header><div id="workspace" tabindex="-1" class="workspace-marker"></div>{{end}}
+
+{{define "site-footer"}}<footer class="site-footer"><span>sherlock / workspace</span><span>Views are audited · missing data is never shown as healthy</span></footer>{{end}}
+
+{{define "stacked-bar"}}<svg class="stacked-bar" width="100%" height="10" role="img" aria-label="{{range $index, $segment := .Segments}}{{if $index}}, {{end}}{{$segment.Count}} {{$segment.Label}}{{end}}"><rect class="track" x="0" y="0" width="100%" height="10"></rect>{{range .Segments}}{{if .Count}}<rect class="fill-{{.Class}}" x="{{.X}}" y="0" width="{{.Width}}" height="10"><title>{{.Count}} {{.Label}}</title></rect>{{end}}{{end}}</svg>{{end}}
+
+{{define "bar-legend"}}<ul class="legend">{{range .Segments}}<li><span class="swatch fill-{{.Class}}" aria-hidden="true"></span>{{.Label}} <strong>{{.Count}}</strong></li>{{end}}</ul>{{end}}
+
+{{define "meter"}}<svg class="meter-bar" width="100%" height="8" aria-hidden="true"><rect class="track" x="0" y="0" width="100%" height="8"></rect>{{if .}}<rect class="fill-accent" x="0" y="0" width="{{.}}" height="8"></rect>{{end}}</svg>{{end}}
+
+{{define "column-chart"}}{{if .Empty}}<p class="chart-empty">{{.EmptyText}}</p>{{else}}<figure class="column-chart"><svg width="100%" height="160" role="img" aria-label="{{.AriaLabel}}">
+<line class="grid" x1="0" y1="16.5" x2="100%" y2="16.5"></line><line class="grid" x1="0" y1="76.5" x2="100%" y2="76.5"></line><line class="axis" x1="0" y1="136.5" x2="100%" y2="136.5"></line>
+{{range .Columns}}{{$column := .}}<g><title>{{.Title}}</title><rect class="hit" x="{{.X}}" y="16" width="{{.Width}}" height="120"></rect>{{range .Segments}}<rect class="fill-{{.Class}}" x="{{$column.X}}" y="{{.Y}}" width="{{$column.Width}}" height="{{.Height}}"></rect>{{end}}<text class="day{{if .Narrow}} narrow{{end}}" x="{{.Center}}" y="153" text-anchor="middle">{{.Label}}</text></g>{{end}}
+<text class="tick" x="0" y="12">{{.MaxLabel}}</text><text class="tick" x="0" y="72">{{.MidLabel}}</text>
+</svg>{{if .Legend.Segments}}{{template "bar-legend" .Legend}}{{end}}</figure>{{end}}{{end}}
+
+{{define "evidence-cell"}}{{if not .HasSummary}}<small>Summary unavailable</small>{{else if .Evidence.Total}}{{template "stacked-bar" .Evidence}}<small>{{.EvidenceComplete}} / {{.Evidence.Total}} streams complete</small>{{else}}<small>No current evidence streams</small>{{end}}{{end}}
+
+{{define "gpu-cell"}}{{if .GPU}}{{template "meter" .GPUWidth}}<small>{{formatPercent .GPU}} · {{.GPUs}} GPUs observed</small>{{else if .HasSummary}}<small>No data</small>{{else}}<small>Summary unavailable</small>{{end}}{{end}}
+
+{{define "shared-health"}}
+<section class="panel shared-health" aria-labelledby="shared-health-title" data-shared-health-version="{{.SchemaVersion}}">
+  <div class="section-title"><h2 id="shared-health-title">Shared cluster health</h2>{{if sharedHealthAvailable .}}<p>Observed {{localTime .GeneratedAt}}</p>{{end}}</div>
+  {{if sharedHealthAvailable .}}
+  <p class="chart-note">The same health projection is used for cluster viewers and administrators. Window {{localTime .WindowStart}} – {{localTime .WindowEnd}}.</p>
+  <div class="status-split">
+    <div><h3>Capacity · {{.Capacity.Condition}}</h3><strong>{{healthCount .Capacity.ObservedNodes}} / {{healthCount .Capacity.ExpectedNodes}} nodes · {{healthCount .Capacity.ObservedGPUs}} / {{healthCount .Capacity.ExpectedGPUs}} GPUs</strong><p>Observed / expected inventory. Missing or conflicting inventory remains UNKNOWN.</p></div>
+    <div><h3>Monitoring</h3><strong>Collectors {{.Monitoring.CollectorCondition}} · {{.Monitoring.FreshCollectors}} / {{.Monitoring.ExpectedCollectors}} fresh</strong><p>Source freshness {{.Monitoring.FreshnessCondition}} · {{.Monitoring.FreshSources}} fresh · {{.Monitoring.StaleSources}} stale · {{.Monitoring.SourcesWithoutData}} without data</p><p>Coverage {{.Monitoring.CoverageCondition}} · {{.Monitoring.CompleteStreams}} complete · {{.Monitoring.PartialStreams}} partial · {{.Monitoring.NoDataStreams}} no data · {{.Monitoring.UnavailableStreams}} unavailable</p><p>Support {{.Monitoring.SupportCondition}} · {{.Monitoring.FreshOperations}} / {{.Monitoring.ExpectedOperations}} operations fresh · {{.Monitoring.LateOperations}} late · {{.Monitoring.FailedOperations}} failed</p></div>
+    <div><h3>Workload · {{.Workload}}</h3><strong>Progress {{.Progress}}</strong><p>Uninstrumented workloads remain UNMEASURED. Missing scheduler evidence does not prove idle or stalled.</p></div>
+    <div><h3>Attention · {{len .Attention}}</h3>{{if .Attention}}<ul>{{range .Attention}}<li class="mono">{{.}}</li>{{end}}</ul>{{else}}<p>No attention reason in this projection. UNKNOWN fields remain unverified.</p>{{end}}<p>{{.Monitoring.HistoricalStreams}} historical streams are separate from current health. Network monitoring below is a separate projection.</p></div>
+  </div>
+  {{else}}<p class="chart-empty">Shared health unavailable. No supported shared projection was returned; missing data is not healthy.</p>{{end}}
+</section>
+{{end}}

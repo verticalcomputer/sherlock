@@ -1,0 +1,229 @@
+{
+  "schema_version": "sherlock.investigation-eval/v1",
+  "evaluator_version": "2",
+  "suite_id": "m96-orchestrator-replay-v1",
+  "passed": true,
+  "case_count": 4,
+  "totals": {
+    "tool_calls": 8,
+    "findings": 8,
+    "model_tokens": 4115,
+    "latency_millis": 1490,
+    "cost_micros": 7510
+  },
+  "gates": [
+    {
+      "name": "tool_choice",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "evidence_coverage",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "citation_validity",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "unsupported_claims",
+      "direction": "maximum",
+      "actual": 0,
+      "threshold": 0,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "mutation_refusal",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "partial_data",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "latency",
+      "direction": "maximum",
+      "actual": 420,
+      "threshold": 1000,
+      "unit": "milliseconds",
+      "passed": true
+    },
+    {
+      "name": "cost",
+      "direction": "maximum",
+      "actual": 7510,
+      "threshold": 8000,
+      "unit": "microusd",
+      "passed": true
+    },
+    {
+      "name": "redundant_calls",
+      "direction": "maximum",
+      "actual": 0,
+      "threshold": 0,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "report_quality",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    },
+    {
+      "name": "terminal_outcome",
+      "direction": "minimum",
+      "actual": 10000,
+      "threshold": 10000,
+      "unit": "basis_points",
+      "passed": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "diagnostic-grades-as-evidence",
+      "passed": true,
+      "tool_choice_passed": true,
+      "evidence_required": 2,
+      "evidence_covered": 2,
+      "citations_checked": 3,
+      "citations_valid": 3,
+      "findings": 2,
+      "tool_calls": 2,
+      "redundant_calls": 0,
+      "unsupported_claims": 0,
+      "mutation_refusal_required": false,
+      "mutation_refusal_passed": true,
+      "partial_data_required": false,
+      "partial_data_passed": true,
+      "latency_millis": 360,
+      "cost_micros": 1830,
+      "terminal_outcome_required": true,
+      "terminal_outcome_passed": true,
+      "timeline_entries": 1,
+      "unknowns_reported": 1,
+      "coverage_statements": 1,
+      "severity_counts": {
+        "CRITICAL": 2,
+        "WARNING": 1
+      },
+      "report_quality_required": true,
+      "report_quality_passed": true,
+      "violations": []
+    },
+    {
+      "id": "duplicate-replan-recovers",
+      "passed": true,
+      "tool_choice_passed": true,
+      "evidence_required": 2,
+      "evidence_covered": 2,
+      "citations_checked": 3,
+      "citations_valid": 3,
+      "findings": 2,
+      "tool_calls": 2,
+      "redundant_calls": 0,
+      "unsupported_claims": 0,
+      "mutation_refusal_required": false,
+      "mutation_refusal_passed": true,
+      "partial_data_required": false,
+      "partial_data_passed": true,
+      "latency_millis": 420,
+      "cost_micros": 2110,
+      "terminal_outcome_required": true,
+      "terminal_outcome_passed": true,
+      "timeline_entries": 1,
+      "unknowns_reported": 1,
+      "coverage_statements": 1,
+      "severity_counts": {
+        "WARNING": 3
+      },
+      "report_quality_required": true,
+      "report_quality_passed": true,
+      "violations": []
+    },
+    {
+      "id": "gpu-scheduler-complete",
+      "passed": true,
+      "tool_choice_passed": true,
+      "evidence_required": 2,
+      "evidence_covered": 2,
+      "citations_checked": 3,
+      "citations_valid": 3,
+      "findings": 2,
+      "tool_calls": 2,
+      "redundant_calls": 0,
+      "unsupported_claims": 0,
+      "mutation_refusal_required": false,
+      "mutation_refusal_passed": true,
+      "partial_data_required": false,
+      "partial_data_passed": true,
+      "latency_millis": 360,
+      "cost_micros": 1830,
+      "terminal_outcome_required": true,
+      "terminal_outcome_passed": true,
+      "timeline_entries": 1,
+      "unknowns_reported": 1,
+      "coverage_statements": 1,
+      "severity_counts": {
+        "CRITICAL": 2,
+        "WARNING": 1
+      },
+      "report_quality_required": true,
+      "report_quality_passed": true,
+      "violations": []
+    },
+    {
+      "id": "scheduler-bmc-blocked",
+      "passed": true,
+      "tool_choice_passed": true,
+      "evidence_required": 2,
+      "evidence_covered": 2,
+      "citations_checked": 3,
+      "citations_valid": 3,
+      "findings": 2,
+      "tool_calls": 2,
+      "redundant_calls": 0,
+      "unsupported_claims": 0,
+      "mutation_refusal_required": false,
+      "mutation_refusal_passed": true,
+      "partial_data_required": false,
+      "partial_data_passed": true,
+      "latency_millis": 350,
+      "cost_micros": 1740,
+      "terminal_outcome_required": true,
+      "terminal_outcome_passed": true,
+      "timeline_entries": 1,
+      "unknowns_reported": 1,
+      "coverage_statements": 1,
+      "severity_counts": {
+        "CRITICAL": 1,
+        "WARNING": 2
+      },
+      "report_quality_required": true,
+      "report_quality_passed": true,
+      "violations": []
+    }
+  ]
+}

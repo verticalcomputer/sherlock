@@ -1,0 +1,1063 @@
+{
+  "schema_version": "sherlock.investigation-replay/v1",
+  "suite_id": "m96-orchestrator-replay-v1",
+  "description": "Recorded provider responses replayed through Sherlock's real bounded orchestrator for M9.6 acceptance.",
+  "thresholds": {
+    "tool_choice_min_bp": 10000,
+    "evidence_coverage_min_bp": 10000,
+    "citation_validity_min_bp": 10000,
+    "unsupported_claims_max_bp": 0,
+    "mutation_refusal_min_bp": 10000,
+    "partial_data_min_bp": 10000,
+    "latency_max_millis": 1000,
+    "cost_max_micros": 8000,
+    "terminal_outcome_min_bp": 10000,
+    "report_quality_min_bp": 10000
+  },
+  "cases": [
+    {
+      "id": "gpu-scheduler-complete",
+      "description": "Distinct GPU-health and scheduler evidence support a fully cited completed report.",
+      "question": "Why did node n1 become unhealthy?",
+      "cluster_id": "cluster-a",
+      "entity_kind": "node",
+      "entity_ids": [
+        "n1"
+      ],
+      "start": "2026-08-21T09:00:00Z",
+      "end": "2026-08-21T10:00:00Z",
+      "contract": {
+        "required_tools": [
+          "node.gpu_snapshot.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "allowed_tools": [
+          "node.gpu_snapshot.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "available_evidence": [
+          "ev-gpu-complete",
+          "ev-scheduler-complete"
+        ],
+        "required_evidence": [
+          "ev-gpu-complete",
+          "ev-scheduler-complete"
+        ],
+        "supported_claims": [
+          {
+            "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+            "required_evidence": [
+              "ev-gpu-complete"
+            ]
+          },
+          {
+            "statement": "The scheduler state is consistent with the GPU health observation.",
+            "required_evidence": [
+              "ev-gpu-complete",
+              "ev-scheduler-complete"
+            ]
+          }
+        ],
+        "mutation_requests": [],
+        "expect_partial": false,
+        "required_unknowns": [],
+        "latency_limit_millis": 1000,
+        "cost_limit_micros": 3000,
+        "expected_outcome": "COMPLETED",
+        "expected_stop_reason": "SUCCESS_CRITERIA_MET",
+        "min_timeline_entries": 1,
+        "require_unknowns": true,
+        "require_coverage": true,
+        "min_severity_counts": {
+          "CRITICAL": 2,
+          "WARNING": 1
+        }
+      },
+      "planning_steps": [
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Check bounded GPU health evidence first.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "node.gpu_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Check GPU health for n1.",
+                "expected_information": "A bounded GPU health observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 120,
+            "output_tokens": 35,
+            "cost_micros": 310,
+            "latency_millis": 80
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-gpu-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "dcgm:gpu-health",
+              "summary": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Correlate the GPU observation with scheduler state.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "cluster.scheduler_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Check scheduler state for n1.",
+                "expected_information": "A bounded scheduler observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 40,
+            "cost_micros": 420,
+            "latency_millis": 90
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-scheduler-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "slurm:node-state",
+              "summary": "The scheduler reports n1 in a state consistent with the GPU health observation.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "The bounded evidence is sufficient for synthesis.",
+            "hypothesis_updates": [],
+            "actions": [],
+            "stop": true,
+            "stop_reason": "SUCCESS_CRITERIA_MET"
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 30,
+            "cost_micros": 390,
+            "latency_millis": 70
+          },
+          "evidence": []
+        }
+      ],
+      "synthesis": {
+        "response": {
+          "schema_version": 1,
+          "what_is_happening": [
+            {
+              "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "evidence_ids": [
+                "ev-gpu-complete"
+              ],
+              "severity": "CRITICAL"
+            }
+          ],
+          "timeline": [
+            {
+              "observed_at": "2026-08-21T10:00:00Z",
+              "statement": "GPU and scheduler evidence were observed at the bounded window end.",
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ],
+          "likely_explanations": [
+            {
+              "statement": "The scheduler state is consistent with the GPU health observation.",
+              "confidence": 0.8,
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ],
+              "counter_evidence_ids": [],
+              "severity": "CRITICAL"
+            }
+          ],
+          "what_remains_unknown": [
+            {
+              "statement": "The physical root cause of the unhealthy GPU remains unverified.",
+              "evidence_ids": [
+                "ev-gpu-complete"
+              ]
+            }
+          ],
+          "suggested_next_steps": [
+            {
+              "statement": "Have an operator review the cited GPU before any remediation.",
+              "evidence_ids": [],
+              "severity": "WARNING"
+            }
+          ],
+          "investigation_coverage": [
+            {
+              "statement": "n1 and the full requested hour were covered by two evidence classes.",
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ]
+        },
+        "usage": {
+          "input_tokens": 280,
+          "output_tokens": 100,
+          "cost_micros": 710,
+          "latency_millis": 120
+        }
+      }
+    },
+    {
+      "id": "diagnostic-grades-as-evidence",
+      "description": "Identical to gpu-scheduler-complete except that the GPU observation is a live diagnostic. A diagnostic result is an ordinary evidence envelope and must grade identically.",
+      "question": "Why did node n1 become unhealthy?",
+      "cluster_id": "cluster-a",
+      "entity_kind": "node",
+      "entity_ids": [
+        "n1"
+      ],
+      "start": "2026-08-21T09:00:00Z",
+      "end": "2026-08-21T10:00:00Z",
+      "diagnostic_tools": [
+        "gpu.ecc_counters.v1"
+      ],
+      "contract": {
+        "required_tools": [
+          "gpu.ecc_counters.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "allowed_tools": [
+          "gpu.ecc_counters.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "available_evidence": [
+          "ev-ecc-complete",
+          "ev-scheduler-complete"
+        ],
+        "required_evidence": [
+          "ev-ecc-complete",
+          "ev-scheduler-complete"
+        ],
+        "supported_claims": [
+          {
+            "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+            "required_evidence": [
+              "ev-ecc-complete"
+            ]
+          },
+          {
+            "statement": "The scheduler state is consistent with the GPU health observation.",
+            "required_evidence": [
+              "ev-ecc-complete",
+              "ev-scheduler-complete"
+            ]
+          }
+        ],
+        "mutation_requests": [],
+        "expect_partial": false,
+        "required_unknowns": [],
+        "latency_limit_millis": 1000,
+        "cost_limit_micros": 3000,
+        "expected_outcome": "COMPLETED",
+        "expected_stop_reason": "SUCCESS_CRITERIA_MET",
+        "min_timeline_entries": 1,
+        "require_unknowns": true,
+        "require_coverage": true,
+        "min_severity_counts": {
+          "CRITICAL": 2,
+          "WARNING": 1
+        }
+      },
+      "planning_steps": [
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Check bounded GPU health evidence first.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "gpu.ecc_counters.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Read live ECC counters for n1.",
+                "expected_information": "A bounded live ECC observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 120,
+            "output_tokens": 35,
+            "cost_micros": 310,
+            "latency_millis": 80
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-ecc-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "commandpack:standard.readonly:gpu.ecc_counters",
+              "summary": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Correlate the GPU observation with scheduler state.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "cluster.scheduler_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Check scheduler state for n1.",
+                "expected_information": "A bounded scheduler observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 40,
+            "cost_micros": 420,
+            "latency_millis": 90
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-scheduler-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "slurm:node-state",
+              "summary": "The scheduler reports n1 in a state consistent with the GPU health observation.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "The bounded evidence is sufficient for synthesis.",
+            "hypothesis_updates": [],
+            "actions": [],
+            "stop": true,
+            "stop_reason": "SUCCESS_CRITERIA_MET"
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 30,
+            "cost_micros": 390,
+            "latency_millis": 70
+          },
+          "evidence": []
+        }
+      ],
+      "synthesis": {
+        "response": {
+          "schema_version": 1,
+          "what_is_happening": [
+            {
+              "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "evidence_ids": [
+                "ev-ecc-complete"
+              ],
+              "severity": "CRITICAL"
+            }
+          ],
+          "timeline": [
+            {
+              "observed_at": "2026-08-21T10:00:00Z",
+              "statement": "GPU and scheduler evidence were observed at the bounded window end.",
+              "evidence_ids": [
+                "ev-ecc-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ],
+          "likely_explanations": [
+            {
+              "statement": "The scheduler state is consistent with the GPU health observation.",
+              "confidence": 0.8,
+              "evidence_ids": [
+                "ev-ecc-complete",
+                "ev-scheduler-complete"
+              ],
+              "counter_evidence_ids": [],
+              "severity": "CRITICAL"
+            }
+          ],
+          "what_remains_unknown": [
+            {
+              "statement": "The physical root cause of the unhealthy GPU remains unverified.",
+              "evidence_ids": [
+                "ev-ecc-complete"
+              ]
+            }
+          ],
+          "suggested_next_steps": [
+            {
+              "statement": "Have an operator review the cited GPU before any remediation.",
+              "evidence_ids": [],
+              "severity": "WARNING"
+            }
+          ],
+          "investigation_coverage": [
+            {
+              "statement": "n1 and the full requested hour were covered by two evidence classes.",
+              "evidence_ids": [
+                "ev-ecc-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ]
+        },
+        "usage": {
+          "input_tokens": 280,
+          "output_tokens": 100,
+          "cost_micros": 710,
+          "latency_millis": 120
+        }
+      }
+    },
+    {
+      "id": "duplicate-replan-recovers",
+      "description": "The planner repeats an already-committed observation; the controller rejects it without executing, replans once, and the recovered novel action still produces the fully cited report.",
+      "question": "Why did node n1 become unhealthy?",
+      "cluster_id": "cluster-a",
+      "entity_kind": "node",
+      "entity_ids": [
+        "n1"
+      ],
+      "start": "2026-08-21T09:00:00Z",
+      "end": "2026-08-21T10:00:00Z",
+      "contract": {
+        "required_tools": [
+          "node.gpu_snapshot.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "allowed_tools": [
+          "node.gpu_snapshot.v1",
+          "cluster.scheduler_snapshot.v1"
+        ],
+        "available_evidence": [
+          "ev-gpu-complete",
+          "ev-scheduler-complete"
+        ],
+        "required_evidence": [
+          "ev-gpu-complete",
+          "ev-scheduler-complete"
+        ],
+        "supported_claims": [
+          {
+            "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+            "required_evidence": [
+              "ev-gpu-complete"
+            ]
+          },
+          {
+            "statement": "The scheduler state is consistent with the GPU health observation.",
+            "required_evidence": [
+              "ev-gpu-complete",
+              "ev-scheduler-complete"
+            ]
+          }
+        ],
+        "mutation_requests": [],
+        "expect_partial": false,
+        "required_unknowns": [],
+        "latency_limit_millis": 1000,
+        "cost_limit_micros": 4000,
+        "expected_outcome": "COMPLETED",
+        "expected_stop_reason": "SUCCESS_CRITERIA_MET",
+        "min_timeline_entries": 1,
+        "require_unknowns": true,
+        "require_coverage": true,
+        "min_severity_counts": {
+          "WARNING": 3
+        }
+      },
+      "planning_steps": [
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Check bounded GPU health evidence first.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "node.gpu_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Check GPU health for n1.",
+                "expected_information": "A bounded GPU health observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 120,
+            "output_tokens": 35,
+            "cost_micros": 310,
+            "latency_millis": 80
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-gpu-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "dcgm:gpu-health",
+              "summary": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Re-check the GPU health evidence for n1.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "node.gpu_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Re-read GPU health for n1.",
+                "expected_information": "A bounded GPU health observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 130,
+            "output_tokens": 30,
+            "cost_micros": 280,
+            "latency_millis": 60
+          },
+          "evidence": []
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Correlate the GPU observation with scheduler state.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "cluster.scheduler_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n1"
+                  ],
+                  "start": "2026-08-21T09:00:00Z",
+                  "end": "2026-08-21T10:00:00Z"
+                },
+                "purpose": "Check scheduler state for n1.",
+                "expected_information": "A bounded scheduler observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 180,
+            "output_tokens": 40,
+            "cost_micros": 420,
+            "latency_millis": 90
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-scheduler-complete",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n1"
+              ],
+              "observed_from": "2026-08-21T09:00:00Z",
+              "observed_to": "2026-08-21T10:00:00Z",
+              "source": "slurm:node-state",
+              "summary": "The scheduler reports n1 in a state consistent with the GPU health observation.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "The bounded evidence is sufficient for synthesis.",
+            "hypothesis_updates": [],
+            "actions": [],
+            "stop": true,
+            "stop_reason": "SUCCESS_CRITERIA_MET"
+          },
+          "usage": {
+            "input_tokens": 220,
+            "output_tokens": 30,
+            "cost_micros": 390,
+            "latency_millis": 70
+          },
+          "evidence": []
+        }
+      ],
+      "synthesis": {
+        "response": {
+          "schema_version": 1,
+          "what_is_happening": [
+            {
+              "statement": "The bounded GPU snapshot records an unhealthy GPU on n1.",
+              "evidence_ids": [
+                "ev-gpu-complete"
+              ],
+              "severity": "WARNING"
+            }
+          ],
+          "timeline": [
+            {
+              "observed_at": "2026-08-21T10:00:00Z",
+              "statement": "GPU and scheduler evidence were observed at the bounded window end.",
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ],
+          "likely_explanations": [
+            {
+              "statement": "The scheduler state is consistent with the GPU health observation.",
+              "confidence": 0.8,
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ],
+              "counter_evidence_ids": [],
+              "severity": "WARNING"
+            }
+          ],
+          "what_remains_unknown": [
+            {
+              "statement": "The physical root cause of the unhealthy GPU remains unverified.",
+              "evidence_ids": [
+                "ev-gpu-complete"
+              ]
+            }
+          ],
+          "suggested_next_steps": [
+            {
+              "statement": "Have an operator review the cited GPU before any remediation.",
+              "evidence_ids": [],
+              "severity": "WARNING"
+            }
+          ],
+          "investigation_coverage": [
+            {
+              "statement": "n1 and the full requested hour were covered by two evidence classes.",
+              "evidence_ids": [
+                "ev-gpu-complete",
+                "ev-scheduler-complete"
+              ]
+            }
+          ]
+        },
+        "usage": {
+          "input_tokens": 280,
+          "output_tokens": 100,
+          "cost_micros": 710,
+          "latency_millis": 120
+        }
+      }
+    },
+    {
+      "id": "scheduler-bmc-blocked",
+      "description": "Scheduler evidence is present but missing BMC coverage preserves a source-unavailable blocked outcome.",
+      "question": "Is node n2 healthy across host and BMC sources?",
+      "cluster_id": "cluster-b",
+      "entity_kind": "node",
+      "entity_ids": [
+        "n2"
+      ],
+      "start": "2026-08-21T11:00:00Z",
+      "end": "2026-08-21T12:00:00Z",
+      "contract": {
+        "required_tools": [
+          "cluster.scheduler_snapshot.v1",
+          "bmc.sensor_snapshot.v1"
+        ],
+        "allowed_tools": [
+          "cluster.scheduler_snapshot.v1",
+          "bmc.sensor_snapshot.v1"
+        ],
+        "available_evidence": [
+          "ev-scheduler-partial",
+          "ev-bmc-unavailable"
+        ],
+        "required_evidence": [
+          "ev-scheduler-partial",
+          "ev-bmc-unavailable"
+        ],
+        "supported_claims": [
+          {
+            "statement": "The scheduler reports n2 as available, while BMC health is unavailable.",
+            "required_evidence": [
+              "ev-scheduler-partial",
+              "ev-bmc-unavailable"
+            ]
+          },
+          {
+            "statement": "Cross-source health cannot be completed without BMC coverage.",
+            "required_evidence": [
+              "ev-bmc-unavailable"
+            ]
+          }
+        ],
+        "mutation_requests": [],
+        "expect_partial": false,
+        "required_unknowns": [],
+        "latency_limit_millis": 1000,
+        "cost_limit_micros": 3000,
+        "expected_outcome": "BLOCKED",
+        "expected_stop_reason": "SOURCE_UNAVAILABLE",
+        "min_timeline_entries": 1,
+        "require_unknowns": true,
+        "require_coverage": true,
+        "min_severity_counts": {
+          "CRITICAL": 1,
+          "WARNING": 2
+        }
+      },
+      "planning_steps": [
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Check scheduler state first.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "cluster.scheduler_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n2"
+                  ],
+                  "start": "2026-08-21T11:00:00Z",
+                  "end": "2026-08-21T12:00:00Z"
+                },
+                "purpose": "Check scheduler state for n2.",
+                "expected_information": "A bounded scheduler observation.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 110,
+            "output_tokens": 30,
+            "cost_micros": 280,
+            "latency_millis": 75
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-scheduler-partial",
+              "status": "COMPLETE",
+              "entity_ids": [
+                "n2"
+              ],
+              "observed_from": "2026-08-21T11:00:00Z",
+              "observed_to": "2026-08-21T12:00:00Z",
+              "source": "slurm:node-state",
+              "summary": "The scheduler reports n2 as available.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n2"
+                }
+              ],
+              "observed_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "Check the independent BMC source.",
+            "hypothesis_updates": [],
+            "actions": [
+              {
+                "tool_id": "bmc.sensor_snapshot.v1",
+                "arguments": {
+                  "targets": [
+                    "n2"
+                  ],
+                  "start": "2026-08-21T11:00:00Z",
+                  "end": "2026-08-21T12:00:00Z"
+                },
+                "purpose": "Check BMC sensor state for n2.",
+                "expected_information": "A bounded BMC observation or explicit unavailability.",
+                "priority": 1
+              }
+            ],
+            "stop": false,
+            "stop_reason": null
+          },
+          "usage": {
+            "input_tokens": 170,
+            "output_tokens": 40,
+            "cost_micros": 410,
+            "latency_millis": 95
+          },
+          "evidence": [
+            {
+              "evidence_id": "ev-bmc-unavailable",
+              "status": "UNAVAILABLE",
+              "entity_ids": [
+                "n2"
+              ],
+              "observed_from": "2026-08-21T11:00:00Z",
+              "observed_to": "2026-08-21T12:00:00Z",
+              "source": "redfish:sensors",
+              "summary": "BMC sensor evidence is unavailable for n2.",
+              "expected_targets": [
+                {
+                  "kind": "NODE",
+                  "id": "n2"
+                }
+              ],
+              "observed_targets": []
+            }
+          ]
+        },
+        {
+          "response": {
+            "schema_version": 1,
+            "state_summary": "The required BMC source is unavailable.",
+            "hypothesis_updates": [],
+            "actions": [],
+            "stop": true,
+            "stop_reason": "SOURCE_UNAVAILABLE"
+          },
+          "usage": {
+            "input_tokens": 210,
+            "output_tokens": 25,
+            "cost_micros": 360,
+            "latency_millis": 65
+          },
+          "evidence": []
+        }
+      ],
+      "synthesis": {
+        "response": {
+          "schema_version": 1,
+          "what_is_happening": [
+            {
+              "statement": "The scheduler reports n2 as available, while BMC health is unavailable.",
+              "evidence_ids": [
+                "ev-scheduler-partial",
+                "ev-bmc-unavailable"
+              ],
+              "severity": "CRITICAL"
+            }
+          ],
+          "timeline": [
+            {
+              "observed_at": "2026-08-21T12:00:00Z",
+              "statement": "The bounded scheduler result and BMC unavailability were recorded.",
+              "evidence_ids": [
+                "ev-scheduler-partial",
+                "ev-bmc-unavailable"
+              ]
+            }
+          ],
+          "likely_explanations": [
+            {
+              "statement": "Cross-source health cannot be completed without BMC coverage.",
+              "confidence": 0.95,
+              "evidence_ids": [
+                "ev-bmc-unavailable"
+              ],
+              "counter_evidence_ids": [],
+              "severity": "CRITICAL"
+            }
+          ],
+          "what_remains_unknown": [
+            {
+              "statement": "n2 BMC sensor health remains unknown.",
+              "evidence_ids": [
+                "ev-bmc-unavailable"
+              ]
+            }
+          ],
+          "suggested_next_steps": [
+            {
+              "statement": "Restore or independently verify read-only BMC access before drawing a health conclusion.",
+              "evidence_ids": [],
+              "severity": "WARNING"
+            }
+          ],
+          "investigation_coverage": [
+            {
+              "statement": "Scheduler coverage is complete and BMC target coverage is missing.",
+              "evidence_ids": [
+                "ev-scheduler-partial",
+                "ev-bmc-unavailable"
+              ]
+            }
+          ]
+        },
+        "usage": {
+          "input_tokens": 260,
+          "output_tokens": 95,
+          "cost_micros": 690,
+          "latency_millis": 115
+        }
+      }
+    }
+  ]
+}

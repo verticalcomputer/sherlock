@@ -1,0 +1,37 @@
+[Unit]
+Description=Sherlock durable AI investigator
+Documentation=file:/opt/sherlock/current/deploy/vm/README.md
+After=network-online.target sherlock-migrate.service
+Wants=network-online.target
+Requires=sherlock-migrate.service
+
+[Service]
+Type=simple
+User=sherlock
+Group=sherlock
+WorkingDirectory=/opt/sherlock/current
+EnvironmentFile=/etc/sherlock/common.env
+EnvironmentFile=/etc/sherlock/investigator.env
+ExecStartPre=/usr/bin/test -x /opt/sherlock/current/bin/sherlock-investigator
+ExecStart=/opt/sherlock/current/bin/sherlock-investigator
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/sherlock/artifacts
+
+[Install]
+WantedBy=multi-user.target

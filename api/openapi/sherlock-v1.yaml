@@ -1,0 +1,378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sherlock Public API",
+    "version": "1.0.0-alpha.1",
+    "description": "Cluster-scoped API for Sherlock collection state, evidence, and signed restricted diagnostics. Missing, stale, partial, unavailable, and no-data states are represented explicitly; no arbitrary command or credential value is accepted."
+  },
+  "servers": [{"url": "/api/v1"}],
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/clusters/{cluster_id}/incidents": {
+      "get": {
+        "operationId": "listIncidents", "summary": "List incidents for an authorized cluster",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}, {"name": "status", "in": "query", "schema": {"$ref": "#/components/schemas/IncidentStatus"}}, {"name": "severity", "in": "query", "schema": {"$ref": "#/components/schemas/IncidentSeverity"}}],
+        "responses": {"200": {"description": "Incident page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IncidentListResponse"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}
+      },
+      "post": {
+        "operationId": "createIncident", "summary": "Create an incident idempotently",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateIncidentRequest"}}}},
+        "responses": {"201": {"description": "Incident created", "headers": {"Location": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Incident"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "409": {"$ref": "#/components/responses/Conflict"}}
+      }
+    },
+    "/incidents/{incident_id}": {
+      "get": {"operationId": "getIncident", "summary": "Get an incident after resolving its cluster scope", "parameters": [{"$ref": "#/components/parameters/IncidentID"}], "responses": {"200": {"description": "Incident", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Incident"}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}}}
+    },
+    "/investigations": {
+      "post": {
+        "operationId": "startInvestigation", "summary": "Start a durable deterministic investigation",
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StartInvestigationRequest"}}}},
+        "responses": {"202": {"description": "Investigation accepted", "headers": {"Location": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Investigation"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}
+      }
+    },
+    "/investigations/{investigation_id}": {
+      "get": {"operationId": "getInvestigation", "summary": "Get authoritative investigation state and validated finding references", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "responses": {"200": {"description": "Investigation", "headers": {"ETag": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Investigation"}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}}
+    },
+    "/investigations/{investigation_id}/cancel": {
+      "post": {"operationId": "cancelInvestigation", "summary": "Cancel a non-terminal investigation with optimistic concurrency", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CancelInvestigationRequest"}}}}, "responses": {"200": {"description": "Cancelled investigation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Investigation"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}}}
+    },
+    "/investigations/{investigation_id}/approvals": {
+      "post": {"operationId": "approveInvestigationAction", "summary": "Approve and resume one versioned bounded action", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApproveInvestigationRequest"}}}}, "responses": {"200": {"description": "Resumed investigation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Investigation"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}}}
+    },
+    "/investigations/{investigation_id}/events": {
+      "get": {"operationId": "listInvestigationEvents", "summary": "Read durable ordered investigation history", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}, {"name": "Last-Event-ID", "in": "header", "schema": {"type": "string", "maxLength": 128}}, {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 200}}], "responses": {"200": {"description": "Ordered event history", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InvestigationEventListResponse"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}}}
+    },
+    "/investigations/{investigation_id}/evidence": {
+      "get": {"operationId": "listInvestigationEvidence", "summary": "Read the immutable evidence ledger", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "responses": {"200": {"description": "Evidence ledger", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InvestigationEvidenceListResponse"}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}}}
+    },
+    "/investigations/{investigation_id}/hypotheses": {
+      "get": {"operationId": "listInvestigationHypotheses", "summary": "Read supporting and counter-evidence hypotheses", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "responses": {"200": {"description": "Hypothesis ledger", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HypothesisListResponse"}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}}}
+    },
+    "/investigations/{investigation_id}/findings": {
+      "get": {"operationId": "listInvestigationFindings", "summary": "Read citation-validated findings", "parameters": [{"$ref": "#/components/parameters/InvestigationID"}], "responses": {"200": {"description": "Finding ledger", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FindingListResponse"}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}}}
+    },
+    "/clusters": {
+      "get": {
+        "operationId": "listClusters",
+        "summary": "List clusters authorized for the current key",
+        "parameters": [{"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}],
+        "responses": {
+          "200": {"description": "Authorized clusters", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ClusterListResponse"}, "examples": {"success": {"$ref": "#/components/examples/ClusterListSuccess"}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}, "429": {"$ref": "#/components/responses/RateLimited"}, "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}": {
+      "get": {
+        "operationId": "getCluster",
+        "summary": "Get a cluster summary",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}],
+        "responses": {
+          "200": {"description": "Cluster summary", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Cluster"}, "examples": {"partial": {"$ref": "#/components/examples/ClusterPartial"}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Get the deterministic cluster health projection",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}],
+        "responses": {
+          "200": {"description": "Health projection, including unavailable and no-data states", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HealthSummary"}, "examples": {"partial": {"$ref": "#/components/examples/HealthPartial"}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/sources": {
+      "get": {
+        "operationId": "listSources",
+        "summary": "List source state",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}, {"name": "status", "in": "query", "schema": {"$ref": "#/components/schemas/SourceStatus"}}],
+        "responses": {
+          "200": {"description": "Source states", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SourceListResponse"}, "examples": {"partial": {"$ref": "#/components/examples/SourceListPartial"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/observations": {
+      "get": {
+        "operationId": "listObservations",
+        "summary": "List normalized observations",
+        "parameters": [
+          {"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"},
+          {"name": "source_id", "in": "query", "schema": {"type": "string"}}, {"name": "entity_key", "in": "query", "schema": {"type": "string"}},
+          {"name": "kind", "in": "query", "schema": {"type": "string"}}, {"name": "metric", "in": "query", "schema": {"type": "string"}},
+          {"name": "observed_after", "in": "query", "schema": {"$ref": "#/components/schemas/Timestamp"}}, {"name": "observed_before", "in": "query", "schema": {"$ref": "#/components/schemas/Timestamp"}}
+        ],
+        "responses": {
+          "200": {"description": "Normalized observations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ObservationListResponse"}, "examples": {"success": {"$ref": "#/components/examples/ObservationListSuccess"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/gpus": {
+      "get": {
+        "operationId": "listGPUSummaries",
+        "summary": "List GPU inventory and deterministic health summaries",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}, {"name": "node_id", "in": "query", "schema": {"type": "string"}}, {"name": "health", "in": "query", "schema": {"$ref": "#/components/schemas/HealthState"}}],
+        "responses": {
+          "200": {"description": "GPU summaries", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GPUSummaryListResponse"}, "examples": {"incident": {"$ref": "#/components/examples/GPUSummaryIncident"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/collection-runs": {
+      "get": {
+        "operationId": "listCollectionRuns",
+        "summary": "List collection runs",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}, {"name": "source_id", "in": "query", "schema": {"type": "string"}}, {"name": "status", "in": "query", "schema": {"$ref": "#/components/schemas/CollectionStatus"}}],
+        "responses": {
+          "200": {"description": "Collection runs", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CollectionRunListResponse"}, "examples": {"partial": {"$ref": "#/components/examples/CollectionRunPartial"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/evidence": {
+      "get": {
+        "operationId": "listEvidence",
+        "summary": "List evidence envelopes",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/PageSize"}, {"$ref": "#/components/parameters/PageToken"}, {"name": "status", "in": "query", "schema": {"$ref": "#/components/schemas/EvidenceStatus"}}, {"name": "target_id", "in": "query", "schema": {"type": "string"}}],
+        "responses": {
+          "200": {"description": "Evidence envelopes", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EvidenceListResponse"}, "examples": {"partial": {"$ref": "#/components/examples/EvidenceListPartial"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/evidence/{evidence_id}": {
+      "get": {
+        "operationId": "getEvidence",
+        "summary": "Get an evidence envelope and artifact metadata",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/EvidenceID"}],
+        "responses": {
+          "200": {"description": "Evidence envelope", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Evidence"}, "examples": {"partial": {"$ref": "#/components/examples/EvidencePartial"}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/clusters/{cluster_id}/diagnostic-runs/preview": {
+      "post": {
+        "operationId": "previewDiagnosticRun",
+        "summary": "Preview authorization for one signed diagnostic action",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticRunRequest"}}}},
+        "responses": {"200": {"description": "Authorization decision", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticAuthorizationPreview"}, "examples": {"allowed": {"$ref": "#/components/examples/DiagnosticPreviewAllowed"}}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}
+      }
+    },
+    "/clusters/{cluster_id}/diagnostic-runs": {
+      "post": {
+        "operationId": "startDiagnosticRun",
+        "summary": "Create durable work for one signed diagnostic action",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"name": "Idempotency-Key", "in": "header", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticRunRequest"}}}},
+        "responses": {"202": {"description": "Diagnostic work accepted", "headers": {"Location": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticRun"}, "examples": {"queued": {"$ref": "#/components/examples/DiagnosticRunQueued"}}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "409": {"description": "Idempotency or state conflict", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}
+      }
+    },
+    "/clusters/{cluster_id}/diagnostic-runs/{run_id}": {
+      "get": {
+        "operationId": "getDiagnosticRun",
+        "summary": "Get attributable diagnostic attempts and per-target results",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/DiagnosticRunID"}],
+        "responses": {"200": {"description": "Diagnostic run without raw output or credential material", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticRun"}, "examples": {"queued": {"$ref": "#/components/examples/DiagnosticRunQueued"}}}}}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}}
+      }
+    },
+    "/clusters/{cluster_id}/diagnostic-runs/{run_id}/approval": {
+      "post": {
+        "operationId": "approveDiagnosticRun",
+        "summary": "Approve one versioned privileged diagnostic action",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"$ref": "#/components/parameters/DiagnosticRunID"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticApprovalRequest"}}}},
+        "responses": {"200": {"description": "Approved run", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiagnosticRun"}, "examples": {"queued": {"$ref": "#/components/examples/DiagnosticRunQueued"}}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"description": "Stale or conflicting approval", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}
+      }
+    },
+    "/clusters/{cluster_id}/events": {
+      "get": {
+        "operationId": "streamEvents",
+        "summary": "Stream durable collection and source updates",
+        "description": "Events have monotonic IDs within a cluster stream. Reconnect with Last-Event-ID; the REST resources remain authoritative.",
+        "parameters": [{"$ref": "#/components/parameters/ClusterID"}, {"name": "Last-Event-ID", "in": "header", "schema": {"type": "string"}}, {"name": "event_type", "in": "query", "schema": {"type": "array", "items": {"$ref": "#/components/schemas/EventType"}}, "style": "form", "explode": true}],
+        "responses": {
+          "200": {"description": "SSE stream. Each framed data field is a JSON CollectionRunEvent or SourceEvent.", "headers": {"Cache-Control": {"schema": {"type": "string", "const": "no-cache"}}, "X-Accel-Buffering": {"schema": {"type": "string", "const": "no"}}}, "content": {"text/event-stream": {"schema": {"oneOf": [{"$ref": "#/components/schemas/CollectionRunEvent"}, {"$ref": "#/components/schemas/SourceEvent"}]}, "example": {"schema_version": 1, "cluster_id": "cluster_h100_prod", "occurred_at": "2026-08-19T12:00:04Z", "run_id": "run_01JABC", "status": "PARTIAL"}, "x-sse-framing-example": "id: evt_000042\nevent: collection_run.updated\ndata: {\"schema_version\":1,\"cluster_id\":\"cluster_h100_prod\",\"occurred_at\":\"2026-08-19T12:00:04Z\",\"run_id\":\"run_01JABC\",\"status\":\"PARTIAL\"}\n\n"}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "410": {"description": "Requested event is outside the replay window", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}, "503": {"$ref": "#/components/responses/ServiceUnavailable"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "Sherlock cluster API key"}},
+    "parameters": {
+      "ClusterID": {"name": "cluster_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "EvidenceID": {"name": "evidence_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "DiagnosticRunID": {"name": "run_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "IncidentID": {"name": "incident_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "InvestigationID": {"name": "investigation_id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "IdempotencyKey": {"name": "Idempotency-Key", "in": "header", "required": true, "schema": {"type": "string", "minLength": 1, "maxLength": 128}},
+      "PageSize": {"name": "page_size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+      "PageToken": {"name": "page_token", "in": "query", "schema": {"type": "string", "maxLength": 2048}}
+    },
+    "responses": {
+      "BadRequest": {"description": "Invalid request", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}, "examples": {"invalid": {"$ref": "#/components/examples/InvalidRequest"}}}}},
+      "Unauthorized": {"description": "Missing or invalid API key", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}, "examples": {"unauthorized": {"$ref": "#/components/examples/Unauthorized"}}}}},
+      "Forbidden": {"description": "Key lacks capability or belongs to a different cluster", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}, "examples": {"forbidden": {"$ref": "#/components/examples/Forbidden"}}}}},
+      "NotFound": {"description": "Resource not found in the authorized cluster", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}, "examples": {"not_found": {"$ref": "#/components/examples/NotFound"}}}}},
+      "Conflict": {"description": "Idempotency, version, or state conflict", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}},
+      "RateLimited": {"description": "Rate limit exceeded", "headers": {"Retry-After": {"schema": {"type": "integer", "minimum": 1}}}, "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}},
+      "InternalError": {"description": "Internal error", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}},
+      "ServiceUnavailable": {"description": "Service temporarily unavailable", "headers": {"Retry-After": {"schema": {"type": "integer", "minimum": 1}}}, "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}, "examples": {"unavailable": {"$ref": "#/components/examples/Unavailable"}}}}}
+    },
+    "schemas": {
+      "Timestamp": {"type": "string", "format": "date-time", "examples": ["2026-08-19T12:00:00Z"]},
+      "IncidentSeverity": {"type": "string", "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+      "IncidentStatus": {"type": "string", "enum": ["OPEN", "INVESTIGATING", "MONITORING", "RESOLVED", "CLOSED"]},
+      "InvestigationStatus": {"type": "string", "enum": ["INITIALIZING", "PLANNING", "POLICY_CHECK", "AWAITING_APPROVAL", "EXECUTING", "AWAITING_EVIDENCE", "RECORDING_EVIDENCE", "UPDATING_LEDGER", "SYNTHESIZING", "COMPLETED", "PARTIAL", "BLOCKED", "CANCELLED"]},
+      "CreateIncidentRequest": {"type": "object", "additionalProperties": false, "required": ["title", "summary", "severity", "target_ids", "evidence_ids"], "properties": {"title": {"type": "string", "minLength": 1, "maxLength": 256}, "summary": {"type": "string", "maxLength": 4096}, "severity": {"$ref": "#/components/schemas/IncidentSeverity"}, "target_ids": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string"}}, "evidence_ids": {"type": "array", "maxItems": 1024, "uniqueItems": true, "items": {"type": "string"}}}},
+      "Incident": {"type": "object", "additionalProperties": false, "required": ["incident_id", "cluster_id", "title", "summary", "severity", "status", "target_ids", "evidence_ids", "created_by", "created_at", "updated_at", "version", "investigation_ids"], "properties": {"incident_id": {"type": "string"}, "cluster_id": {"type": "string"}, "title": {"type": "string"}, "summary": {"type": "string"}, "severity": {"$ref": "#/components/schemas/IncidentSeverity"}, "status": {"$ref": "#/components/schemas/IncidentStatus"}, "target_ids": {"type": "array", "items": {"type": "string"}}, "evidence_ids": {"type": "array", "items": {"type": "string"}}, "created_by": {"type": "string"}, "created_at": {"$ref": "#/components/schemas/Timestamp"}, "updated_at": {"$ref": "#/components/schemas/Timestamp"}, "version": {"type": "integer", "minimum": 1}, "investigation_ids": {"type": "array", "items": {"type": "string"}}}},
+      "IncidentListResponse": {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Incident"}}, "next_page_token": {"type": "string"}}},
+      "InvestigationBudget": {"type": "object", "additionalProperties": false, "required": ["max_decisions", "max_tool_calls", "max_privileged_calls", "max_fan_out", "max_model_tokens", "max_cost_micros", "decisions_used", "tool_calls_used", "privileged_calls_used", "fan_out_used", "model_tokens_used", "cost_micros_used"], "properties": {"max_decisions": {"type": "integer", "minimum": 1, "maximum": 100}, "max_tool_calls": {"type": "integer", "minimum": 1, "maximum": 1000}, "max_diagnostic_calls": {"type": "integer", "minimum": 0, "maximum": 1000}, "max_privileged_calls": {"type": "integer", "minimum": 0, "maximum": 1000}, "max_fan_out": {"type": "integer", "minimum": 1, "maximum": 256}, "max_model_tokens": {"type": "integer", "minimum": 0}, "max_cost_micros": {"type": "integer", "minimum": 0}, "decisions_used": {"type": "integer", "minimum": 0}, "tool_calls_used": {"type": "integer", "minimum": 0}, "diagnostic_calls_used": {"type": "integer", "minimum": 0}, "privileged_calls_used": {"type": "integer", "minimum": 0}, "fan_out_used": {"type": "integer", "minimum": 0}, "model_tokens_used": {"type": "integer", "minimum": 0}, "cost_micros_used": {"type": "integer", "minimum": 0}}},
+      "InvestigationScope": {"type": "object", "additionalProperties": false, "required": ["entity_kind", "entity_ids", "start", "end"], "properties": {"entity_kind": {"type": "string", "minLength": 1}, "entity_ids": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"type": "string"}}, "start": {"$ref": "#/components/schemas/Timestamp"}, "end": {"$ref": "#/components/schemas/Timestamp"}}},
+      "StartInvestigationRequest": {"type": "object", "additionalProperties": false, "required": ["cluster_id", "incident_id", "question", "scope", "success_criteria", "budget", "deadline"], "properties": {"cluster_id": {"type": "string", "minLength": 1}, "incident_id": {"type": "string", "minLength": 1}, "question": {"type": "string", "minLength": 1, "maxLength": 4096}, "scope": {"$ref": "#/components/schemas/InvestigationScope"}, "success_criteria": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"type": "string", "minLength": 1, "maxLength": 512}}, "budget": {"$ref": "#/components/schemas/InvestigationBudget"}, "deadline": {"$ref": "#/components/schemas/Timestamp"}}},
+      "InvestigationAction": {"type": "object", "additionalProperties": false, "required": ["action_id", "tool_id", "action_sha256", "privileged", "fan_out"], "properties": {"action_id": {"type": "string"}, "tool_id": {"type": "string"}, "action_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "privileged": {"type": "boolean"}, "fan_out": {"type": "integer", "minimum": 1}}},
+      "Investigation": {"type": "object", "additionalProperties": false, "required": ["investigation_id", "cluster_id", "incident_id", "question", "scope", "success_criteria", "status", "budget", "finding_ids", "created_by", "created_at", "deadline", "updated_at", "version"], "properties": {"investigation_id": {"type": "string"}, "cluster_id": {"type": "string"}, "incident_id": {"type": "string"}, "question": {"type": "string"}, "scope": {"$ref": "#/components/schemas/InvestigationScope"}, "success_criteria": {"type": "array", "items": {"type": "string"}}, "status": {"$ref": "#/components/schemas/InvestigationStatus"}, "stop_reason": {"type": "string"}, "budget": {"$ref": "#/components/schemas/InvestigationBudget"}, "pending_action": {"$ref": "#/components/schemas/InvestigationAction"}, "finding_ids": {"type": "array", "items": {"type": "string"}}, "created_by": {"type": "string"}, "created_at": {"$ref": "#/components/schemas/Timestamp"}, "deadline": {"$ref": "#/components/schemas/Timestamp"}, "updated_at": {"$ref": "#/components/schemas/Timestamp"}, "completed_at": {"$ref": "#/components/schemas/Timestamp"}, "version": {"type": "integer", "minimum": 1}}},
+      "CancelInvestigationRequest": {"type": "object", "additionalProperties": false, "required": ["expected_version", "reason"], "properties": {"expected_version": {"type": "integer", "minimum": 1}, "reason": {"type": "string", "minLength": 1, "maxLength": 1024}}},
+      "ApproveInvestigationRequest": {"type": "object", "additionalProperties": false, "required": ["approval_id", "action_id", "action_sha256", "expected_version", "expires_at"], "properties": {"approval_id": {"type": "string", "minLength": 1}, "action_id": {"type": "string", "minLength": 1}, "action_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "expected_version": {"type": "integer", "minimum": 1}, "expires_at": {"$ref": "#/components/schemas/Timestamp"}}},
+      "InvestigationEvent": {"type": "object", "additionalProperties": false, "required": ["event_id", "schema_version", "investigation_id", "cluster_id", "sequence", "type", "occurred_at"], "properties": {"event_id": {"type": "string"}, "schema_version": {"type": "integer", "const": 1}, "investigation_id": {"type": "string"}, "cluster_id": {"type": "string"}, "sequence": {"type": "integer", "minimum": 1}, "type": {"type": "string", "enum": ["CREATED", "STATE_CHANGED", "BUDGET_CONSUMED", "APPROVAL_GRANTED", "EVIDENCE_ADDED", "HYPOTHESIS_UPDATED", "FINDING_ADDED"]}, "from_status": {"$ref": "#/components/schemas/InvestigationStatus"}, "to_status": {"$ref": "#/components/schemas/InvestigationStatus"}, "occurred_at": {"$ref": "#/components/schemas/Timestamp"}, "attributes": {"type": "object", "additionalProperties": true}}},
+      "InvestigationEventListResponse": {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/InvestigationEvent"}}}},
+      "InvestigationEvidence": {"type": "object", "additionalProperties": false, "required": ["investigation_id", "evidence_id", "cluster_id", "entity_ids", "recorded_at"], "properties": {"investigation_id": {"type": "string"}, "evidence_id": {"type": "string"}, "cluster_id": {"type": "string"}, "entity_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "recorded_at": {"$ref": "#/components/schemas/Timestamp"}}},
+      "InvestigationEvidenceListResponse": {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/InvestigationEvidence"}}}},
+      "Hypothesis": {"type": "object", "additionalProperties": false, "required": ["hypothesis_id", "investigation_id", "statement", "status", "confidence", "supporting_evidence_ids", "counter_evidence_ids", "unresolved_tests", "version"], "properties": {"hypothesis_id": {"type": "string"}, "investigation_id": {"type": "string"}, "statement": {"type": "string"}, "status": {"type": "string", "enum": ["PROPOSED", "SUPPORTED", "WEAKENED", "REFUTED", "UNRESOLVED"]}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}, "supporting_evidence_ids": {"type": "array", "items": {"type": "string"}}, "counter_evidence_ids": {"type": "array", "items": {"type": "string"}}, "unresolved_tests": {"type": "array", "items": {"type": "string"}}, "version": {"type": "integer", "minimum": 1}}},
+      "HypothesisListResponse": {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Hypothesis"}}}},
+      "Finding": {"type": "object", "additionalProperties": false, "required": ["finding_id", "investigation_id", "kind", "statement", "entity_ids", "severity", "evidence_ids", "counter_evidence_ids", "status", "validation_status", "validation_errors"], "properties": {"finding_id": {"type": "string"}, "investigation_id": {"type": "string"}, "kind": {"type": "string", "enum": ["OBSERVATION", "DERIVED_SIGNAL", "HYPOTHESIS", "RECOMMENDATION"]}, "statement": {"type": "string"}, "entity_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "severity": {"type": "string"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}, "evidence_ids": {"type": "array", "items": {"type": "string"}}, "counter_evidence_ids": {"type": "array", "items": {"type": "string"}}, "status": {"type": "string", "enum": ["CURRENT", "SUPERSEDED"]}, "validation_status": {"type": "string", "enum": ["VALID", "INVALID"]}, "validation_errors": {"type": "array", "items": {"type": "string"}}}},
+      "FindingListResponse": {"type": "object", "additionalProperties": false, "required": ["data"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Finding"}}}},
+      "Freshness": {"type": "string", "enum": ["FRESH", "STALE", "UNKNOWN"]},
+      "CollectionStatus": {"type": "string", "enum": ["SUCCEEDED", "NO_DATA", "PARTIAL", "FAILED"]},
+      "SourceStatus": {"type": "string", "enum": ["AVAILABLE", "DEGRADED", "UNAVAILABLE", "UNKNOWN"]},
+      "SourceSupport": {"type": "string", "enum": ["SUPPORTED", "NOT_SUPPORTED", "UNKNOWN"]},
+      "CoverageScope": {"type": "string", "enum": ["INVENTORY", "ALLOCATIONS", "PROGRESS", "METRICS", "EVENTS"]},
+      "HealthState": {"type": "string", "enum": ["NORMAL", "PARTIAL", "STALE", "UNAVAILABLE", "NO_DATA", "XID", "ECC", "THERMAL", "MEMORY", "POWER", "UTILIZATION"]},
+      "HealthSeverity": {"type": "string", "enum": ["UNKNOWN", "INFO", "WARNING", "CRITICAL"]},
+      "EvidenceStatus": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "NO_DATA", "UNAVAILABLE"]},
+      "EventType": {"type": "string", "enum": ["collection_run.updated", "source.updated"]},
+      "DiagnosticRunStatus": {"type": "string", "enum": ["AWAITING_APPROVAL", "QUEUED", "RUNNING", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"]},
+      "DiagnosticPrivilege": {"type": "string", "enum": ["UNPRIVILEGED", "PRIVILEGED"]},
+      "DiagnosticDefinitionReference": {"type": "object", "additionalProperties": false, "required": ["pack_id", "pack_version", "definition_id", "definition_version", "definition_sha256"], "properties": {"pack_id": {"type": "string"}, "pack_version": {"type": "string"}, "definition_id": {"type": "string"}, "definition_version": {"type": "string"}, "definition_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+      "DiagnosticArgument": {"type": "object", "additionalProperties": false, "required": ["name", "value"], "properties": {"name": {"type": "string", "maxLength": 128}, "value": {"type": "string", "maxLength": 512, "description": "Non-secret typed definition input. Credential-shaped fields are rejected."}}},
+      "DiagnosticRunRequest": {"type": "object", "additionalProperties": false, "required": ["definition", "targets", "arguments"], "properties": {"definition": {"$ref": "#/components/schemas/DiagnosticDefinitionReference"}, "targets": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"type": "string"}}, "arguments": {"type": "array", "maxItems": 32, "items": {"$ref": "#/components/schemas/DiagnosticArgument"}}, "deadline": {"$ref": "#/components/schemas/Timestamp"}, "max_attempts": {"type": "integer", "minimum": 1, "maximum": 3, "default": 1}}},
+      "DiagnosticAuthorizationPreview": {"type": "object", "additionalProperties": false, "required": ["allowed", "approval_required", "reason_code"], "properties": {"allowed": {"type": "boolean"}, "approval_required": {"type": "boolean"}, "reason_code": {"type": "string"}}},
+      "DiagnosticApprovalRequest": {"type": "object", "additionalProperties": false, "required": ["expires_at"], "properties": {"expires_at": {"$ref": "#/components/schemas/Timestamp"}}},
+      "DiagnosticTargetResult": {"type": "object", "additionalProperties": false, "required": ["target", "status", "retryable", "timed_out", "stdout_truncated", "stderr_truncated", "stdout_bytes", "stderr_bytes", "stdout_sha256", "stdout_transformation_state", "stderr_sha256"], "properties": {"target": {"type": "string"}, "status": {"type": "string", "enum": ["SUCCEEDED", "FAILED", "TIMED_OUT", "REJECTED"]}, "retryable": {"type": "boolean"}, "exit_code": {"type": ["integer", "null"]}, "signal": {"type": "string"}, "timed_out": {"type": "boolean"}, "stdout_truncated": {"type": "boolean"}, "stderr_truncated": {"type": "boolean"}, "stdout_bytes": {"type": "integer", "minimum": 0}, "stderr_bytes": {"type": "integer", "minimum": 0}, "stdout_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "stdout_transformation_state": {"type": "string", "enum": ["UNKNOWN", "UNMODIFIED", "TRANSFORMED"]}, "stderr_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "error_code": {"type": "string"}}},
+      "DiagnosticAttempt": {"type": "object", "additionalProperties": false, "required": ["attempt", "runner_id", "status", "lease_expires_at", "targets"], "properties": {"attempt": {"type": "integer", "minimum": 1, "maximum": 3}, "runner_id": {"type": "string"}, "status": {"type": "string", "enum": ["CLAIMED", "RUNNING", "SUCCEEDED", "PARTIAL", "FAILED", "EXPIRED"]}, "lease_expires_at": {"$ref": "#/components/schemas/Timestamp"}, "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "started_at": {"$ref": "#/components/schemas/Timestamp"}, "completed_at": {"$ref": "#/components/schemas/Timestamp"}, "targets": {"type": "array", "items": {"$ref": "#/components/schemas/DiagnosticTargetResult"}}}},
+      "DiagnosticRun": {"type": "object", "additionalProperties": false, "required": ["run_id", "cluster_id", "definition", "privilege", "status", "requested_by", "requested_at", "deadline", "version", "attempts"], "properties": {"run_id": {"type": "string"}, "cluster_id": {"type": "string"}, "definition": {"$ref": "#/components/schemas/DiagnosticDefinitionReference"}, "privilege": {"$ref": "#/components/schemas/DiagnosticPrivilege"}, "status": {"$ref": "#/components/schemas/DiagnosticRunStatus"}, "requested_by": {"type": "string"}, "requested_at": {"$ref": "#/components/schemas/Timestamp"}, "deadline": {"$ref": "#/components/schemas/Timestamp"}, "completed_at": {"$ref": "#/components/schemas/Timestamp"}, "version": {"type": "integer", "minimum": 1}, "work_id": {"type": "string"}, "attempts": {"type": "array", "items": {"$ref": "#/components/schemas/DiagnosticAttempt"}}}},
+      "Coverage": {
+        "type": "object", "additionalProperties": false, "required": ["requested", "successful", "failed", "complete"],
+        "properties": {"requested": {"type": "integer", "minimum": 0}, "successful": {"type": "integer", "minimum": 0}, "failed": {"type": "integer", "minimum": 0}, "complete": {"type": "boolean"}, "series_expected": {"type": ["integer", "null"], "minimum": 0}, "series_returned": {"type": "integer", "minimum": 0}, "bytes_read": {"type": "integer", "minimum": 0}}
+      },
+      "SourceProvenance": {
+        "type": "object", "additionalProperties": false,
+        "required": ["source_id", "source_at", "effective_at", "observed_at"],
+        "properties": {"source_id": {"type": "string"}, "source_at": {"$ref": "#/components/schemas/Timestamp"}, "effective_at": {"$ref": "#/components/schemas/Timestamp"}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "source_reference": {"type": "string"}, "evidence_ids": {"type": "array", "items": {"type": "string"}}}
+      },
+      "SourceCoverage": {
+        "type": "object", "additionalProperties": false,
+        "required": ["scope", "support", "state", "expected", "observed", "provenance"],
+        "properties": {"scope": {"$ref": "#/components/schemas/CoverageScope"}, "support": {"$ref": "#/components/schemas/SourceSupport"}, "state": {"type": "string", "enum": ["UNKNOWN", "COMPLETE", "PARTIAL", "UNAVAILABLE", "UNSUPPORTED"]}, "expected": {"type": "integer", "minimum": 0}, "observed": {"type": "integer", "minimum": 0}, "provenance": {"$ref": "#/components/schemas/SourceProvenance"}}
+      },
+      "CollectionError": {
+        "type": "object", "additionalProperties": false, "required": ["code", "retryable"],
+        "properties": {"code": {"type": "string", "enum": ["SOURCE_UNAVAILABLE", "DEADLINE_EXCEEDED", "MALFORMED_RESPONSE", "RESULT_LIMIT_EXCEEDED", "UNAUTHORIZED", "INVALID_ARGUMENT", "PARTIAL_DATA", "COLLECTOR_UNAVAILABLE", "INTERNAL"]}, "source_id": {"type": "string"}, "target_id": {"type": "string"}, "retryable": {"type": "boolean"}, "message": {"type": "string", "maxLength": 1024}}
+      },
+      "ResponseMeta": {
+        "type": "object", "additionalProperties": false, "required": ["request_id", "generated_at", "collection_status", "freshness", "coverage", "warnings"],
+        "properties": {"request_id": {"type": "string"}, "generated_at": {"$ref": "#/components/schemas/Timestamp"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "warnings": {"type": "array", "items": {"type": "string"}}, "next_page_token": {"type": "string"}}
+      },
+      "Cluster": {
+        "type": "object", "additionalProperties": false, "required": ["cluster_id", "name", "capabilities", "observed_at", "collected_at", "freshness", "coverage", "collection_status"],
+        "properties": {"cluster_id": {"type": "string"}, "name": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}}
+      },
+      "ClusterListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Cluster"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "Source": {
+        "type": "object", "additionalProperties": false, "required": ["source_id", "kind", "status", "observed_at", "collected_at", "freshness", "coverage", "collection_status"],
+        "properties": {"source_id": {"type": "string"}, "kind": {"type": "string"}, "status": {"$ref": "#/components/schemas/SourceStatus"}, "last_success_at": {"oneOf": [{"$ref": "#/components/schemas/Timestamp"}, {"type": "null"}]}, "last_error": {"oneOf": [{"$ref": "#/components/schemas/CollectionError"}, {"type": "null"}]}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "coverage_by_scope": {"type": "array", "items": {"$ref": "#/components/schemas/SourceCoverage"}}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}}
+      },
+      "SourceListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Source"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "Label": {"type": "object", "additionalProperties": false, "required": ["name", "value"], "properties": {"name": {"type": "string"}, "value": {"type": "string"}}},
+      "Observation": {
+        "type": "object", "additionalProperties": false, "required": ["observation_id", "schema_version", "cluster_id", "source_id", "kind", "entity_key", "metric", "labels", "value", "unit", "observed_at", "collected_at", "freshness", "coverage", "collection_status", "source_reference"],
+        "properties": {"observation_id": {"type": "string"}, "schema_version": {"type": "integer", "minimum": 1}, "cluster_id": {"type": "string"}, "source_id": {"type": "string"}, "kind": {"type": "string"}, "entity_key": {"type": "string"}, "metric": {"type": "string"}, "labels": {"type": "array", "items": {"$ref": "#/components/schemas/Label"}}, "value": {"type": "number"}, "unit": {"type": "string"}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}, "source_reference": {"type": "string"}, "provenance": {"$ref": "#/components/schemas/SourceProvenance"}, "evidence_ids": {"type": "array", "items": {"type": "string"}}}
+      },
+      "ObservationListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Observation"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "HealthSignal": {
+        "type": "object", "additionalProperties": false, "required": ["schema_version", "type", "category", "severity", "source_id", "entity_key", "observed_at", "projected_at", "freshness", "coverage", "evidence", "counter_evidence", "reason"],
+        "properties": {"schema_version": {"type": "integer", "minimum": 1}, "type": {"$ref": "#/components/schemas/HealthState"}, "category": {"$ref": "#/components/schemas/HealthState"}, "severity": {"$ref": "#/components/schemas/HealthSeverity"}, "source_id": {"type": "string"}, "entity_key": {"type": "string"}, "metric": {"type": "string"}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "projected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "evidence": {"type": "array", "items": {"type": "string"}}, "counter_evidence": {"type": "array", "items": {"type": "string"}}, "reason": {"type": "string"}}
+      },
+      "ClusterHealthView": {
+        "type": "object", "additionalProperties": false,
+        "required": ["schema_version", "cluster_id", "generated_at", "window_start", "window_end", "capacity", "monitoring", "workload_condition", "progress_state", "attention"],
+        "properties": {
+          "schema_version": {"type": "integer", "enum": [1]}, "cluster_id": {"type": "string"}, "generated_at": {"$ref": "#/components/schemas/Timestamp"}, "window_start": {"$ref": "#/components/schemas/Timestamp"}, "window_end": {"$ref": "#/components/schemas/Timestamp"},
+          "capacity": {"type": "object", "additionalProperties": false, "required": ["condition", "expected_nodes", "expected_gpus", "observed_nodes", "observed_gpus"], "properties": {"condition": {"type": "string"}, "expected_nodes": {"type": ["integer", "null"]}, "expected_gpus": {"type": ["integer", "null"]}, "observed_nodes": {"type": ["integer", "null"]}, "observed_gpus": {"type": ["integer", "null"]}, "expected_revision_id": {"type": "string"}, "observed_revision_id": {"type": "string"}}},
+          "monitoring": {"type": "object", "additionalProperties": false, "required": ["collector_condition", "freshness_condition", "coverage_condition", "support_condition", "expected_collectors", "fresh_collectors", "fresh_sources", "stale_sources", "sources_without_data", "complete_streams", "partial_streams", "no_data_streams", "unavailable_streams", "historical_streams", "expected_operations", "fresh_operations", "late_operations", "failed_operations"], "properties": {"collector_condition": {"type": "string"}, "freshness_condition": {"type": "string"}, "coverage_condition": {"type": "string"}, "support_condition": {"type": "string"}, "expected_collectors": {"type": "integer"}, "fresh_collectors": {"type": "integer"}, "fresh_sources": {"type": "integer"}, "stale_sources": {"type": "integer"}, "sources_without_data": {"type": "integer"}, "complete_streams": {"type": "integer"}, "partial_streams": {"type": "integer"}, "no_data_streams": {"type": "integer"}, "unavailable_streams": {"type": "integer"}, "historical_streams": {"type": "integer"}, "expected_operations": {"type": "integer"}, "fresh_operations": {"type": "integer"}, "late_operations": {"type": "integer"}, "failed_operations": {"type": "integer"}}},
+          "workload_condition": {"type": "string"}, "progress_state": {"type": "string", "enum": ["UNKNOWN", "MEASURED", "UNMEASURED", "UNSUPPORTED"]}, "attention": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "HealthSummary": {
+        "type": "object", "additionalProperties": false, "required": ["cluster_id", "state", "severity", "signals", "observed_at", "collected_at", "freshness", "coverage", "collection_status", "errors"],
+        "properties": {"cluster_id": {"type": "string"}, "state": {"$ref": "#/components/schemas/HealthState"}, "severity": {"$ref": "#/components/schemas/HealthSeverity"}, "signals": {"type": "array", "items": {"$ref": "#/components/schemas/HealthSignal"}}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}, "shared": {"$ref": "#/components/schemas/ClusterHealthView"}}
+      },
+      "GPUMetric": {"type": "object", "additionalProperties": false, "required": ["value", "unit", "observed_at"], "properties": {"value": {"type": "number"}, "unit": {"type": "string"}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}}},
+      "GPUSummary": {
+        "type": "object", "additionalProperties": false, "required": ["gpu_id", "node_id", "health", "severity", "signals", "metrics", "observed_at", "collected_at", "freshness", "coverage", "collection_status"],
+        "properties": {"gpu_id": {"type": "string"}, "node_id": {"type": "string"}, "uuid": {"type": "string"}, "model": {"type": "string"}, "health": {"$ref": "#/components/schemas/HealthState"}, "severity": {"$ref": "#/components/schemas/HealthSeverity"}, "signals": {"type": "array", "items": {"$ref": "#/components/schemas/HealthSignal"}}, "metrics": {"type": "object", "additionalProperties": {"$ref": "#/components/schemas/GPUMetric"}}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}}
+      },
+      "GPUSummaryListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/GPUSummary"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "CollectionRun": {
+        "type": "object", "additionalProperties": false, "required": ["run_id", "cluster_id", "source_id", "query", "status", "scheduled_for", "started_at", "completed_at", "observed_at", "collected_at", "freshness", "coverage", "collection_status", "failures"],
+        "properties": {"run_id": {"type": "string"}, "cluster_id": {"type": "string"}, "source_id": {"type": "string"}, "query": {"type": "string"}, "status": {"$ref": "#/components/schemas/CollectionStatus"}, "scheduled_for": {"$ref": "#/components/schemas/Timestamp"}, "started_at": {"$ref": "#/components/schemas/Timestamp"}, "completed_at": {"$ref": "#/components/schemas/Timestamp"}, "observed_at": {"$ref": "#/components/schemas/Timestamp"}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "freshness": {"$ref": "#/components/schemas/Freshness"}, "coverage": {"$ref": "#/components/schemas/Coverage"}, "collection_status": {"$ref": "#/components/schemas/CollectionStatus"}, "failures": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}
+      },
+      "CollectionRunListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionRun"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "EvidenceTarget": {"type": "object", "additionalProperties": false, "required": ["kind", "id"], "properties": {"kind": {"type": "string", "enum": ["CLUSTER", "NODE", "GPU", "SOURCE"]}, "id": {"type": "string"}}},
+      "EvidenceCoverage": {"type": "object", "additionalProperties": false, "required": ["expected", "covered", "complete"], "properties": {"expected": {"type": "array", "minItems": 1, "items": {"$ref": "#/components/schemas/EvidenceTarget"}}, "covered": {"type": "array", "items": {"$ref": "#/components/schemas/EvidenceTarget"}}, "complete": {"type": "boolean"}}},
+      "EvidenceSourceReference": {"type": "object", "additionalProperties": false, "required": ["source_id", "run_id", "operation", "definition_version", "reference"], "properties": {"source_id": {"type": "string"}, "run_id": {"type": "string"}, "operation": {"type": "string"}, "definition_version": {"type": "string"}, "reference": {"type": "string"}}},
+      "ArtifactReference": {
+        "type": "object", "additionalProperties": false, "required": ["artifact_id", "sha256", "bytes", "media_type", "compression", "parser_version", "redactions", "retention_class", "availability"],
+        "properties": {"artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bytes": {"type": "integer", "minimum": 0}, "media_type": {"type": "string"}, "compression": {"type": "string", "enum": ["NONE", "GZIP", "ZSTD"]}, "parser_version": {"type": "string"}, "redactions": {"type": "object", "additionalProperties": false, "required": ["policy_version", "match_count"], "properties": {"policy_version": {"type": "string"}, "match_count": {"type": "integer", "minimum": 0}}}, "retention_class": {"type": "string", "enum": ["SHORT", "STANDARD", "EXTENDED"]}, "availability": {"type": "string", "enum": ["PENDING", "AVAILABLE", "UNAVAILABLE", "CORRUPT"]}}
+      },
+      "Evidence": {
+        "type": "object", "additionalProperties": false, "required": ["evidence_id", "schema_version", "cluster_id", "status", "source", "time_range", "collected_at", "coverage"],
+        "properties": {"evidence_id": {"type": "string"}, "schema_version": {"type": "integer", "const": 1}, "cluster_id": {"type": "string"}, "status": {"$ref": "#/components/schemas/EvidenceStatus"}, "source": {"$ref": "#/components/schemas/EvidenceSourceReference"}, "time_range": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "properties": {"start": {"$ref": "#/components/schemas/Timestamp"}, "end": {"$ref": "#/components/schemas/Timestamp"}}}, "collected_at": {"$ref": "#/components/schemas/Timestamp"}, "coverage": {"$ref": "#/components/schemas/EvidenceCoverage"}, "artifact": {"oneOf": [{"$ref": "#/components/schemas/ArtifactReference"}, {"type": "null"}]}, "supersedes": {"type": ["string", "null"]}}
+      },
+      "EvidenceListResponse": {"type": "object", "additionalProperties": false, "required": ["data", "meta", "errors"], "properties": {"data": {"type": "array", "items": {"$ref": "#/components/schemas/Evidence"}}, "meta": {"$ref": "#/components/schemas/ResponseMeta"}, "errors": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionError"}}}},
+      "CollectionRunEvent": {"type": "object", "additionalProperties": false, "required": ["schema_version", "cluster_id", "occurred_at", "run_id", "status"], "properties": {"schema_version": {"type": "integer", "const": 1}, "cluster_id": {"type": "string"}, "occurred_at": {"$ref": "#/components/schemas/Timestamp"}, "run_id": {"type": "string"}, "status": {"$ref": "#/components/schemas/CollectionStatus"}}},
+      "SourceEvent": {"type": "object", "additionalProperties": false, "required": ["schema_version", "cluster_id", "occurred_at", "source_id", "status", "freshness"], "properties": {"schema_version": {"type": "integer", "const": 1}, "cluster_id": {"type": "string"}, "occurred_at": {"$ref": "#/components/schemas/Timestamp"}, "source_id": {"type": "string"}, "status": {"$ref": "#/components/schemas/SourceStatus"}, "freshness": {"$ref": "#/components/schemas/Freshness"}}},
+      "Problem": {
+        "type": "object", "additionalProperties": false, "required": ["type", "title", "status", "code", "detail", "request_id"],
+        "properties": {"type": {"type": "string", "format": "uri"}, "title": {"type": "string"}, "status": {"type": "integer", "minimum": 400, "maximum": 599}, "code": {"type": "string"}, "detail": {"type": "string"}, "request_id": {"type": "string"}, "violations": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["field", "reason"], "properties": {"field": {"type": "string"}, "reason": {"type": "string"}}}}
+      }
+    }
+    },
+    "examples": {
+      "ClusterListSuccess": {"value": {"data": [{"cluster_id": "cluster_h100_prod", "name": "H100 production", "capabilities": ["cluster:read", "telemetry:read", "evidence:raw"], "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "FRESH", "coverage": {"requested": 80, "successful": 80, "failed": 0, "complete": true, "series_expected": 80, "series_returned": 80, "bytes_read": 4096}, "collection_status": "SUCCEEDED"}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "SUCCEEDED", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "warnings": []}, "errors": []}},
+      "ClusterPartial": {"value": {"cluster_id": "cluster_h100_prod", "name": "H100 production", "capabilities": ["cluster:read", "telemetry:read"], "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "FRESH", "coverage": {"requested": 80, "successful": 78, "failed": 2, "complete": false}, "collection_status": "PARTIAL"}},
+      "HealthPartial": {"value": {"cluster_id": "cluster_h100_prod", "state": "PARTIAL", "severity": "UNKNOWN", "signals": [{"schema_version": 1, "type": "UNAVAILABLE", "category": "UNAVAILABLE", "severity": "UNKNOWN", "source_id": "prometheus-main", "entity_key": "comp007/GPU-7", "observed_at": "2026-08-19T12:00:00Z", "projected_at": "2026-08-19T12:00:05Z", "freshness": "UNKNOWN", "coverage": {"requested": 1, "successful": 0, "failed": 1, "complete": false}, "evidence": [], "counter_evidence": [], "reason": "source unavailable; health is not inferred"}], "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "UNKNOWN", "coverage": {"requested": 80, "successful": 79, "failed": 1, "complete": false}, "collection_status": "PARTIAL", "errors": [{"code": "SOURCE_UNAVAILABLE", "source_id": "prometheus-main", "target_id": "comp007", "retryable": true}]}},
+      "SourceListPartial": {"value": {"data": [{"source_id": "prometheus-main", "kind": "PROMETHEUS", "status": "DEGRADED", "last_success_at": "2026-08-19T11:55:00Z", "last_error": {"code": "PARTIAL_DATA", "source_id": "prometheus-main", "retryable": true}, "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "STALE", "coverage": {"requested": 80, "successful": 78, "failed": 2, "complete": false}, "collection_status": "PARTIAL"}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "PARTIAL", "freshness": "STALE", "coverage": {"requested": 80, "successful": 78, "failed": 2, "complete": false}, "warnings": ["two targets did not respond"]}, "errors": [{"code": "PARTIAL_DATA", "source_id": "prometheus-main", "retryable": true}]}},
+      "ObservationListSuccess": {"value": {"data": [{"observation_id": "obs_01JABC", "schema_version": 1, "cluster_id": "cluster_h100_prod", "source_id": "prometheus-main", "kind": "GPU_TEMPERATURE", "entity_key": "comp001/GPU-0", "metric": "DCGM_FI_DEV_GPU_TEMP", "labels": [{"name": "gpu", "value": "0"}], "value": 67, "unit": "celsius", "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "collection_status": "SUCCEEDED", "source_reference": "prometheus:series:7", "evidence_ids": ["ev_01JABC"]}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "SUCCEEDED", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "warnings": []}, "errors": []}},
+      "GPUSummaryIncident": {"value": {"data": [{"gpu_id": "GPU-0", "node_id": "comp001", "uuid": "GPU-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "model": "NVIDIA H100 80GB HBM3", "health": "XID", "severity": "CRITICAL", "signals": [{"schema_version": 1, "type": "XID", "category": "XID", "severity": "CRITICAL", "source_id": "prometheus-main", "entity_key": "comp001/GPU-0", "metric": "DCGM_FI_DEV_XID_ERRORS", "observed_at": "2026-08-19T12:00:00Z", "projected_at": "2026-08-19T12:00:05Z", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "evidence": ["obs_xid_01"], "counter_evidence": [], "reason": "non-zero XID event"}], "metrics": {"temperature": {"value": 67, "unit": "celsius", "observed_at": "2026-08-19T12:00:00Z"}}, "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "FRESH", "coverage": {"requested": 7, "successful": 7, "failed": 0, "complete": true}, "collection_status": "SUCCEEDED"}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "SUCCEEDED", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "warnings": []}, "errors": []}},
+      "CollectionRunPartial": {"value": {"data": [{"run_id": "run_01JABC", "cluster_id": "cluster_h100_prod", "source_id": "prometheus-main", "query": "dcgm_gpu_xid", "status": "PARTIAL", "scheduled_for": "2026-08-19T11:59:58Z", "started_at": "2026-08-19T12:00:00Z", "completed_at": "2026-08-19T12:00:04Z", "observed_at": "2026-08-19T12:00:00Z", "collected_at": "2026-08-19T12:00:04Z", "freshness": "FRESH", "coverage": {"requested": 80, "successful": 78, "failed": 2, "complete": false, "series_expected": 80, "series_returned": 78, "bytes_read": 4096}, "collection_status": "PARTIAL", "failures": [{"code": "SOURCE_UNAVAILABLE", "target_id": "comp007", "retryable": true}]}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "PARTIAL", "freshness": "FRESH", "coverage": {"requested": 80, "successful": 78, "failed": 2, "complete": false}, "warnings": []}, "errors": [{"code": "SOURCE_UNAVAILABLE", "target_id": "comp007", "retryable": true}]}},
+      "EvidencePartial": {"value": {"evidence_id": "ev_01JABC", "schema_version": 1, "cluster_id": "cluster_h100_prod", "status": "PARTIAL", "source": {"source_id": "prometheus-main", "run_id": "run_01JABC", "operation": "dcgm_gpu_xid", "definition_version": "1", "reference": "prometheus:query:abc"}, "time_range": {"start": "2026-08-19T11:59:00Z", "end": "2026-08-19T12:00:00Z"}, "collected_at": "2026-08-19T12:00:04Z", "coverage": {"expected": [{"kind": "GPU", "id": "GPU-0"}, {"kind": "GPU", "id": "GPU-1"}], "covered": [{"kind": "GPU", "id": "GPU-0"}], "complete": false}, "artifact": {"artifact_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": 4096, "media_type": "application/json", "compression": "ZSTD", "parser_version": "prometheus-v1", "redactions": {"policy_version": "1", "match_count": 0}, "retention_class": "STANDARD", "availability": "AVAILABLE"}, "supersedes": null}},
+      "EvidenceListPartial": {"value": {"data": [{"evidence_id": "ev_01JABC", "schema_version": 1, "cluster_id": "cluster_h100_prod", "status": "NO_DATA", "source": {"source_id": "prometheus-main", "run_id": "run_01JABC", "operation": "dcgm_gpu_ecc", "definition_version": "1", "reference": "prometheus:query:def"}, "time_range": {"start": "2026-08-19T11:59:00Z", "end": "2026-08-19T12:00:00Z"}, "collected_at": "2026-08-19T12:00:04Z", "coverage": {"expected": [{"kind": "GPU", "id": "GPU-0"}], "covered": [], "complete": false}, "artifact": null, "supersedes": null}], "meta": {"request_id": "req_01JABC", "generated_at": "2026-08-19T12:00:05Z", "collection_status": "NO_DATA", "freshness": "FRESH", "coverage": {"requested": 1, "successful": 1, "failed": 0, "complete": true}, "warnings": []}, "errors": []}},
+      "DiagnosticPreviewAllowed": {"value": {"allowed": true, "approval_required": false, "reason_code": "AUTHORIZED"}},
+      "DiagnosticRunQueued": {"value": {"run_id": "run_01JDIAG", "cluster_id": "cluster_h100_prod", "definition": {"pack_id": "base", "pack_version": "2.0.0", "definition_id": "gpu-query", "definition_version": "1.3.0", "definition_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "privilege": "UNPRIVILEGED", "status": "QUEUED", "requested_by": "key_01JABC", "requested_at": "2026-08-20T12:00:00Z", "deadline": "2026-08-20T12:10:00Z", "version": 1, "work_id": "work_01JDIAG", "attempts": []}},
+      "InvalidRequest": {"value": {"type": "https://sherlock.dev/problems/invalid-request", "title": "Invalid request", "status": 400, "code": "INVALID_ARGUMENT", "detail": "page_size must be between 1 and 200", "request_id": "req_01JABC", "violations": [{"field": "page_size", "reason": "out of range"}]}},
+      "Unauthorized": {"value": {"type": "https://sherlock.dev/problems/unauthorized", "title": "Unauthorized", "status": 401, "code": "UNAUTHORIZED", "detail": "a valid cluster API key is required", "request_id": "req_01JABC"}},
+      "Forbidden": {"value": {"type": "https://sherlock.dev/problems/forbidden", "title": "Forbidden", "status": 403, "code": "CLUSTER_SCOPE_DENIED", "detail": "the key is not authorized for this cluster", "request_id": "req_01JABC"}},
+      "NotFound": {"value": {"type": "https://sherlock.dev/problems/not-found", "title": "Not found", "status": 404, "code": "NOT_FOUND", "detail": "the requested resource was not found", "request_id": "req_01JABC"}},
+      "Unavailable": {"value": {"type": "https://sherlock.dev/problems/service-unavailable", "title": "Service unavailable", "status": 503, "code": "SERVICE_UNAVAILABLE", "detail": "the query service is temporarily unavailable", "request_id": "req_01JABC"}}
+    }
+  }
+}

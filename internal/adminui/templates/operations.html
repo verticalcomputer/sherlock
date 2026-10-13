@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Sherlock</title>
+  <link rel="stylesheet" href="/admin/assets/dashboard.css">
+  <script src="/admin/assets/dashboard.js" defer></script>
+</head>
+<body>
+  {{template "site-header" .Page}}
+  <main class="page-shell">
+    <div class="page-heading"><div><p class="eyebrow">{{if eq .Page "operations"}}Fleet{{else}}Autonomy{{end}}</p><h1>{{.Title}}</h1><p>{{if eq .Page "operations"}}What is happening across every cluster, from current summaries and recorded runs.{{else if eq .Page "incidents"}}Signals that need attention, grouped by the issue they describe.{{else if eq .Page "investigations"}}Follow the reasoning, evidence, and outcome of every investigation.{{else}}Recovery is complete when the evidence confirms it.{{end}}</p></div><p class="snapshot">Snapshot<br>{{localTime .GeneratedAt}}</p></div>
+    {{if .Error}}<div class="notice danger" role="alert">{{.Error}}</div>{{end}}
+
+    {{if eq .Page "operations"}}
+    {{if not .Error}}{{with .Overview}}
+    <dl class="kpi-grid" aria-label="Fleet summary">
+      <div class="kpi{{if .Attention}} attention{{end}}"><dt><a href="/admin/clusters">Clusters</a></dt><dd>{{if .InventoryAvailable}}{{.ActiveClusters}}{{else}}—{{end}}</dd><p>{{if not .InventoryAvailable}}Inventory unavailable{{else if .Attention}}{{.Attention}} not healthy{{else if .ActiveClusters}}All reporting healthy{{else}}None registered{{end}}</p></div>
+      <div class="kpi"><dt><a href="/admin/incidents">Live incidents</a></dt><dd>{{len $.Tickets}}</dd><p>{{.HighIncidents}} critical or high severity</p></div>
+      <div class="kpi"><dt><a href="/admin/investigations">Runs · 14 days</a></dt><dd>{{.Activity.RunCount}}</dd><p><span title="{{formatUSD .Activity.Cost}}">{{formatCost .Activity.Cost}}</span> · {{formatCount .Activity.Tokens}} tokens</p></div>
+      <div class="kpi"><dt><a href="/admin/repairs">Verified repairs</a></dt><dd>{{if $.Repairs.Available}}{{$.Repairs.Succeeded}}{{else}}—{{end}}</dd><p>{{if $.Repairs.Available}}{{$.Repairs.PendingVerification}} awaiting verification{{else}}Repair status unavailable{{end}}</p></div>
+    </dl>
+
+    <section class="panel" aria-labelledby="fleet-title">
+      <div class="section-title"><h2 id="fleet-title">Cluster health</h2><a class="text-link" href="/admin/clusters">All clusters →</a></div>
+      {{if not .InventoryAvailable}}<div class="notice warning" role="status">Cluster inventory is temporarily unavailable. Missing data is not interpreted as healthy.</div>
+      {{else if .Rows}}
+      <div class="fleet-bar">{{template "stacked-bar" .FleetBar}}{{template "bar-legend" .FleetBar}}</div>
+      <div class="table-wrap"><table class="fleet-table">
+        <thead><tr><th scope="col">Cluster</th><th scope="col">State</th><th scope="col">Current evidence</th><th scope="col">GPU usage</th><th scope="col" class="num">Incidents</th><th scope="col" class="num">Runs · 14d</th><th scope="col" class="num">Spend · 14d</th></tr></thead>
+        <tbody>{{range .Rows}}<tr>
+          <td><a class="row-link" href="/admin/clusters/{{.ID | urlquery}}">{{.Name}}</a><small class="mono">{{.ID}}</small></td>
+          <td><span class="badge {{stateClass .State}}">{{.State}}</span></td>
+          <td class="bar-cell">{{template "evidence-cell" .}}</td>
+          <td class="bar-cell">{{template "gpu-cell" .}}</td>
+          <td class="num">{{.Incidents}}</td>
+          <td class="num">{{.Runs}}</td>
+          <td class="num"><span title="{{formatUSD .Spend}}">{{formatCost .Spend}}</span></td>
+        </tr>{{end}}</tbody>
+      </table></div>
+      {{if .Omitted}}<p class="chart-note">Summaries were not loaded for {{.Omitted}} more active clusters; they show their registered state only.</p>{{end}}
+      {{else}}<div class="empty-state">No clusters are registered.</div>{{end}}
+    </section>
+
+    <div class="chart-row">
+      <section class="panel" aria-labelledby="runs-title"><div class="section-title"><h2 id="runs-title">Investigation runs</h2><p>Per UTC day · last 14 days</p></div>{{template "column-chart" .Activity.Runs}}</section>
+      <section class="panel" aria-labelledby="spend-title"><div class="section-title"><h2 id="spend-title">Model spend</h2><p>Audited · per UTC day</p></div>{{template "column-chart" .Activity.Spend}}</section>
+    </div>
+    {{if .InvestigationsCapped}}<p class="chart-note">The private API returned its maximum page of runs; the earliest days in this window may be undercounted.</p>{{end}}
+
+    <div class="chart-row">
+      <section class="panel" aria-labelledby="incident-mix-title"><div class="section-title"><h2 id="incident-mix-title">Live incidents by cluster</h2><a class="text-link" href="/admin/incidents">Incidents →</a></div>
+        {{if .IncidentRows}}<ul class="hbar-list">{{range .IncidentRows}}<li><a class="row-link" href="{{.Href}}">{{.Label}}</a>{{template "stacked-bar" .Bar}}<strong>{{.Value}}</strong></li>{{end}}</ul>{{template "bar-legend" .IncidentLegend}}{{else}}<p class="chart-empty">No open, investigating, or monitoring incident.</p>{{end}}
+      </section>
+      <section class="panel" aria-labelledby="repair-mix-title"><div class="section-title"><h2 id="repair-mix-title">Repair outcomes</h2><a class="text-link" href="/admin/repairs">Repairs →</a></div>
+        {{if .RepairRows}}<ul class="hbar-list">{{range .RepairRows}}<li><span>{{.Label}}</span>{{template "stacked-bar" .Bar}}<strong>{{.Value}}</strong></li>{{end}}</ul><p class="chart-note">Counts include retained history and are not current source health.</p>{{else}}<p class="chart-empty">Repair status is unavailable.</p>{{end}}
+      </section>
+    </div>
+    {{end}}{{end}}
+    <section class="authority-strip"><div><p class="eyebrow">Execution authority</p><h2>{{if .Repairs.Available}}{{if .Repairs.GlobalEnabled}}Global repair gate enabled{{else}}Global repair gate disabled{{end}}{{else}}Repair authority unavailable{{end}}</h2><p>A global gate alone does not authorize a target or confirm the runtime is running.</p></div><a class="button secondary" href="/admin/repairs">Review repairs →</a></section>
+    {{end}}
+    {{if eq .Page "incidents"}}<section class="operations-section" aria-labelledby="tickets-title">
+      <div class="section-title"><h2 id="tickets-title">Live tickets</h2><p>{{len .Tickets}} open, investigating, or monitoring</p></div>
+      {{if .Tickets}}<ul class="ticket-list">{{range .Tickets}}<li>
+        <div class="ticket-tags">{{if .Severity}}<span class="severity {{severityClass .Severity}}">{{.Severity}}</span>{{end}}<span class="status {{statusClass .Status}}">{{.Status}}</span></div>
+        <div class="ticket-body"><a class="report-link ticket-title" href="/admin/clusters/{{.ClusterID | urlquery}}">{{.Title}}</a>{{if .Summary}}<p>{{.Summary}}</p>{{end}}<p class="ticket-meta"><span class="mono">{{.ClusterID}} · {{.ID}}</span> · Automatic investigation: {{if .AutoStartDecision}}{{.AutoStartStatus}} · {{.AutoStartDecision}}{{else}}no decision recorded{{end}}{{if gt .RelatedIncidentCount 1}} · {{.RelatedIncidentCount}} correlated incident records{{end}}</p></div>
+        {{localTime .UpdatedAt}}
+      </li>{{end}}</ul>{{else}}<div class="empty-state">No live tickets.</div>{{end}}
+      {{if .HistoricalXID}}<details class="inline-details"><summary>{{len .HistoricalXID}} older XID incident records</summary><p>These incidents remain open in durable history. Their last detected XID change was over 24 hours ago. A nonzero DCGM XID gauge can retain the last code; this list does not prove recovery.</p><ul class="ticket-list">{{range .HistoricalXID}}<li><div class="ticket-body"><strong>{{.Title}}</strong><p class="ticket-meta"><span class="mono">{{.ClusterID}} · {{.ID}}</span> · last detected change {{localTime .LastSignalAt}}</p></div></li>{{end}}</ul></details>{{end}}
+    </section>
+
+    {{end}}
+    {{if eq .Page "investigations"}}<section class="operations-section" aria-labelledby="investigations-title">
+      <div class="section-title"><h2 id="investigations-title">Investigations</h2><p>{{len .Investigations}} total</p></div>
+      {{if .RecentInvestigations}}<ul class="run-list">{{range .RecentInvestigations}}{{template "operations-run-row" .}}{{end}}</ul>
+      {{if .EarlierInvestigations}}<details class="earlier-runs"><summary>Show {{len .EarlierInvestigations}} earlier</summary><ul class="run-list">{{range .EarlierInvestigations}}{{template "operations-run-row" .}}{{end}}</ul></details>{{end}}
+      {{else}}<div class="empty-state">No investigations are available.</div>{{end}}
+    </section>
+
+    {{end}}
+    {{if eq .Page "repairs"}}{{template "repairs" .}}{{end}}
+  </main>
+  {{template "site-footer"}}
+</body>
+</html>
+
+{{define "operations-run-row"}}<li><span class="status {{statusClass .Status}}">{{.Status}}</span><a class="report-link" href="/admin/investigations/{{.ID | urlquery}}">{{shortQuestion .Question}}</a>{{localTime .UpdatedAt}}<span class="run-meta"><a class="report-link" href="/admin/clusters/{{.ClusterID | urlquery}}">{{.ClusterID}}</a>{{if .EntityIDs}} · <span class="mono">{{entitySummary .EntityIDs}}</span>{{end}} · {{formatCount .AuditedTokens}} tokens · <span title="{{formatUSD .AuditedCostMicrounits}}">{{formatCost .AuditedCostMicrounits}}</span></span></li>{{end}}

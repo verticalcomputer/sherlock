@@ -1,0 +1,1 @@
+ALTER TABLE investigation_events DROP CONSTRAINT investigation_event_stop_details_check;

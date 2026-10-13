@@ -1,0 +1,5 @@
+DROP TRIGGER kernel_xid_artifact_immutable_update_trigger ON kernel_xid_artifacts;
+DROP TRIGGER kernel_xid_artifact_validate_insert_trigger ON kernel_xid_artifacts;
+DROP FUNCTION kernel_xid_artifact_immutable_update();
+DROP FUNCTION kernel_xid_artifact_validate_insert();
+DROP TABLE kernel_xid_artifacts;

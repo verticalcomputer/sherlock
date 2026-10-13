@@ -1,0 +1,107 @@
+{
+  "schema_version": "sherlock.investigation-pilot-run/v1",
+  "pilot_id": "pilot-20260821-01",
+  "investigation_id": "investigation-live-01",
+  "incident_id": "incident-live-01",
+  "cluster_id": "cluster-pilot-a",
+  "environment": "PILOT",
+  "provider": "azure_openai",
+  "model": "gpt-5.6-sol",
+  "model_config_version": "azure-pilot-v1",
+  "deployment_id": "gpt-5-6-sol-pilot",
+  "region": "centralindia",
+  "planning_prompt_version": "planning-v2",
+  "synthesis_prompt_version": "synthesis-v2",
+  "tool_schema_version": "catalog-v1",
+  "started_at": "2026-08-21T10:00:00Z",
+  "completed_at": "2026-08-21T10:05:00Z",
+  "scope": {
+    "entity_kind": "node",
+    "entity_ids": ["n1"],
+    "start": "2026-08-21T09:00:00Z",
+    "end": "2026-08-21T10:00:00Z"
+  },
+  "outcome": "COMPLETED",
+  "stop_reason": "SUCCESS_CRITERIA_MET",
+  "limits": {
+    "max_model_tokens": 2000,
+    "max_cost_micros": 5000,
+    "max_model_latency_millis": 1000
+  },
+  "usage": {
+    "decisions": 3,
+    "tool_calls": 2,
+    "model_calls": 4,
+    "model_tokens": 790,
+    "cost_micros": 1250,
+    "model_latency_millis": 340
+  },
+  "actions": [
+    {
+      "digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "tool_id": "node.gpu_snapshot.v1",
+      "read_only": true,
+      "privileged": false,
+      "targets": ["n1"],
+      "evidence_ids": ["ev-live-gpu"]
+    },
+    {
+      "digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "tool_id": "cluster.scheduler_snapshot.v1",
+      "read_only": true,
+      "privileged": false,
+      "targets": ["n1"],
+      "evidence_ids": ["ev-live-scheduler"]
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "ev-live-gpu",
+      "status": "COMPLETE",
+      "source": "dcgm:gpu-health",
+      "observed_from": "2026-08-21T09:00:00Z",
+      "observed_to": "2026-08-21T10:00:00Z",
+      "expected_targets": [{"kind":"NODE","id":"n1"}],
+      "observed_targets": [{"kind":"NODE","id":"n1"}],
+      "missing_targets": [],
+      "time_complete": true
+    },
+    {
+      "evidence_id": "ev-live-scheduler",
+      "status": "COMPLETE",
+      "source": "slurm:node-state",
+      "observed_from": "2026-08-21T09:00:00Z",
+      "observed_to": "2026-08-21T10:00:00Z",
+      "expected_targets": [{"kind":"NODE","id":"n1"}],
+      "observed_targets": [{"kind":"NODE","id":"n1"}],
+      "missing_targets": [],
+      "time_complete": true
+    }
+  ],
+  "findings": [
+    {"kind":"OBSERVATION","statement":"The bounded GPU snapshot records an unhealthy GPU on n1.","evidence_ids":["ev-live-gpu"]},
+    {"kind":"HYPOTHESIS","statement":"The scheduler state is consistent with the observed GPU health condition.","evidence_ids":["ev-live-gpu","ev-live-scheduler"]},
+    {"kind":"RECOMMENDATION","statement":"Have an operator review the cited GPU before remediation.","evidence_ids":[]}
+  ],
+  "model_calls": [
+    {"call_key":"investigation/investigation-live-01/planning/1","kind":"PLANNING","status":"SUCCEEDED","input_tokens":100,"output_tokens":20,"cost_micros":200,"latency_millis":70},
+    {"call_key":"investigation/investigation-live-01/planning/2","kind":"PLANNING","status":"SUCCEEDED","input_tokens":140,"output_tokens":30,"cost_micros":300,"latency_millis":90},
+    {"call_key":"investigation/investigation-live-01/planning/3","kind":"PLANNING","status":"SUCCEEDED","input_tokens":180,"output_tokens":20,"cost_micros":250,"latency_millis":60},
+    {"call_key":"investigation/investigation-live-01/synthesis/4","kind":"SYNTHESIS","status":"SUCCEEDED","input_tokens":220,"output_tokens":80,"cost_micros":500,"latency_millis":120}
+  ],
+  "exports": [
+    {"kind":"INVESTIGATION_SNAPSHOT","reference":"release/pilot-20260821-01/investigation.json","sha256":"f216038825e44c517ebce50f96eba728d0515b582b6623b2e6c372277f6fa899"},
+    {"kind":"MODEL_AUDIT","reference":"release/pilot-20260821-01/model-audit.json","sha256":"35c6f0a450226b4f9f4d0df820ee4e5e06ac0bb3d1bc626bc212d3aa91b34497"},
+    {"kind":"EVIDENCE_MANIFEST","reference":"release/pilot-20260821-01/evidence-manifest.json","sha256":"6687d6108680c63faa139e38dc1bb9cb1afb30da23a285292bd9bbb19789b735"}
+  ],
+  "safety": {
+    "read_only_tools_only": true,
+    "no_duplicate_actions": true,
+    "no_credential_exposure": true,
+    "no_unrestricted_artifact_exposure": true,
+    "all_factual_claims_cited": true,
+    "coverage_explicit": true,
+    "terminal_state_evidence_supported": true,
+    "interruption_and_restart_safe": true
+  }
+}

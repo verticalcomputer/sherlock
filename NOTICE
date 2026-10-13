@@ -1,0 +1,9 @@
+Sherlock
+Copyright 2026 Vertical Computer Inc
+
+First-party Sherlock source is provided under the Apache License, Version 2.0.
+Third-party components retain their respective copyrights and licenses.
+See THIRD_PARTY_NOTICES.md and the accompanying third_party/licenses directory.
+
+This notice does not license customer data, credentials, operational evidence,
+or third-party material beyond the rights granted by its respective owner.

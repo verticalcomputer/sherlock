@@ -1,0 +1,56 @@
+{{define "expected-inventory"}}
+<section class="panel" id="expected-inventory" aria-labelledby="expected-inventory-title">
+  <div class="section-title"><h2 id="expected-inventory-title">Expected inventory</h2></div>
+  <p>Expected inventory is the administrator-declared set of nodes and physical GPUs for one collection source. It is built by reconciling the listed BCM devices with the physical GPU identities already reported by collection. Listing and reconciling devices is not verification of hardware, access or health.</p>
+  {{if .ExpectedInventory.Message}}<p class="field-note">{{.ExpectedInventory.Message}}</p>{{end}}
+  {{if .ExpectedInventory.Status}}<p class="field-note">{{.ExpectedInventory.Status}}</p>{{end}}
+  {{if .ExpectedInventory.Enabled}}
+    {{with .ExpectedInventory.Current}}<p><span class="badge">EXPECTED REVISION</span> <span class="mono">{{.RevisionID}}</span> — {{.NodeCount}} nodes, {{.GPUCount}} GPUs. Source time {{localTime .SourceAt}}, effective {{localTime .EffectiveAt}}, observed {{localTime .ObservedAt}}.</p>{{else}}<p class="field-note">No expected inventory revision is in force for source <span class="mono">{{.ExpectedInventory.SourceID}}</span>.</p>{{end}}
+    {{if .ExpectedInventory.DiscoveryText}}<p class="field-note">{{.ExpectedInventory.DiscoveryText}}</p>{{end}}
+    {{if .ExpectedInventory.CanGenerate}}<form method="post" action="/admin/clusters/{{.Cluster.ID | urlquery}}/expected-inventory/previews">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="source_id" value="{{.ExpectedInventory.SourceID}}">
+      <label for="exclude-nodes">Exclude nodes (comma or whitespace separated hostnames)</label>
+      <input id="exclude-nodes" type="text" name="exclude_nodes" maxlength="2048" spellcheck="false" autocomplete="off">
+      <p class="field-note">Listed devices named here are not proposed as expected inventory. A hostname that matches no listed device is reported and refuses the import, so a typo is never silently ignored.</p>
+      <label for="exclude-categories">Exclude categories (comma or whitespace separated BCM device categories)</label>
+      <input id="exclude-categories" type="text" name="exclude_categories" maxlength="2048" spellcheck="false" autocomplete="off">
+      <p class="field-note">Every listed device in a category named here is excluded, including any node added to that category later. A category that matches no listed device is reported and refuses the import in the same way.</p>
+      <div class="form-actions"><button type="submit">Generate preview from BCM discovery</button></div>
+    </form>{{else}}<div class="form-actions"><button type="button" disabled>Generate preview from BCM discovery</button></div>{{end}}
+    {{with .ExpectedInventory.Preview}}
+    {{$preview := .}}
+    <div class="expected-inventory-preview" data-preview-blocking="{{.Blocking}}" data-preview-superseded="{{.Superseded}}">
+      {{if .Superseded}}<p><span class="badge stale">SUPERSEDED</span> {{.SupersededReason}}</p>{{end}}
+      <p><span class="badge">PREVIEW {{if .Superseded}}SUPERSEDED{{else if .Blocking}}BLOCKED{{else if .Imported}}IMPORTED{{else}}READY{{end}}</span>
+        Generated {{localTime .GeneratedAt}} by {{.GeneratedBy}} from discovery <span class="mono">{{.DiscoveryTestID}}</span>
+        (credential version {{.CredentialVersion}}{{if .BCMVersion}}, BCM {{.BCMVersion}}{{end}}).
+        Proposes {{.NodeCount}} nodes and {{.GPUCount}} GPUs, {{.Additions}} of which are new. Expires {{localTime .ExpiresAt}}.</p>
+      <p class="field-note">Digest <span class="mono" title="{{.Digest}}">{{.ShortDigest}}</span></p>
+      {{if .ExcludedNodes}}<p class="field-note">Excluded by operator: {{range $index, $node := .ExcludedNodes}}{{if $index}}, {{end}}<span class="mono">{{$node}}</span>{{end}}</p>{{end}}
+      {{if .ExcludedCategories}}<p class="field-note">Excluded categories: {{range $index, $category := .ExcludedCategories}}{{if $index}}, {{end}}<span class="mono">{{$category}}</span>{{end}}</p>{{end}}
+      <table class="inventory-devices"><thead><tr><th>Type</th><th>Hostname</th><th>Category</th><th>Status</th><th>Managed</th><th>GPUs</th></tr></thead>
+        <tbody>{{range .Devices}}<tr><td>{{.Type}}</td><td class="mono">{{.Hostname}}</td><td class="mono">{{if .Category}}{{.Category}}{{else}}—{{end}}</td><td>{{.Status}}</td><td>{{if .Managed}}yes{{else}}no{{end}}</td><td>{{if .Managed}}{{if $preview.NodeExcluded .Hostname}}<span class="badge">EXCLUDED</span>{{else if $preview.NodeUnclassified .Hostname}}<span class="badge">UNCLASSIFIED</span>{{else if $preview.CategoryUnclassified .Category}}<span class="badge">CATEGORY UNCLASSIFIED</span>{{else if $preview.NodeGPUsUnknown .Hostname}}<span class="badge">unknown</span>{{else}}{{.ObservedGPUs}}{{end}}{{else}}—{{end}}</td></tr>{{end}}</tbody>
+      </table>
+      <table class="inventory-devices"><thead><tr><th>Proposed node</th><th>GPUs</th><th>Flags</th></tr></thead>
+        <tbody>{{range .NodeSummaries}}<tr><td class="mono">{{.NodeID}}</td><td>{{if .GPUsUnknown}}<span class="badge">unknown</span>{{else}}{{.GPUs}}{{end}}</td><td>{{range $index, $flag := .Flags}}{{if $index}}, {{end}}<span class="mono">{{$flag}}</span>{{end}}</td></tr>{{end}}</tbody>
+      </table>
+      {{if .Discrepancies}}<ul class="discrepancy-list">{{range .Discrepancies}}<li>{{if .Blocking}}<span class="badge">BLOCKING</span> {{end}}<span class="mono">{{.Code}}</span>{{if .NodeID}} <span class="mono">{{.NodeID}}</span>{{end}}{{if .GPUUUID}} <span class="mono">{{.GPUUUID}}</span>{{end}}{{if .DeviceType}} ({{.DeviceType}}){{end}} — {{.Detail}}</li>{{end}}</ul>
+      {{else}}<p class="field-note">No discrepancies were reported.</p>{{end}}
+      {{if .Removals}}<p class="field-note">Proposed removals ({{len .Removals}}): these are in the current expected revision and are not in this preview.</p>
+      <ul class="discrepancy-list">{{range .Removals}}<li><span class="mono">{{.Kind}}</span> <span class="mono">{{.NodeID}}</span>{{if .GPUUUID}} <span class="mono">{{.GPUUUID}}</span>{{end}}</li>{{end}}</ul>{{end}}
+      {{if .Superseded}}<p class="field-note">This preview was generated by an earlier format and cannot be approved. Generate a new preview.</p>
+      {{else if .Imported}}<p><span class="badge">IMPORTED</span> Approved {{localTime .ImportedAtTime}} by {{.ImportedBy}} as revision <span class="mono">{{.ImportedRevisionID}}</span>.</p>
+      {{else if $.ExpectedInventory.CanImport}}<form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/expected-inventory/import">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input type="hidden" name="preview_id" value="{{.PreviewID}}">
+        <input type="hidden" name="digest" value="{{.Digest}}">
+        <div class="form-actions"><button type="submit">Approve and import this exact preview</button></div>
+      </form>
+      {{else}}<div class="form-actions"><button type="button" disabled>Approve and import this exact preview</button></div>
+      <p class="field-note">{{if .Blocking}}This preview has blocking discrepancies and cannot be imported. Resolve them and generate a new preview.{{else}}This preview can no longer be approved. Generate a new one.{{end}}</p>{{end}}
+    </div>
+    {{else}}<p class="field-note">No preview has been generated for this source.</p>{{end}}
+  {{else if not .ExpectedInventory.Status}}<p class="field-note">Expected inventory management is not configured for this dashboard.</p>{{end}}
+</section>
+{{end}}

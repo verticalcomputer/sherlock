@@ -1,0 +1,2 @@
+DROP TABLE credential_target_binding_audit_events;
+DROP TABLE credential_target_bindings;

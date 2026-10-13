@@ -1,0 +1,3 @@
+DROP TABLE credential_access_test_events;
+DROP TABLE credential_access_test_attempts;
+DROP TABLE credential_access_tests;

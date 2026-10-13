@@ -1,0 +1,1 @@
+DROP TABLE admin_dashboard_audit_events;

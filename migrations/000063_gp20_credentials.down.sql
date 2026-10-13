@@ -1,0 +1,4 @@
+DROP TABLE admin_credential_audit_events;
+DROP TABLE admin_credential_grant_audit_events;
+DROP TABLE cluster_credentials;
+DROP TABLE admin_cluster_credential_grants;

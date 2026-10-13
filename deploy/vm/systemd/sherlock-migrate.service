@@ -1,0 +1,30 @@
+[Unit]
+Description=Apply Sherlock PostgreSQL migrations
+Documentation=file:/opt/sherlock/current/deploy/vm/README.md
+After=sherlock-postgres.service
+Requires=sherlock-postgres.service
+
+[Service]
+Type=oneshot
+User=sherlock
+Group=sherlock
+WorkingDirectory=/opt/sherlock/current
+EnvironmentFile=/etc/sherlock/common.env
+ExecStartPre=/usr/bin/test -x /opt/sherlock/current/bin/sherlock-migrate
+ExecStart=/opt/sherlock/current/bin/sherlock-migrate -dir /opt/sherlock/current/migrations
+RemainAfterExit=yes
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

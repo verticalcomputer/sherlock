@@ -1,0 +1,903 @@
+{
+  "ClusterID": "fixture2-zone2",
+  "CollectorID": "fixture-network-collector",
+  "Revision": "fixture2-zone3-20260930-v1",
+  "Ports": [
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0001"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0002"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0003"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0004"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0005"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0006"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0007"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp001",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0008"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0009"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:000f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp002",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0010"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0011"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0012"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0013"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0014"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0015"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0016"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0017"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp004",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0018"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0019"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:001f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp005",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0020"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0021"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0022"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0023"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0024"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0025"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0026"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0027"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp006",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0028"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0029"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:002f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp007",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0030"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0031"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0032"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0033"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0034"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0035"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0036"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0037"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp008",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0038"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0039"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:003f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp009",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0040"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0041"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0042"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0043"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0044"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0045"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0046"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0047"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp010",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0048"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0049"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:004f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp011",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0050"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0051"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0052"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0053"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0054"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0055"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0056"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0057"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp012",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0058"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0059"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:005f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp013",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0060"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0061"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0062"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0063"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0064"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0065"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0066"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0067"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp015",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0068"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_0",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0069"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_1",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006a"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_4",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006b"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_5",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006c"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_6",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006d"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_7",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006e"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_8",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:006f"
+    },
+    {
+      "Key": {
+        "Node": "fixture2-zone1-comp017",
+        "Device": "mlx5_9",
+        "Port": 1
+      },
+      "NodeGUID": "0200:0000:0000:0070"
+    }
+  ]
+}

@@ -1,0 +1,579 @@
+openapi: 3.1.0
+info:
+  title: Sherlock Collector Control API
+  version: 1.0.0
+  description: Private, versioned collector control protocol. This contract is separate from the public Sherlock API. The additive typed collection protocol is documented in v2.yaml; v1 behavior and identity endpoints remain unchanged.
+servers:
+  - url: https://control.internal/collector/v1
+security:
+  - collectorMTLS: []
+paths:
+  /enroll:
+    post:
+      operationId: enrollCollector
+      security:
+        - bootstrapBearer: []
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollmentRequest'
+      responses:
+        '201':
+          description: Collector identity issued and bootstrap token consumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /identity/renew:
+    post:
+      operationId: renewCollectorIdentity
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewIdentityRequest'
+      responses:
+        '200':
+          description: Replacement collector identity issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /heartbeat:
+    post:
+      operationId: recordCollectorHeartbeat
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat accepted atomically.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /work/claim:
+    get:
+      operationId: claimCollectorWork
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - name: wait_seconds
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 30, default: 25 }
+      responses:
+        '200':
+          description: A work lease was claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '204': { description: No compatible work became available within the requested wait. }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /work/{work_id}/attempts/{attempt}/start:
+    post:
+      operationId: acknowledgeCollectorWorkStart
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/WorkID'
+        - $ref: '#/components/parameters/Attempt'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRequest'
+      responses:
+        '204': { description: Start was acknowledged or had already been acknowledged. }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /work/{work_id}/attempts/{attempt}/renew:
+    post:
+      operationId: renewCollectorWorkLease
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/WorkID'
+        - $ref: '#/components/parameters/Attempt'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewLeaseRequest'
+      responses:
+        '204': { description: Lease was renewed. }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /work/{work_id}/attempts/{attempt}/results/chunks/{index}:
+    put:
+      operationId: uploadCollectorResultChunk
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/WorkID'
+        - $ref: '#/components/parameters/Attempt'
+        - name: index
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 63 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultChunkRequest'
+      responses:
+        '200':
+          description: Identical chunk had already been uploaded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultChunkResponse' }
+        '201':
+          description: Chunk persisted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultChunkResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /work/{work_id}/attempts/{attempt}/results/finalize:
+    post:
+      operationId: finalizeCollectorResult
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/WorkID'
+        - $ref: '#/components/parameters/Attempt'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultFinalizationRequest'
+      responses:
+        '200':
+          description: Result finalized or identical finalization previously accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultFinalizationResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /diagnostic-work/claim:
+    get:
+      operationId: claimDiagnosticWork
+      description: >-
+        Claim one reviewed diagnostic invocation. Diagnostic work is a separate
+        endpoint family from /work because its result is per target -- exit
+        code, signal, and output digest for each host -- rather than a series
+        of observations, and because a collector authorized to poll metrics is
+        not thereby authorized to execute commands.
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - name: wait_seconds
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 30, default: 25 }
+      responses:
+        '200':
+          description: A diagnostic work lease was claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticClaimResponse'
+        '204': { description: No compatible diagnostic work became available within the requested wait. }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+  /diagnostic-work/{work_id}/attempts/{attempt}/results:
+    post:
+      operationId: recordDiagnosticAttempt
+      description: >-
+        Record one diagnostic attempt. Recording is idempotent on
+        (work_id, attempt): an exact replay returns the stored outcome rather
+        than executing or recording a second time.
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersion'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/WorkID'
+        - $ref: '#/components/parameters/Attempt'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosticAttemptRequest'
+      responses:
+        '200':
+          description: Attempt recorded, or an identical attempt was previously accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiagnosticAttemptResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '426': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    bootstrapBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: one-time-bootstrap-token
+    collectorMTLS:
+      type: mutualTLS
+  parameters:
+    ProtocolVersion:
+      name: X-Sherlock-Protocol-Version
+      in: header
+      required: true
+      schema: { type: integer, const: 1 }
+    CorrelationID:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
+    WorkID:
+      name: work_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    Attempt:
+      name: attempt
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    Problem:
+      description: Safe collector protocol error; internal causes and secrets are never included.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    DiagnosticDefinitionRef:
+      type: object
+      additionalProperties: false
+      required: [pack_id, pack_version, definition_id, definition_version, definition_sha256]
+      properties:
+        pack_id: { type: string, minLength: 1, maxLength: 128 }
+        pack_version: { type: string, minLength: 1, maxLength: 128 }
+        definition_id: { type: string, minLength: 1, maxLength: 128 }
+        definition_version: { type: string, minLength: 1, maxLength: 128 }
+        definition_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    DiagnosticInvocation:
+      type: object
+      additionalProperties: false
+      description: >-
+        A reviewed invocation by reference only. The argv is never transmitted:
+        the runner independently resolves it from the signed pack it verifies
+        itself, so a compromised control plane cannot dictate a command.
+      required: [run_id, cluster_id, definition, privilege, targets, arguments, deadline, max_attempts]
+      properties:
+        run_id: { type: string, minLength: 1, maxLength: 128 }
+        cluster_id: { type: string, minLength: 1, maxLength: 128 }
+        definition: { $ref: '#/components/schemas/DiagnosticDefinitionRef' }
+        privilege: { type: string, enum: [UNPRIVILEGED, PRIVILEGED] }
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 256
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 128 }
+        arguments:
+          type: array
+          maxItems: 32
+          items: { $ref: '#/components/schemas/DiagnosticArgument' }
+        deadline: { type: string, format: date-time }
+        max_attempts: { type: integer, minimum: 1, maximum: 3 }
+    DiagnosticArgument:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        value: { type: string, maxLength: 512 }
+    DiagnosticClaimResponse:
+      type: object
+      additionalProperties: false
+      required: [work_id, attempt, lease_token, lease_expires_at, invocation]
+      properties:
+        work_id: { type: string, minLength: 1, maxLength: 128 }
+        attempt: { type: integer, minimum: 1 }
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        lease_expires_at: { type: string, format: date-time }
+        invocation: { $ref: '#/components/schemas/DiagnosticInvocation' }
+    DiagnosticTargetResult:
+      type: object
+      additionalProperties: false
+      description: >-
+        Per-target execution metadata, plus a bounded excerpt of what the probe
+        printed. Full output bodies are uploaded separately as artifacts; only
+        their digests and sizes cross this boundary. The excerpt exists because
+        a diagnostic that carried only a digest reached the model as evidence
+        that a check had run rather than as its result. It is untrusted host
+        output and travels in the evidence excerpt channel, never in a trusted
+        summary.
+      required: [target, status, retryable, timed_out, stdout_truncated, stderr_truncated, stdout_bytes, stderr_bytes, stdout_sha256, stderr_sha256]
+      properties:
+        target: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [SUCCEEDED, FAILED, TIMED_OUT, REJECTED] }
+        retryable: { type: boolean }
+        exit_code: { type: integer, minimum: -1, maximum: 255 }
+        signal: { type: string, maxLength: 64 }
+        timed_out: { type: boolean }
+        stdout_truncated: { type: boolean }
+        stderr_truncated: { type: boolean }
+        stdout_bytes: { type: integer, minimum: 0 }
+        stderr_bytes: { type: integer, minimum: 0 }
+        stdout_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        stdout_transformation_state: { type: string, enum: [UNKNOWN, UNMODIFIED, TRANSFORMED], description: Optional producer proof; absent or invalid legacy values are stored as UNKNOWN. }
+        stderr_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        error_code: { type: string, maxLength: 64 }
+        stdout_excerpt: { type: string, maxLength: 1024, description: Bounded, screened excerpt of the target's standard output. }
+    DiagnosticAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token, run_id, runner_id, plan_sha256, started_at, completed_at, targets]
+      properties:
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        run_id: { type: string, minLength: 1, maxLength: 128 }
+        runner_id: { type: string, minLength: 1, maxLength: 128 }
+        plan_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        started_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: '#/components/schemas/DiagnosticTargetResult' }
+    DiagnosticAttemptResponse:
+      type: object
+      additionalProperties: false
+      required: [run_id, status, recorded]
+      properties:
+        run_id: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [AWAITING_APPROVAL, QUEUED, RUNNING, SUCCEEDED, PARTIAL, FAILED, CANCELLED] }
+        recorded: { type: boolean, description: False when an identical attempt had already been accepted. }
+    CollectorMetadata:
+      type: object
+      additionalProperties: false
+      required: [display_name, version, build_commit, protocol_min, protocol_max, operating_system, architecture]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 128 }
+        version: { type: string, minLength: 1, maxLength: 128 }
+        build_commit: { type: string, maxLength: 128 }
+        protocol_min: { type: integer, minimum: 1 }
+        protocol_max: { type: integer, minimum: 1 }
+        operating_system: { type: string, minLength: 1, maxLength: 64 }
+        architecture: { type: string, minLength: 1, maxLength: 64 }
+    EnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [csr_pem, metadata]
+      properties:
+        csr_pem: { type: string, minLength: 1, maxLength: 32768 }
+        metadata: { $ref: '#/components/schemas/CollectorMetadata' }
+    RenewIdentityRequest:
+      type: object
+      additionalProperties: false
+      required: [csr_pem]
+      properties:
+        csr_pem: { type: string, minLength: 1, maxLength: 32768 }
+    IdentityResponse:
+      type: object
+      additionalProperties: false
+      required: [certificate_pem, ca_chain_pem, not_before, not_after]
+      properties:
+        collector_id: { type: string }
+        certificate_pem: { type: string }
+        ca_chain_pem: { type: string }
+        not_before: { type: string, format: date-time }
+        not_after: { type: string, format: date-time }
+    Capability:
+      type: object
+      additionalProperties: false
+      required: [name, version]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        version: { type: string, minLength: 1, maxLength: 128 }
+    CommandPack:
+      type: object
+      additionalProperties: false
+      required: [pack_id, version, digest_sha256]
+      properties:
+        pack_id: { type: string, minLength: 1, maxLength: 128 }
+        version: { type: string, minLength: 1, maxLength: 128 }
+        digest_sha256: { type: string, pattern: '^[0-9a-fA-F]{64}$' }
+    SourceHealth:
+      type: object
+      additionalProperties: false
+      required: [source_id, availability, safe_message, checked_at]
+      properties:
+        source_id: { type: string, minLength: 1, maxLength: 128 }
+        availability: { type: string, enum: [UNKNOWN, AVAILABLE, UNAVAILABLE] }
+        safe_message: { type: string, maxLength: 256 }
+        checked_at: { type: string, format: date-time }
+    HeartbeatRequest:
+      type: object
+      description: Optional protocol bounds replace the enrolled range atomically with capabilities; omitting both means v1 only. Both bounds must be present together and protocol_min must not exceed protocol_max.
+      additionalProperties: false
+      required: [version, build_commit, capabilities, command_packs, source_health]
+      properties:
+        version: { type: string, minLength: 1, maxLength: 128 }
+        build_commit: { type: string, maxLength: 128 }
+        protocol_min: { type: integer, minimum: 1, maximum: 2 }
+        protocol_max: { type: integer, minimum: 1, maximum: 2 }
+        capabilities:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Capability' }
+        command_packs:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CommandPack' }
+        source_health:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/SourceHealth' }
+    HeartbeatResponse:
+      type: object
+      additionalProperties: false
+      required: [server_time, next_heartbeat_seconds]
+      properties:
+        server_time: { type: string, format: date-time }
+        next_heartbeat_seconds: { type: integer, minimum: 1 }
+    CollectionRange:
+      type: object
+      additionalProperties: false
+      required: [start, end, step_seconds]
+      properties:
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+        step_seconds: { type: number, minimum: 1, maximum: 3600 }
+    CollectionTask:
+      type: object
+      additionalProperties: false
+      required: [run_id, cluster_id, source_id, query_kind, node_filter, scheduled_for, deadline, max_series, max_bytes, idempotency_key]
+      properties:
+        run_id: { type: string }
+        cluster_id: { type: string }
+        source_id: { type: string }
+        query_kind: { type: string }
+        node_filter: { type: string }
+        range: { $ref: '#/components/schemas/CollectionRange' }
+        scheduled_for: { type: string, format: date-time }
+        deadline: { type: string, format: date-time }
+        max_series: { type: integer, minimum: 1, maximum: 10000 }
+        max_bytes: { type: integer, minimum: 1, maximum: 10485760 }
+        idempotency_key: { type: string }
+    ClaimResponse:
+      type: object
+      additionalProperties: false
+      required: [work_id, attempt, lease_token, lease_expires_at, work_expires_at, task]
+      properties:
+        work_id: { type: string }
+        attempt: { type: integer, minimum: 1 }
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        lease_expires_at: { type: string, format: date-time }
+        work_expires_at: { type: string, format: date-time }
+        task: { $ref: '#/components/schemas/CollectionTask' }
+    StartRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token]
+      properties:
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+    RenewLeaseRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token, duration_seconds]
+      properties:
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        duration_seconds: { type: integer, minimum: 1, maximum: 300 }
+    ResultChunkRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token, payload_base64, sha256]
+      properties:
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        payload_base64:
+          type: string
+          contentEncoding: base64
+          maxLength: 349528
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    ResultChunkResponse:
+      type: object
+      additionalProperties: false
+      required: [previously_uploaded]
+      properties:
+        previously_uploaded: { type: boolean }
+    ResultFinalizationRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token, run_id, status, chunk_count, sha256, bytes]
+      properties:
+        lease_token: { type: string, minLength: 32, maxLength: 256 }
+        run_id: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [SUCCEEDED, NO_DATA, PARTIAL, FAILED] }
+        chunk_count: { type: integer, minimum: 1, maximum: 64 }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        bytes: { type: integer, minimum: 1, maximum: 10485760 }
+    ResultFinalizationResponse:
+      type: object
+      additionalProperties: false
+      required: [run_id, status, sha256, previously_finalized]
+      properties:
+        run_id: { type: string }
+        status: { type: string, enum: [SUCCEEDED, NO_DATA, PARTIAL, FAILED] }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        previously_finalized: { type: boolean }
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        correlation_id: { type: string }

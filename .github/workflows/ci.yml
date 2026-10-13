@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - run: go mod download
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - name: Check release signing policy without credentials
+        run: python3 -m unittest discover -s scripts -p test_release_signing.py
+      - name: Check public export boundaries with synthetic data
+        run: python3 -m unittest discover -s scripts -p test_export_public_candidate.py
+      - name: Check unsigned release assembly with synthetic data
+        run: python3 -m unittest discover -s scripts -p test_prepare_release_review.py
+      - name: Check reproducible candidate builder with synthetic data
+        run: python3 -m unittest discover -s scripts -p test_build_telemetry_candidate.py
+      - run: go install honnef.co/go/tools/cmd/staticcheck@2026.2.2
+      - run: staticcheck ./...
+      - run: ./scripts/check-sdk-sync.sh
+      - run: go test -race ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - run: npm ci --prefix sdk/typescript
+      - run: npm --prefix sdk/typescript run smoke
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sherlock
+          POSTGRES_PASSWORD: sherlock
+          POSTGRES_DB: sherlock
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sherlock"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SHERLOCK_DATABASE_URL: postgres://sherlock:sherlock@localhost:5432/sherlock?sslmode=disable
+      SHERLOCK_TEST_DATABASE_URL: postgres://sherlock:sherlock@localhost:5432/sherlock?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.9'
+      - run: go mod download
+      - run: go run ./cmd/sherlock-migrate -dir migrations
+      - run: go test -race -tags=integration ./...

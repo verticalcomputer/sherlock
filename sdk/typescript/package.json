@@ -1,0 +1,10 @@
+{
+  "name": "@akmo/sherlock-client",
+  "version": "1.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "files": ["dist"],
+  "scripts": {"build": "tsc -p tsconfig.json", "check": "tsc -p tsconfig.json --noEmit", "smoke": "npm run build && node ../../test/contract/typescript_client_smoke.mjs"},
+  "devDependencies": {"typescript": "^5.8.3"}
+}

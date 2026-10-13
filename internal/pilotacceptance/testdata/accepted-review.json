@@ -1,0 +1,24 @@
+{
+  "schema_version": "sherlock.investigation-pilot-review/v1",
+  "review_id": "review-pilot-20260821-01",
+  "pilot_id": "pilot-20260821-01",
+  "run_sha256": "3000d1715ed6f880b1e184995bad4620c8ebb9f31ac2532730b519ddd1823d23",
+  "reviewer_id": "admin-01",
+  "reviewer_role": "sherlock-admin",
+  "reviewed_at": "2026-08-21T12:00:00Z",
+  "decision": "ACCEPTED",
+  "useful": true,
+  "evidence_trusted": true,
+  "terminal_correct": true,
+  "safety_accepted": true,
+  "usability_accepted": true,
+  "notes": "Synthetic acceptance fixture for the closeout validator; it is not live pilot evidence.",
+  "findings": [
+    {"id":"finding-doc-01","severity":"LOW","status":"CLOSED","resolution":"Documented the bounded evidence interpretation."}
+  ],
+  "approvals": [
+    {"kind":"SECURITY","approver_id":"admin-01","approved_at":"2026-08-21T11:00:00Z","reference":"approval/security/pilot-01"},
+    {"kind":"DATA_GOVERNANCE","approver_id":"admin-01","approved_at":"2026-08-21T11:05:00Z","reference":"approval/data/pilot-01"},
+    {"kind":"OPERATIONS","approver_id":"admin-01","approved_at":"2026-08-21T11:10:00Z","reference":"approval/operations/pilot-01"}
+  ]
+}

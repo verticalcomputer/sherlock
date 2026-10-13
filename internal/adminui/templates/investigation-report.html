@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{shortQuestion .Report.Question}} · Sherlock Workspace</title>
+  <link rel="stylesheet" href="/admin/assets/dashboard.css">
+  <script src="/admin/assets/dashboard.js" defer></script>
+</head>
+<body>
+  {{template "site-header" .Page}}
+  <main class="page-shell report-page">
+    {{with .Report}}
+    <a class="back-link" href="/admin/clusters/{{.ClusterID | urlquery}}">← Cluster {{.ClusterID}}</a>
+    <header class="report-heading">
+      <p class="eyebrow">Investigation report</p>
+      <h1>{{shortQuestion .Question}}</h1>
+      <div class="report-tags"><span class="status {{statusClass .Status}}">{{.Status}}</span>{{if .StopReason}}<span>Stopped: <span class="mono">{{.StopReason}}</span></span>{{end}}<span class="mono">{{.ID}}{{if .IncidentID}} · incident {{.IncidentID}}{{end}}</span></div>
+      {{if ne (shortQuestion .Question) .Question}}<details class="inline-details"><summary>Show full question</summary><p class="full-question">{{.Question}}</p></details>{{end}}
+    </header>
+
+    <dl class="report-facts" aria-label="Investigation summary">
+      <div><dt>Evidence window</dt><dd>{{localTime .WindowStart}} – {{localTime .WindowEnd}}</dd></div>
+      <div><dt>Scope</dt><dd>{{if .EntityKind}}{{.EntityKind}}{{else}}Not specified{{end}}{{if .EntityIDs}}<small class="mono">{{entitySummary .EntityIDs}}</small>{{end}}</dd></div>
+      <div><dt>{{if .CompletedAt}}Completed{{else}}Last updated{{end}}</dt><dd>{{if .CompletedAt}}{{localTime .CompletedAt}}{{else}}{{localTime .UpdatedAt}}{{end}}</dd></div>
+      <div><dt>Model tokens</dt><dd>{{formatCount .ModelUsage.AuditedTokens}} audited<small>{{formatCount .ModelUsage.AdmittedTokens}} admitted of {{formatCount .ModelUsage.MaxTokens}} ceiling</small></dd></div>
+      <div><dt>Model cost</dt><dd><span title="{{formatUSD .ModelUsage.AuditedCostMicrounits}} audited">{{formatCost .ModelUsage.AuditedCostMicrounits}}</span> audited<small><span title="{{formatUSD .ModelUsage.AdmittedCostMicrounits}} admitted">{{formatCost .ModelUsage.AdmittedCostMicrounits}}</span> admitted of {{formatCost .ModelUsage.MaxCostMicrounits}} ceiling</small></dd></div>
+    </dl>
+    {{if $.Report.Shared}}<p class="chart-note">Shared report: synthesized findings and citation metadata. Raw evidence, model input/output and context manifests are excluded.</p>{{end}}
+    {{if $.CanCancel}}<form method="post" action="/admin/investigations/{{.ID | urlquery}}/cancel"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><button class="quiet-button" type="submit">Cancel investigation</button><p class="chart-note">Stops this investigation through the controller. Running cluster workloads are not changed.</p></form>{{end}}
+    {{if .Shared}}<p class="chart-note"><a class="report-link" href="/admin/investigations/{{.ID | urlquery}}">Refresh durable progress</a> · updated {{localTime .UpdatedAt}}</p>{{end}}
+    {{if .SuccessCriteria}}<details class="inline-details criteria"><summary>Success criteria · {{len .SuccessCriteria}}</summary><ul>{{range .SuccessCriteria}}<li>{{.}}</li>{{end}}</ul></details>{{end}}
+
+    {{with .PrimaryAction}}
+    <section class="action-card" aria-labelledby="primary-action-title">
+      <div class="action-card-tags"><span class="eyebrow">Recommended action</span>{{if .Urgency}}<span class="status neutral">{{.Urgency}}</span>{{end}}{{if .Owner}}<span>Owner: {{.Owner}}</span>{{end}}<span class="mono">{{.ID}}</span></div>
+      <h2 id="primary-action-title">{{.Action}}</h2>
+      {{if .Rationale}}<p>{{.Rationale}}</p>{{end}}
+      {{if or .Targets .EscalationCondition}}<dl class="action-facts">
+        {{if .Targets}}<div><dt>Targets</dt><dd><div class="chips">{{range .Targets}}<span class="mono">{{.}}</span>{{end}}</div></dd></div>{{end}}
+        {{if .EscalationCondition}}<div><dt>Escalate if</dt><dd>{{.EscalationCondition}}</dd></div>{{end}}
+      </dl>{{end}}
+      {{if .BlockingGaps}}<div class="blocking-gaps"><strong>Blocking gaps</strong><ul>{{range .BlockingGaps}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+      {{if .EvidenceIDs}}{{template "section-refs" .}}{{else}}<p class="refs-none">No evidence was available; this is a deterministic recovery action.</p>{{end}}
+    </section>
+    {{else}}<p class="report-note">No recommended action was recorded for this investigation.</p>{{end}}
+
+    <section class="report-section" aria-labelledby="findings-title">
+      <div class="section-title"><h2 id="findings-title">Findings</h2><p>{{len .Findings}} citation-validated</p></div>
+      {{if .Findings}}<ol class="finding-list">{{range .Findings}}<li>
+        <div class="finding-meta"><span class="tag">{{.Kind}}</span>{{if .Severity}}<span class="severity {{severityClass .Severity}}">{{.Severity}}</span>{{end}}{{if .Confidence}}<span class="mono">confidence {{formatConfidence .Confidence}}</span>{{end}}</div>
+        <p class="finding-statement">{{.Statement}}</p>
+        {{if .EntityIDs}}<p class="subtle-line mono">{{entitySummary .EntityIDs}}</p>{{end}}
+        {{template "finding-refs" .}}
+      </li>{{end}}</ol>{{else}}<p class="report-note">No citation-validated findings were recorded.</p>{{end}}
+    </section>
+
+    {{$unknowns := sectionsOfKind "UNKNOWN" .ReportSections}}
+    {{$timeline := sectionsOfKind "TIMELINE" .ReportSections}}
+    {{$coverage := sectionsOfKind "COVERAGE" .ReportSections}}
+    {{if $unknowns}}<section class="report-section" aria-labelledby="unknowns-title">
+      <div class="section-title"><h2 id="unknowns-title">What remains unknown</h2><p>{{countLabel (len $unknowns) "statement" "statements"}}</p></div>
+      <ul class="statement-list">{{range $unknowns}}<li><p>{{.Statement}}</p>{{template "section-refs" .}}</li>{{end}}</ul>
+    </section>{{end}}
+    {{if $timeline}}<section class="report-section" aria-labelledby="timeline-title">
+      <div class="section-title"><h2 id="timeline-title">Timeline</h2><p>{{countLabel (len $timeline) "entry" "entries"}}</p></div>
+      <ol class="timeline">{{range $timeline}}<li><span class="timeline-when">{{formatInstant .ObservedAt}}</span><div><p>{{.Statement}}</p>{{template "section-refs" .}}</div></li>{{end}}</ol>
+    </section>{{end}}
+    {{if $coverage}}<section class="report-section" aria-labelledby="coverage-title">
+      <div class="section-title"><h2 id="coverage-title">Coverage</h2><p>{{countLabel (len $coverage) "statement" "statements"}}</p></div>
+      <ul class="statement-list">{{range $coverage}}<li><p>{{.Statement}}</p>{{template "section-refs" .}}</li>{{end}}</ul>
+    </section>{{end}}
+
+    {{$omitted := totalOmitted .ReportOmissions}}
+    {{$refused := refusedCalls .ModelCalls}}
+    <section class="report-section" aria-labelledby="integrity-title">
+      <div class="section-title"><h2 id="integrity-title">Report integrity</h2></div>
+      <ul class="integrity-list">
+        <li class="{{if $omitted}}degraded{{else}}healthy{{end}}">{{if $omitted}}{{countLabel $omitted "synthesis statement was" "synthesis statements were"}} omitted{{else}}No synthesis statement was omitted{{end}}{{if and $omitted .ReportOmissions}}<ul>{{range .ReportOmissions}}<li><span class="mono">{{.Kind}}</span> · {{.Count}} · {{describeOmission .Reason}}</li>{{end}}</ul>{{end}}</li>
+        <li class="{{if .Shared}}neutral{{else if $refused}}degraded{{else}}healthy{{end}}">{{if .Shared}}Detailed model-call audit is excluded from this shared report{{else if $refused}}{{countLabel (len $refused) "proposed action was" "proposed actions were"}} refused before execution<ul>{{range $refused}}<li><span class="mono">{{.Kind}}</span>{{if .ReasonCode}} · {{.ReasonCode}}{{end}} · {{localTime .OccurredAt}}</li>{{end}}</ul>{{else}}No proposed action was refused{{end}}</li>
+        {{if or (not $unknowns) (not $timeline) (not $coverage)}}<li class="no-data">Not recorded by this run: <span class="joined">{{if not $unknowns}}<span>what remains unknown</span>{{end}}{{if not $timeline}}<span>timeline</span>{{end}}{{if not $coverage}}<span>coverage</span>{{end}}</span></li>{{end}}
+      </ul>
+    </section>
+
+    <details class="audit-trail" id="audit-trail">
+      <summary><strong>Audit trail</strong><small>{{countLabel (len .Evidence) "evidence entry" "evidence entries"}}{{if not .Shared}} · {{countLabel (len .ContextManifests) "context manifest" "context manifests"}} · {{countLabel (len .ModelCalls) "AI call" "AI calls"}}{{else}} · metadata only{{end}}</small></summary>
+      <div class="audit-body">
+        <section class="audit-section" aria-labelledby="evidence-title">
+          <h3 id="evidence-title">Evidence</h3>
+          {{if .Evidence}}{{range .Evidence}}<details class="audit-item" id="evidence-{{.ID}}"><summary><span class="status {{statusClass .Status}}">{{.Status}}</span><span class="tag">{{.Kind}}</span><span class="mono audit-id">{{.ID}}</span>{{localTime .RecordedAt}}</summary><div class="audit-item-body"><p>Observed {{localTime .ObservedStart}} – {{localTime .ObservedEnd}}</p>{{if not $.Report.Shared}}<pre class="payload">{{formatPayload .ExactScope}}</pre>{{end}}</div></details>{{end}}{{else}}<p class="report-note">No evidence has been committed to this investigation.</p>{{end}}
+        </section>
+
+        {{if not .Shared}}<section class="audit-section" aria-labelledby="context-manifests-title">
+          <h3 id="context-manifests-title">Context selection and calibration</h3>
+          {{if .ContextManifests}}{{range .ContextManifests}}<details class="audit-item">
+            <summary><span class="status neutral">{{if .ShadowOnly}}SHADOW{{else}}ADMITTED{{end}}</span><span><strong>{{.CallKind}}</strong> · {{.FallbackState}}</span>{{localTime .CreatedAt}}</summary>
+            <div class="call-metadata"><span>{{.CallKey}}</span><span>{{formatCount .EstimatedInputTokens}} / {{formatCount .AllowanceTokens}} admitted{{if .ActualInputTokens}} · {{.ActualInputTokens}} actual{{end}}</span><span>factor {{.CalibrationFactorMillionths}} ppm · {{.CalibrationSampleCount}} samples{{if .EstimatorUnderrun}} · UNDERRUN{{end}}</span><span>{{len .SelectedEvidenceIDs}} evidence · {{.MemoryCandidateCount}} memory candidates</span><span>{{.ContextMode}}{{if .DeltaFromVersion}} · delta from v{{.DeltaFromVersion}}{{end}}</span><span>{{.RetrievalLatencyMilliseconds}} ms retrieval</span></div>
+            {{if .SelectedMemoryIDs}}<p class="subtle-line mono audit-inset">Selected memory: {{range .SelectedMemoryIDs}}{{.}} {{end}}</p>{{end}}
+            <div class="payload-grid"><section class="payload-panel"><h4>Section tokens</h4><pre class="payload">{{formatPayload .SectionTokens}}</pre></section><section class="payload-panel"><h4>Exclusions</h4><pre class="payload">{{formatPayload .ExclusionReasons}}</pre></section></div>
+          </details>{{end}}{{else}}<p class="report-note">No context manifests are recorded for this investigation.</p>{{end}}
+        </section>
+
+        <section class="audit-section" aria-labelledby="model-calls-title">
+          <h3 id="model-calls-title">AI call input and output</h3>
+          <p class="section-note">Redacted before persistence and loaded from protected model-audit artifacts. Older calls may predate payload capture.</p>
+          {{if .ModelCalls}}{{range .ModelCalls}}<details class="audit-item model-call">
+            <summary><span class="status {{statusClass .Outcome}}">{{.Outcome}}</span><span><strong>{{.Kind}}</strong> · {{.Provider}} / {{.Model}}</span>{{localTime .OccurredAt}}</summary>
+            <div class="call-metadata"><span>{{.ID}}</span><span>{{formatCount .InputTokens}} in / {{formatCount .OutputTokens}} out tokens</span><span>{{.LatencyMilliseconds}} ms</span><span title="{{formatUSD .CostMicrounits}}">{{formatCost .CostMicrounits}}</span></div>
+            {{if .ReasonCode}}<p class="notice warning audit-inset">{{.ReasonCode}}</p>{{end}}
+            <div class="payload-grid">
+              <section class="payload-panel" aria-label="AI call input"><div class="payload-heading"><h4>Input</h4><span class="status {{statusClass .Input.Availability}}">{{.Input.Availability}}</span></div>{{if eq .Input.Availability "AVAILABLE"}}<p class="subtle-line mono">{{.Input.MediaType}} · {{.Input.EvidenceID}}</p><pre class="payload">{{formatPayload .Input.Content}}</pre>{{else}}<p class="report-note">{{if eq .Input.Availability "NOT_RECORDED"}}Input payload was not recorded for this call.{{else}}Input payload artifact is currently unavailable.{{end}}{{if .Input.EvidenceID}} <span class="mono">{{.Input.EvidenceID}}</span>{{end}}</p>{{end}}</section>
+              <section class="payload-panel" aria-label="AI call output"><div class="payload-heading"><h4>Output</h4><span class="status {{statusClass .Output.Availability}}">{{.Output.Availability}}</span></div>{{if eq .Output.Availability "AVAILABLE"}}<p class="subtle-line mono">{{.Output.MediaType}} · {{.Output.EvidenceID}}</p><pre class="payload">{{formatPayload .Output.Content}}</pre>{{else}}<p class="report-note">{{if eq .Output.Availability "NOT_RECORDED"}}Output payload was not recorded for this call.{{else}}Output payload artifact is currently unavailable.{{end}}{{if .Output.EvidenceID}} <span class="mono">{{.Output.EvidenceID}}</span>{{end}}</p>{{end}}</section>
+            </div>
+          </details>{{end}}{{else}}<p class="report-note">No AI calls are associated with this investigation.</p>{{end}}
+        </section>
+      {{end}}</div>
+    </details>
+    {{end}}
+  </main>
+  {{template "site-footer"}}
+</body>
+</html>
+
+{{define "finding-refs"}}{{if or .EvidenceIDs .CounterEvidenceIDs}}<details class="refs"><summary>{{countLabel (len .EvidenceIDs) "evidence reference" "evidence references"}}{{if .CounterEvidenceIDs}} · {{len .CounterEvidenceIDs}} counter-evidence{{end}}</summary><div class="refs-grid"><div><strong>Evidence</strong>{{if .EvidenceIDs}}<ul class="ref-list">{{range .EvidenceIDs}}<li><a class="mono" href="#evidence-{{.}}">{{.}}</a></li>{{end}}</ul>{{else}}<p>None recorded</p>{{end}}</div><div><strong>Counter-evidence</strong>{{if .CounterEvidenceIDs}}<ul class="ref-list">{{range .CounterEvidenceIDs}}<li><a class="mono" href="#evidence-{{.}}">{{.}}</a></li>{{end}}</ul>{{else}}<p>None recorded</p>{{end}}</div></div></details>{{else}}<p class="refs-none">No evidence references recorded</p>{{end}}{{end}}
+
+{{define "section-refs"}}{{if .EvidenceIDs}}<details class="refs"><summary>{{countLabel (len .EvidenceIDs) "evidence reference" "evidence references"}}</summary><ul class="ref-list">{{range .EvidenceIDs}}<li><a class="mono" href="#evidence-{{.}}">{{.}}</a></li>{{end}}</ul></details>{{end}}{{end}}

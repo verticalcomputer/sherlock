@@ -1,0 +1,21 @@
+{
+  "schema_version": "sherlock.ssh-target-auth.v1",
+  "authentication_profiles": [
+    {
+      "id": "pilot-existing-key",
+      "method": "public_key",
+      "credential_source": "head_local_persistent",
+      "credential_reference": "openssh-default-identity"
+    }
+  ],
+  "targets": [
+    {
+      "id": "fixture1-zone1-comp001",
+      "address": "192.0.2.250",
+      "port": 22,
+      "username": "fixture_user_1",
+      "authentication_profile": "pilot-existing-key",
+      "principal_constraint": "shared_shell_reduced_trust"
+    }
+  ]
+}

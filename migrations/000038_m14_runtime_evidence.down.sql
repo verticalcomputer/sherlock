@@ -1,0 +1,11 @@
+DROP TABLE remediation_verification_evidence;
+DROP TABLE remediation_simulation_observations;
+DROP TABLE remediation_simulation_state;
+DROP TABLE remediation_schedule_snapshots;
+DROP TRIGGER remediation_schedule_revision ON collection_jobs;
+DROP FUNCTION remediation_schedule_revision();
+ALTER TABLE collection_jobs DROP COLUMN schedule_revision;
+DROP INDEX remediation_card_once;
+ALTER TABLE remediation_runs DROP COLUMN supervisor_owner, DROP COLUMN supervisor_until;
+ALTER TABLE remediation_runs DROP CONSTRAINT remediation_runs_contained_reason_check;
+ALTER TABLE remediation_runs ADD CHECK (contained_reason IS NULL OR contained_reason IN ('LEASE_LOST','UNKNOWN_OUTCOME','ROLLBACK_UNAVAILABLE','ROLLBACK_UNKNOWN','OPERATOR_CONTAINED'));

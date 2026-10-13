@@ -1,0 +1,125 @@
+{
+  "protocol_version": 1,
+  "key": {
+    "cluster_id": "fixture-cluster",
+    "node_id": "node-a",
+    "enrollment_id": "enrollment-a",
+    "session_epoch": "1",
+    "session_id": "session-a",
+    "sequence": "1"
+  },
+  "enrollment_revision": 1,
+  "inventory_revision_id": "inventory-a",
+  "boot_id": "boot-a",
+  "signing_key_id": "key-a",
+  "agent_version": "fixture.v1",
+  "build_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "created_at": "2026-10-08T10:00:00Z",
+  "sources": [
+    {
+      "source_id": "fixture-gpu",
+      "schema_version": 1,
+      "adapter_version": "fixture.v1",
+      "profile_id": "fixture.v1",
+      "started_at": "2026-10-08T09:59:59Z",
+      "completed_at": "2026-10-08T10:00:00Z",
+      "status": "SUCCEEDED",
+      "coverage": {
+        "expected": 4,
+        "returned": 4,
+        "complete": true
+      },
+      "fields": [
+        {
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.gauge",
+          "state": "SUPPORTED",
+          "reason": "OBSERVED"
+        },
+        {
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.counter",
+          "state": "SUPPORTED",
+          "reason": "OBSERVED"
+        },
+        {
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.flag",
+          "state": "SUPPORTED",
+          "reason": "OBSERVED"
+        },
+        {
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.state",
+          "state": "SUPPORTED",
+          "reason": "OBSERVED"
+        }
+      ],
+      "records": [
+        {
+          "id": "sample-fixture.gauge",
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.gauge",
+          "unit": "1",
+          "kind": "gauge",
+          "reset": "not_applicable",
+          "reset_observed": false,
+          "observed_at": "2026-10-08T10:00:00Z",
+          "collected_at": "2026-10-08T10:00:00Z",
+          "value": {
+            "kind": "float",
+            "float": 55
+          }
+        },
+        {
+          "id": "sample-fixture.counter",
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.counter",
+          "unit": "count",
+          "kind": "counter",
+          "reset": "session_epoch",
+          "reset_observed": false,
+          "observed_at": "2026-10-08T10:00:00Z",
+          "collected_at": "2026-10-08T10:00:00Z",
+          "value": {
+            "kind": "unsigned",
+            "unsigned": "18446744073709551615"
+          }
+        },
+        {
+          "id": "sample-fixture.flag",
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.flag",
+          "unit": "1",
+          "kind": "gauge",
+          "reset": "not_applicable",
+          "reset_observed": false,
+          "observed_at": "2026-10-08T10:00:00Z",
+          "collected_at": "2026-10-08T10:00:00Z",
+          "value": {
+            "kind": "boolean",
+            "boolean": false
+          }
+        },
+        {
+          "id": "sample-fixture.state",
+          "entity_key": "fixture-cluster/NODE/node-a//",
+          "metric": "fixture.state",
+          "unit": "1",
+          "kind": "state",
+          "reset": "not_applicable",
+          "reset_observed": false,
+          "observed_at": "2026-10-08T10:00:00Z",
+          "collected_at": "2026-10-08T10:00:00Z",
+          "value": {
+            "kind": "enum",
+            "enum": "OK"
+          }
+        }
+      ],
+      "loss": null
+    }
+  ],
+  "digest": "be7f6ac3f9dfdc27d268eed7c9af298d8c95a1625eaa6df4deeceb37d8b24a57",
+  "signature": "h9PxjOFOcBWYu8n0rXgEPwq4+4vVf66Gl8YvX3UOCTln7c5AdXUqrC4hScxGEXcv2kQfWT6V6QWX3jclWwAJBA"
+}

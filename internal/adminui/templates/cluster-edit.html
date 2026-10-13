@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edit {{.Cluster.DisplayName}} · Sherlock</title>
+  <link rel="stylesheet" href="/admin/assets/dashboard.css">
+  <script src="/admin/assets/dashboard.js" defer></script>
+  {{if .AccessTestPending}}<meta http-equiv="refresh" content="5">{{end}}
+</head>
+<body>
+  {{template "site-header" .Page}}
+  <main class="page-shell narrow">
+    <a class="back-link" href="/admin/clusters/{{.Cluster.ID | urlquery}}">← {{.Cluster.DisplayName}}</a>
+    <div class="page-heading"><div><p class="eyebrow">Cluster settings</p><h1>Edit cluster</h1><p class="mono">{{.Cluster.ID}}</p></div><span class="badge {{stateClass .Cluster.State}}">{{.Cluster.State}}</span></div>
+    <form class="edit-form" method="post" action="/admin/clusters/{{.Cluster.ID | urlquery}}/edit">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="display-name">Display name</label>
+      <input id="display-name" name="display_name" value="{{.Cluster.DisplayName}}" maxlength="200" required>
+      <p class="field-note">The stable cluster ID cannot be changed.</p>
+      <label for="expected-collectors">Expected collector hostnames</label>
+      <textarea id="expected-collectors" name="expected_collectors" rows="6" spellcheck="false" placeholder="fixture1-zone1-headnode">{{.ExpectedCollectorsText}}</textarea>
+      <p class="field-note">One stable collector display name or hostname per line. Sherlock compares this inventory with fresh active registrations.</p>
+      <div class="form-actions"><button type="submit">Save changes</button><a class="button secondary" href="/admin/clusters/{{.Cluster.ID | urlquery}}">Cancel</a></div>
+    </form>
+    <section class="panel" aria-labelledby="credential-title">
+      <div class="section-title"><h2 id="credential-title">BCM read-only access</h2></div>
+      <p>Authorize a head collector to test read-only BCM access. Choose a sudo password when the reviewed command requires one, or enroll passwordless sudo when that command already runs without one. Saving does not test access; use <strong>Test BCM access</strong> on the active record. Secret fields are write-only.</p>
+      {{if .CredentialMessage}}<p class="field-note">{{.CredentialMessage}}</p>{{end}}
+      {{if .CredentialStatus}}<p class="field-note">{{.CredentialStatus}}</p>{{end}}
+      {{if .CredentialEnabled}}{{range .Credentials}}
+        <div class="credential-row">
+          <div><strong>{{.Host}}</strong> <span class="badge">{{.Status}}</span><p class="field-note">{{.Username}} · {{if eq .Purpose "BCM_READ_ONLY_PASSWORDLESS"}}Passwordless sudo{{else}}Sudo password{{end}}</p></div>
+          {{if eq .Status "ACTIVE"}}<div class="form-actions">{{if $.AccessTestEnabled}}{{$test := index $.AccessTests .ID}}{{if not $test.Pending}}<form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials/{{.ID | urlquery}}/test"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><button type="submit">Test BCM access</button></form>{{end}}{{$discovery := index $.InventoryDiscoveries .ID}}{{if not $discovery.Pending}}<form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials/{{.ID | urlquery}}/inventory-discovery"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><button type="submit">Discover BCM inventory</button></form>{{end}}{{end}}<form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials/{{.ID | urlquery}}/revoke"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><button class="danger-button" type="submit">Revoke</button></form></div>{{end}}
+        </div>
+        {{if $.AccessTestEnabled}}{{$test := index $.AccessTests .ID}}{{if $test.ID}}<div class="access-test" data-test-status="{{$test.Status}}">
+          {{if $test.Pending}}<p><span class="badge">ACCESS TEST {{$test.Status}}</span> Test requested {{$test.RequestedAt.Format "2006-01-02 15:04:05 UTC"}} for credential version {{$test.CredentialVersion}}.{{if $test.CollectorID}} Running on collector <span class="mono">{{$test.CollectorID}}</span>, attempt {{$test.Attempt}}.{{else}} Waiting for a compatible head collector to claim it.{{end}}</p>
+          <form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credential-tests/{{$test.ID | urlquery}}/cancel"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="secondary" type="submit">Cancel test</button></form>
+          {{else if $test.Verified}}<p><span class="badge">BCM ACCESS VERIFIED</span> Verified {{if $test.CompletedAt}}{{$test.CompletedAt.Format "2006-01-02 15:04:05 UTC"}}{{end}} for authorization version {{$test.CredentialVersion}}{{if $test.BCMVersion}} on BCM {{$test.BCMVersion}}{{end}}. {{$test.OutcomeSummary}}</p>
+          {{else if eq $test.Status "SUCCEEDED"}}<p><span class="badge">STALE RESULT</span> A test succeeded for credential version {{$test.CredentialVersion}}, but that version was since replaced or revoked. The current credential has not been tested.</p>
+          {{else}}<p><span class="badge">ACCESS TEST {{$test.Status}}</span> {{if $test.OutcomeCode}}<span class="mono">{{$test.OutcomeCode}}</span> {{end}}{{$test.OutcomeSummary}}{{if not $test.CredentialCurrent}} (credential version {{$test.CredentialVersion}} is no longer current){{end}}</p>{{end}}
+        </div>{{else}}<p class="field-note">Access test: not run for this record. Saving a credential does not verify access.</p>{{end}}
+        {{$discovery := index $.InventoryDiscoveries .ID}}{{if $discovery.ID}}<div class="access-test" data-discovery-status="{{$discovery.Status}}">
+          {{if $discovery.Pending}}<p><span class="badge">INVENTORY DISCOVERY {{$discovery.Status}}</span> Discovery requested {{$discovery.RequestedAt.Format "2006-01-02 15:04:05 UTC"}} for credential version {{$discovery.CredentialVersion}}.{{if $discovery.CollectorID}} Running on collector <span class="mono">{{$discovery.CollectorID}}</span>, attempt {{$discovery.Attempt}}.{{else}} Waiting for a compatible head collector to claim it.{{end}}</p>
+          <form method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credential-tests/{{$discovery.ID | urlquery}}/cancel"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="secondary" type="submit">Cancel discovery</button></form>
+          {{else if $discovery.Listed}}<p><span class="badge">BCM INVENTORY LISTED ({{$discovery.DeviceCount}} DEVICES)</span> Listed {{if $discovery.CompletedAt}}{{$discovery.CompletedAt.Format "2006-01-02 15:04:05 UTC"}}{{end}} for credential version {{$discovery.CredentialVersion}}{{if $discovery.BCMVersion}} on BCM {{$discovery.BCMVersion}}{{end}}. This lists devices; it is not an access verification.</p>
+          {{if $discovery.DeviceTypeCounts}}<p class="field-note">By type: {{range $index, $count := $discovery.DeviceTypeCounts}}{{if $index}}, {{end}}{{$count.Type}} {{$count.Count}}{{end}}</p>{{end}}
+          <table class="inventory-devices"><thead><tr><th>Type</th><th>Hostname</th><th>Category</th><th>Status</th></tr></thead><tbody>{{range $discovery.Devices}}<tr><td>{{.Type}}</td><td class="mono">{{.Hostname}}</td><td class="mono">{{if .Category}}{{.Category}}{{else}}—{{end}}</td><td>{{.Status}}</td></tr>{{end}}</tbody></table>
+          {{else if eq $discovery.Status "SUCCEEDED"}}<p><span class="badge">STALE RESULT</span> An inventory discovery listed devices for credential version {{$discovery.CredentialVersion}}, but that version was since replaced or revoked. The listing may no longer reflect the current credential.</p>
+          {{else}}<p><span class="badge">INVENTORY DISCOVERY {{$discovery.Status}}</span> {{if $discovery.OutcomeCode}}<span class="mono">{{$discovery.OutcomeCode}}</span> {{end}}{{$discovery.OutcomeSummary}}{{if not $discovery.CredentialCurrent}} (credential version {{$discovery.CredentialVersion}} is no longer current){{end}}</p>{{end}}
+        </div>{{else}}<p class="field-note">BCM inventory: not discovered for this record.</p>{{end}}{{end}}
+        {{if and (eq .Status "ACTIVE") (eq .Purpose "BCM_READ_ONLY")}}<form class="edit-form" method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><input type="hidden" name="expected_credential_id" value="{{.ID}}"><input type="hidden" name="purpose" value="BCM_READ_ONLY"><input type="hidden" name="host" value="{{.Host}}">
+          <label>Replace secret for <strong>{{.Host}}</strong></label><label for="credential-replace-username-{{.ID}}">Username</label><input id="credential-replace-username-{{.ID}}" type="text" name="username" value="{{.Username}}" maxlength="256" autocomplete="off" required><label for="credential-replace-ssh-{{.ID}}">Optional SSH password</label><input id="credential-replace-ssh-{{.ID}}" type="password" name="ssh_password" autocomplete="new-password"><label for="credential-replace-sudo-{{.ID}}">Sudo password</label><input id="credential-replace-sudo-{{.ID}}" type="password" name="sudo_password" autocomplete="new-password" required><button type="submit">Replace credential</button>
+        </form>{{end}}
+        {{if and (eq .Status "ACTIVE") (eq .Purpose "BCM_READ_ONLY_PASSWORDLESS")}}<form class="edit-form" method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><input type="hidden" name="expected_credential_id" value="{{.ID}}"><input type="hidden" name="purpose" value="BCM_READ_ONLY_PASSWORDLESS"><input type="hidden" name="host" value="{{.Host}}">
+          <label>Replace passwordless authorization for <strong>{{.Host}}</strong></label><label>Collector login username</label><input type="text" name="username" value="{{.Username}}" maxlength="256" autocomplete="off" required><button type="submit">Replace authorization</button>
+        </form>{{end}}
+        {{if and (eq .Status "REVOKED") (eq .ReplacedBy "") (eq .Purpose "BCM_READ_ONLY")}}<form class="edit-form" method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><input type="hidden" name="expected_credential_id" value="{{.ID}}"><input type="hidden" name="purpose" value="BCM_READ_ONLY"><input type="hidden" name="host" value="{{.Host}}"><label>Re-enroll secret for <strong>{{.Host}}</strong></label><label for="credential-reenroll-username-{{.ID}}">Username</label><input id="credential-reenroll-username-{{.ID}}" type="text" name="username" value="{{.Username}}" maxlength="256" autocomplete="off" required><label for="credential-reenroll-ssh-{{.ID}}">Optional SSH password</label><input id="credential-reenroll-ssh-{{.ID}}" type="password" name="ssh_password" autocomplete="new-password"><label for="credential-reenroll-sudo-{{.ID}}">Sudo password</label><input id="credential-reenroll-sudo-{{.ID}}" type="password" name="sudo_password" autocomplete="new-password" required><button type="submit">Re-enroll credential</button>
+        </form>{{end}}
+        {{if and (eq .Status "REVOKED") (eq .ReplacedBy "") (eq .Purpose "BCM_READ_ONLY_PASSWORDLESS")}}<form class="edit-form" method="post" action="/admin/clusters/{{$.Cluster.ID | urlquery}}/credentials">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="expected_version" value="{{.Version}}"><input type="hidden" name="expected_credential_id" value="{{.ID}}"><input type="hidden" name="purpose" value="BCM_READ_ONLY_PASSWORDLESS"><input type="hidden" name="host" value="{{.Host}}">
+          <label>Re-enroll passwordless authorization for <strong>{{.Host}}</strong></label><label>Collector login username</label><input type="text" name="username" value="{{.Username}}" maxlength="256" autocomplete="off" required><button type="submit">Re-enroll authorization</button>
+        </form>{{end}}
+      {{else}}<p class="field-note">No credential record is enrolled for this cluster.</p>{{end}}
+      {{if not .Cluster.RemovedAt}}<form class="edit-form" method="post" action="/admin/clusters/{{.Cluster.ID | urlquery}}/credentials">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="credential-host">Head host or reviewed target</label><input id="credential-host" name="host" maxlength="256" autocomplete="off" required>
+        <label for="credential-username">Username</label><input id="credential-username" name="username" maxlength="256" autocomplete="off" required>
+        <input type="hidden" name="purpose" value="BCM_READ_ONLY">
+        <label for="credential-ssh-password">Optional SSH password</label><input id="credential-ssh-password" type="password" name="ssh_password" autocomplete="new-password">
+        <label for="credential-sudo-password">Sudo password</label><input id="credential-sudo-password" type="password" name="sudo_password" autocomplete="new-password" required>
+        <input type="hidden" name="expected_version" value="0">
+        <p class="field-note">This form creates a new host record. Use the per-record form above to replace or re-enroll an existing record. Leave the secret fields blank after use; the browser never receives a saved secret.</p>
+        <div class="form-actions"><button type="submit">Save credential</button></div>
+      </form>
+      <form class="edit-form" method="post" action="/admin/clusters/{{.Cluster.ID | urlquery}}/credentials">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="purpose" value="BCM_READ_ONLY_PASSWORDLESS"><input type="hidden" name="expected_version" value="0">
+        <label>Enroll existing passwordless sudo for the reviewed BCM listing</label>
+        <label for="passwordless-host">Head host</label><input id="passwordless-host" name="host" maxlength="256" autocomplete="off" required>
+        <label for="passwordless-username">Collector login username</label><input id="passwordless-username" name="username" maxlength="256" autocomplete="off" required>
+        <p class="field-note">No password is stored or sent to the head. The test runs only Sherlock's fixed read-only cmsh command and checks that sudo permits it without a password.</p>
+        <div class="form-actions"><button type="submit">Enroll passwordless BCM access</button></div>
+      </form>{{end}}{{else}}<p class="field-note">Credential onboarding is disabled or this identity has no grant. No credential metadata is shown.</p>{{end}}
+    </section>
+    {{template "expected-inventory" .}}
+    {{if and .Access.CanRemove (not .Cluster.RemovedAt)}}<section class="danger-zone" aria-labelledby="danger-title">
+      <div class="section-title"><h2 id="danger-title">Decommission</h2></div>
+      <p>Decommissioning revokes this cluster's access. Evidence and audit history are preserved.</p>
+      <details class="delete-panel"><summary>Delete cluster</summary>
+        <form method="post" action="/admin/clusters/{{.Cluster.ID | urlquery}}/delete">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <label>Enter <strong class="mono">{{.Cluster.ID}}</strong> to confirm
+            <input name="confirmation" autocomplete="off" spellcheck="false" required>
+          </label>
+          <button class="danger-button" type="submit">Delete cluster</button>
+        </form>
+      </details>
+    </section>{{end}}
+  </main>
+  {{template "site-footer"}}
+</body>
+</html>

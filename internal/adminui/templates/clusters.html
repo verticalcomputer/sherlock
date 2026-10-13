@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clusters · Sherlock</title>
+  <link rel="stylesheet" href="/admin/assets/dashboard.css">
+  <script src="/admin/assets/dashboard.js" defer></script>
+</head>
+<body>
+  {{template "site-header" .Page}}
+  <main class="page-shell">
+    <div class="page-heading"><div><p class="eyebrow">Workspace</p><h1>Clusters</h1>{{if not .Error}}<p>{{countLabel .ActiveClusters "managed cluster" "managed clusters"}}. State, evidence, and load come from each cluster's current summary.</p>{{end}}</div></div>
+    {{if .Error}}<div class="notice danger" role="alert">{{.Error}} Missing data is not interpreted as healthy.</div>{{end}}
+    {{if .Updated}}<div class="notice success" role="status">Saved changes to <span class="mono">{{.Updated}}</span>.</div>{{end}}
+    {{if .Deleted}}<div class="notice success" role="status">Decommissioned <span class="mono">{{.Deleted}}</span>. Evidence and audit history are preserved.</div>{{end}}
+    {{if .Rows}}
+    <section class="fleet-panel" aria-label="Cluster states">
+      <div class="fleet-counts">{{range .FleetBar.Segments}}<div class="{{.Class}}"><span>{{.Label}}</span><strong>{{.Count}}</strong></div>{{end}}</div>
+      {{template "stacked-bar" .FleetBar}}
+    </section>
+    <div class="table-wrap cluster-table-wrap"><table class="cluster-table">
+      <thead><tr><th scope="col">Cluster</th><th scope="col">State</th><th scope="col">Current evidence</th><th scope="col">Capacity / progress</th><th scope="col" class="num">Nodes</th><th scope="col" class="num">Incidents</th><th scope="col">Last contact</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>{{range .Rows}}<tr class="{{if .RemovedAt}}removed{{end}}">
+        <td><a class="row-link" href="/admin/clusters/{{.ID | urlquery}}">{{.Name}}</a><small class="mono">{{.ID}}</small>{{if .Description}}<small>{{.Description}}</small>{{end}}</td>
+        <td>{{if .RemovedAt}}<span class="tag">Decommissioned</span>{{else}}<span class="badge {{stateClass .State}}">{{.State}}</span>{{end}}</td>
+        <td class="bar-cell">{{if .RemovedAt}}<small>—</small>{{else}}{{template "evidence-cell" .}}{{end}}</td>
+        <td class="bar-cell">{{if .RemovedAt}}<small>—</small>{{else}}{{if sharedHealthAvailable .Health}}<strong>{{healthCount .Health.Capacity.ObservedNodes}} / {{healthCount .Health.Capacity.ExpectedNodes}} nodes</strong><small>{{healthCount .Health.Capacity.ObservedGPUs}} / {{healthCount .Health.Capacity.ExpectedGPUs}} GPUs · {{.Health.Capacity.Condition}}</small><small>Workload {{.Health.Workload}} · progress {{.Health.Progress}}</small><small>{{len .Health.Attention}} attention reasons · {{.Runs}} recent runs</small>{{else}}<small>Shared health unavailable</small>{{end}}{{template "gpu-cell" .}}{{end}}</td>
+        <td class="num">{{if .HasSummary}}{{.Nodes}}{{else}}—{{end}}</td>
+        <td class="num">{{if .HasOperations}}{{.Incidents}}{{else}}—{{end}}</td>
+        <td>{{localTime .LastSeenAt}}{{if .RemovedAt}}<small>Removed {{localTime .RemovedAt}}</small>{{end}}</td>
+        <td class="row-actions"><a class="button compact" href="/admin/clusters/{{.ID | urlquery}}">View</a>{{if .CanConfigure}}<a class="quiet-button compact" href="/admin/clusters/{{.ID | urlquery}}/edit">Edit</a>{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>
+    {{if .SummariesOmitted}}<p class="chart-note">Summaries were not loaded for {{.SummariesOmitted}} more active clusters; they show their registered state only.</p>{{end}}
+    {{else if not .Error}}<div class="empty-state">No cluster records are available.</div>{{end}}
+  </main>
+  {{template "site-footer"}}
+</body>
+</html>

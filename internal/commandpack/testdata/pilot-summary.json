@@ -1,0 +1,113 @@
+[
+  {
+    "id": "gpu.compute_processes",
+    "version": "1.1.0",
+    "arguments": [
+      "--query-compute-apps=gpu_uuid,pid",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.compute_processes.v2",
+    "privileged": false,
+    "maximum_output_bytes": 1048576
+  },
+  {
+    "id": "gpu.ecc_counters",
+    "version": "1.0.0",
+    "arguments": [
+      "--query-gpu=index,uuid,ecc.errors.corrected.volatile.total,ecc.errors.uncorrected.volatile.total,ecc.errors.corrected.aggregate.total,ecc.errors.uncorrected.aggregate.total",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.ecc_counters.v1",
+    "privileged": false,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "gpu.host_stats",
+    "version": "1.0.0",
+    "arguments": [
+      "--query-gpu=uuid,temperature.gpu,power.draw,memory.used",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.host_stats.v1",
+    "privileged": false,
+    "maximum_output_bytes": 1048576
+  },
+  {
+    "id": "gpu.inventory",
+    "version": "1.0.0",
+    "arguments": [
+      "--query-gpu=index,uuid,name,pci.bus_id,temperature.gpu,power.draw,memory.used,ecc.errors.uncorrected.volatile.total",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.inventory.v1",
+    "privileged": false,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "gpu.retired_pages",
+    "version": "1.0.0",
+    "arguments": [
+      "--query-gpu=index,uuid,retired_pages.single_bit_ecc.count,retired_pages.double_bit.count,retired_pages.pending",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.retired_pages.v1",
+    "privileged": false,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "gpu.row_remap",
+    "version": "1.1.0",
+    "arguments": [
+      "--query-remapped-rows=remapped_rows.pending,remapped_rows.failure,remapped_rows.correctable,remapped_rows.uncorrectable",
+      "--format=csv,noheader,nounits"
+    ],
+    "output_schema": "nvidia.row_remap.v2",
+    "privileged": false,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "node.kernel_xid",
+    "version": "1.0.0",
+    "arguments": [
+      "--dmesg",
+      "--utc",
+      "--no-pager",
+      "--output=short-iso",
+      "--grep=NVRM: Xid",
+      "--since=-1 hour",
+      "--lines=2000"
+    ],
+    "output_schema": "kernel.xid.v1",
+    "privileged": true,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "node.kernel_xid",
+    "version": "2.0.0",
+    "arguments": [
+      "--dmesg",
+      "--utc",
+      "--no-pager",
+      "--output=short-iso",
+      "--grep=NVRM: Xid",
+      "--since=-7 days",
+      "--lines=2000"
+    ],
+    "output_schema": "kernel.xid.v1",
+    "privileged": false,
+    "maximum_output_bytes": 4194304
+  },
+  {
+    "id": "slurm.node_detail",
+    "version": "1.0.0",
+    "arguments": [
+      "show",
+      "node",
+      "{{node}}",
+      "--json"
+    ],
+    "output_schema": "slurm.node.v1",
+    "privileged": false,
+    "maximum_output_bytes": 2097152
+  }
+]

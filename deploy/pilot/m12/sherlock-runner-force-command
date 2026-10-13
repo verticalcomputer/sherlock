@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+umask 077
+
+if [ "${SSH_ORIGINAL_COMMAND-}" != "sherlock-runner" ]; then
+  exit 64
+fi
+
+exec /usr/bin/env -i \
+  LANG=C \
+  LC_ALL=C \
+  TZ=UTC \
+  SHERLOCK_RUNNER_COMMAND_PACK_FILE=/etc/sherlock/diagnostics/pack.json \
+  SHERLOCK_RUNNER_TRUST_ROOTS_FILE=/etc/sherlock/diagnostics/trust-roots.json \
+  SHERLOCK_RUNNER_VERSION=1.4.0 \
+  SHERLOCK_RUNNER_TARGET_ID=fixture1-zone1-comp001 \
+  SHERLOCK_RUNNER_TARGET_ROLE=COMPUTE \
+  /usr/local/bin/sherlock-runner

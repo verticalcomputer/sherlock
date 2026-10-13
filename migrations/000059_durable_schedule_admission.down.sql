@@ -1,0 +1,10 @@
+DROP TRIGGER durable_schedule_attempt_guard ON collector_work_attempts;
+DROP FUNCTION durable_schedule_attempt_guard();
+DROP FUNCTION durable_work_claimable(text,text);
+DROP TABLE durable_schedule_occurrences;
+DROP TABLE durable_schedule_executions;
+DROP TRIGGER durable_schedule_initialize ON desired_schedules;
+DROP FUNCTION durable_schedule_initialize();
+DROP TABLE durable_schedule_state;
+DROP TABLE durable_admission_state;
+ALTER TABLE collectors DROP COLUMN reported_source_ids;

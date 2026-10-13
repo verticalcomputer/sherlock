@@ -1,0 +1,21 @@
+[Unit]
+Description=Sherlock PostgreSQL container
+Documentation=file:/opt/sherlock/current/deploy/vm/README.md
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/sherlock/current/deploy/vm
+ExecStartPre=/usr/bin/test -r /etc/sherlock/postgres-compose.env
+ExecStartPre=/usr/bin/test -r /etc/sherlock/secrets/postgres_password
+ExecStart=/usr/bin/docker compose --project-name sherlock --env-file /etc/sherlock/postgres-compose.env --file /opt/sherlock/current/deploy/vm/compose.yaml up --detach --wait postgres
+ExecReload=/usr/bin/docker compose --project-name sherlock --env-file /etc/sherlock/postgres-compose.env --file /opt/sherlock/current/deploy/vm/compose.yaml up --detach --wait postgres
+ExecStop=/usr/bin/docker compose --project-name sherlock --env-file /etc/sherlock/postgres-compose.env --file /opt/sherlock/current/deploy/vm/compose.yaml stop --timeout 60 postgres
+TimeoutStartSec=3min
+TimeoutStopSec=90s
+
+[Install]
+WantedBy=multi-user.target

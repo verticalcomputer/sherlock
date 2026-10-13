@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS collection_events;
+DROP TABLE IF EXISTS current_projections;
+DROP TABLE IF EXISTS observations;
+DROP TABLE IF EXISTS collection_failures;
+DROP TABLE IF EXISTS collection_runs;
+DROP TABLE IF EXISTS collection_jobs;
+DROP TABLE IF EXISTS sources;
+DROP TABLE IF EXISTS clusters;
+DROP TABLE IF EXISTS schema_migrations;

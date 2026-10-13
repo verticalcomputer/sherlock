@@ -1,0 +1,1 @@
+ALTER TABLE diagnostic_target_results DROP COLUMN stdout_transformation_state;

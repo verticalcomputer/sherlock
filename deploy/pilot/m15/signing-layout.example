@@ -1,0 +1,3 @@
+trust-roots.json                         # public keys only
+releases/RELEASE_DIGEST_REQUIRED.json    # signed public release only
+# Private keys, DB URLs, passwords, and live endpoints are intentionally absent.

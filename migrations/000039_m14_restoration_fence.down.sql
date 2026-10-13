@@ -1,0 +1,1 @@
+ALTER TABLE remediation_schedule_snapshots DROP COLUMN live_forward_revision, DROP COLUMN live_restored_revision, DROP COLUMN live_restored_attempt_id;

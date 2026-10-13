@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS diagnostic_audit_cluster_time_idx;
+DROP TABLE IF EXISTS diagnostic_audit_events;
+DROP TABLE IF EXISTS diagnostic_target_results;
+DROP TABLE IF EXISTS diagnostic_work_attempts;
+DROP INDEX IF EXISTS diagnostic_work_available_idx;
+DROP TABLE IF EXISTS diagnostic_work_items;
+DROP TABLE IF EXISTS diagnostic_approvals;
+DROP TABLE IF EXISTS diagnostic_run_targets;
+DROP TABLE IF EXISTS diagnostic_runs;

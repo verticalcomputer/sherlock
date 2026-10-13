@@ -1,0 +1,12 @@
+{
+  "schema_version": "sherlock.agentless-ssh-policy.v1",
+  "acknowledgement": "shared_shell_reduced_trust",
+  "allow_list": [
+    {
+      "cluster_id": "pilot-cluster",
+      "target_id": "fixture1-zone1-comp001",
+      "definition_id": "gpu.ecc_counters",
+      "definition_version": "1.0.0"
+    }
+  ]
+}

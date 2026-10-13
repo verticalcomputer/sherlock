@@ -1,0 +1,30 @@
+/.env
+/.env.pilot
+/.env.local
+/cmd/sherlock-admin-ui/.env
+/.idea/
+/.local/
+/.vscode/
+/bin/
+/coverage.out
+sdk/typescript/node_modules/
+*.test
+*.prof
+
+# Private preparation and operational material are excluded from public exports.
+# Existing tracked historical records are preserved by Git.
+/docs/audits/
+/docs/evidence/
+/output/
+/tmp/
+__pycache__/
+*.pyc
+/.env.*
+!/.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db

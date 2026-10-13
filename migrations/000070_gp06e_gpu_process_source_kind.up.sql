@@ -1,0 +1,35 @@
+-- GP-06e adds a dedicated source kind for the recurring read-only GPU process
+-- observation family. The adapter is opt-in and has its own SSH authority.
+ALTER TABLE sources DROP CONSTRAINT sources_kind_check;
+ALTER TABLE sources ADD CONSTRAINT sources_kind_check
+    CHECK (kind IN ('prometheus', 'model', 'diagnostic', 'slurm', 'gpu_process'));
+
+-- Migration 59 predates the GPU-process source family and maps every typed
+-- plan to a Slurm source. Keep that compatibility rule for existing typed
+-- plans, while allowing only the reviewed GP-06e operation to claim from the
+-- new source kind. This remains a narrow definer helper: callers still need
+-- the existing explicitly provisioned EXECUTE grant.
+CREATE OR REPLACE FUNCTION durable_work_claimable(work text, collector text) RETURNS boolean
+LANGUAGE sql VOLATILE SECURITY DEFINER
+SET search_path=pg_catalog,public,pg_temp AS $$
+ SELECT NOT EXISTS(SELECT 1 FROM durable_schedule_occurrences WHERE work_id=work)
+ OR EXISTS(SELECT 1 FROM desired_schedules d
+ JOIN durable_schedule_occurrences o USING(cluster_id,source_id,operation,revision)
+ JOIN durable_schedule_executions e USING(cluster_id,source_id,operation,revision)
+ JOIN clusters cl ON cl.cluster_id=d.cluster_id
+ JOIN sources s ON s.cluster_id=d.cluster_id AND s.source_id=d.source_id
+ JOIN collectors c ON c.collector_id=e.collector_id AND c.cluster_id=d.cluster_id
+ JOIN collector_work_items w ON w.work_id=o.work_id AND w.work_id=work AND w.cluster_id=d.cluster_id AND w.source_id=d.source_id
+ JOIN collector_capabilities cap ON cap.collector_id=c.collector_id AND cap.capability=w.query_kind AND cap.version='1'
+ WHERE d.enabled AND d.mode='durable' AND cl.removed_at IS NULL
+ AND c.collector_id=collector AND c.status='ACTIVE'
+ AND c.protocol_min<=CASE WHEN w.typed_plan IS NULL THEN 1 ELSE 2 END
+ AND c.protocol_max>=CASE WHEN w.typed_plan IS NULL THEN 1 ELSE 2 END
+ AND c.last_heartbeat_at>clock_timestamp()-interval '2 minutes'
+ AND (c.identity_not_after IS NULL OR c.identity_not_after>clock_timestamp())
+ AND (w.typed_plan IS NOT NULL OR w.source_id=ANY(c.reported_source_ids))
+ AND (s.kind=CASE WHEN w.typed_plan IS NULL THEN 'prometheus' ELSE 'slurm' END
+      OR (s.kind='gpu_process'
+          AND w.typed_plan->>'source_kind'='gpu_process'
+          AND w.typed_plan->>'operation'='gpu.process_observations.v1')));
+$$;

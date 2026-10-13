@@ -1,0 +1,59 @@
+# Review-only, default-off M15 pilot. Apply only after separate authorization.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: sherlock-remediator, namespace: sherlock-system}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: sherlock-remediator}}
+  template:
+    metadata: {labels: {app: sherlock-remediator}}
+    spec:
+      serviceAccountName: sherlock-remediator
+      automountServiceAccountToken: false
+      containers:
+      - name: remediator
+        securityContext: {runAsNonRoot: true, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+        resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "256Mi"}}
+        image: REGISTRY.example.invalid/sherlock/remediator:RELEASE_DIGEST_REQUIRED
+        command: ["/app/sherlock-remediator"]
+        env:
+        - {name: SHERLOCK_REMEDIATION_ENABLED, value: "false"}
+        - {name: SHERLOCK_REMEDIATION_EXECUTOR, value: LIVE}
+        - {name: SHERLOCK_CLUSTER_ID, value: CLUSTER_ID_REQUIRED}
+        - {name: SHERLOCK_REMEDIATION_WORKER_ID, value: remediator-pilot}
+        - {name: SHERLOCK_REMEDIATION_BATCH, value: "1"}
+        - {name: SHERLOCK_REMEDIATION_POLL_INTERVAL, value: "10s"}
+        - {name: SHERLOCK_REMEDIATION_TRUST_ROOTS, value: /etc/sherlock/signing/trust-roots.json}
+        - {name: SHERLOCK_REMEDIATION_RELEASE, value: /etc/sherlock/signing/releases/RELEASE_DIGEST_REQUIRED.json}
+        - {name: SHERLOCK_REMEDIATION_METRICS_ADDRESS, value: "127.0.0.1:9095"}
+        - name: SHERLOCK_REMEDIATION_DATABASE_URL
+          valueFrom: {secretKeyRef: {name: sherlock-remediator-db, key: url}}
+        volumeMounts:
+        - {name: signing, mountPath: /etc/sherlock/signing, readOnly: true}
+        readinessProbe: {exec: {command: ["/app/sherlock-remediator", "healthcheck"]}}
+        livenessProbe: {exec: {command: ["/app/sherlock-remediator", "healthcheck", "live"]}}
+      volumes:
+      - name: signing
+        configMap: {name: sherlock-remediation-signing-public, items: [{key: trust-roots.json, path: trust-roots.json}, {key: release.json, path: releases/RELEASE_DIGEST_REQUIRED.json}]}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: sherlock-remediator-default-deny, namespace: sherlock-system}
+spec:
+  podSelector: {matchLabels: {app: sherlock-remediator}}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: [] # Add only PostgreSQL egress after pilot review.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: sherlock-remediation-signing-public, namespace: sherlock-system}
+data:
+  trust-roots.json: '[]'
+  release.json: '{}'
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: sherlock-remediator, namespace: sherlock-system}
+automountServiceAccountToken: false

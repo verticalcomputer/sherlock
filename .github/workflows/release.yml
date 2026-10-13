@@ -1,0 +1,74 @@
+name: Sign reviewed release
+
+# No push/tag/PR trigger and no GitHub Release publication. The existing
+# source-audit/build gate must approve the exact public package first.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-signing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    if: >-
+      github.repository == 'verticalcomputer/sherlock' &&
+      github.event.repository.private == false &&
+      github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release-signing
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
+    steps:
+      - name: Check out the exact tag commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate approved identity and artifact origin
+        id: selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/verify-release.py select
+          printf 'RELEASE_DIRECTORY=%s/sherlock-reviewed-release\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Download the exact approved artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ steps.selection.outputs.artifact_id }}
+          run-id: ${{ steps.selection.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.RELEASE_DIRECTORY }}
+          merge-multiple: true
+      - name: Validate public package before installing signing tools
+        run: python3 scripts/verify-release.py prepare --directory "$RELEASE_DIRECTORY"
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: v3.0.2
+      - name: Sign and verify the exact manifests
+        run: python3 scripts/verify-release.py sign --directory "$RELEASE_DIRECTORY"
+      - name: Retain only the validated public package and signature bundles
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sherlock-signed-${{ github.ref_name }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ env.RELEASE_DIRECTORY }}/SHA256SUMS
+            ${{ env.RELEASE_DIRECTORY }}/SHA256SUMS.sigstore.json
+            ${{ env.RELEASE_DIRECTORY }}/provenance.unsigned.json
+            ${{ env.RELEASE_DIRECTORY }}/provenance.unsigned.json.sigstore.json
+            ${{ env.RELEASE_DIRECTORY }}/source-files.json
+            ${{ env.RELEASE_DIRECTORY }}/source.tar.gz
+            ${{ env.RELEASE_DIRECTORY }}/sbom.spdx.json
+            ${{ env.RELEASE_DIRECTORY }}/sherlock-node-agent-linux-amd64
+            ${{ env.RELEASE_DIRECTORY }}/sherlock-gateway-linux-amd64

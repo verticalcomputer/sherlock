@@ -1,0 +1,3 @@
+ALTER TABLE remediation_schedule_snapshots DROP CONSTRAINT remediation_snapshot_live_request_fk;
+ALTER TABLE remediation_schedule_snapshots DROP COLUMN live_request_id, DROP COLUMN prior_configuration_revision;
+DROP TABLE collection_repair_requests;

@@ -1,0 +1,17 @@
+{{define "repairs"}}
+    <section class="operations-section" aria-labelledby="repairs-title">
+      <div class="section-title"><h2 id="repairs-title">Collection repair</h2><p>Global repair gate: {{if not .Repairs.Available}}unavailable{{else if .Repairs.GlobalEnabled}}enabled{{else}}disabled{{end}}</p></div>
+      {{if .Repairs.Available}}
+      <dl class="stat-grid">
+        <div><dt>Active requests</dt><dd>{{.Repairs.ActiveRequests}}</dd></div>
+        <div><dt>Awaiting verification</dt><dd>{{.Repairs.PendingVerification}}</dd></div>
+        <div><dt>Verified recoveries</dt><dd>{{.Repairs.Succeeded}}</dd></div>
+        <div><dt>Contained, failed, or expired</dt><dd>{{.Repairs.Contained}}</dd></div>
+        <div><dt>Cancelled / rolled back</dt><dd>{{.Repairs.Cancelled}} / {{.Repairs.RolledBack}}</dd></div>
+      </dl>
+      <h3 class="subsection-title">Latest eligibility decision per stream</h3>
+      {{if .Repairs.Decisions}}<ul class="decision-list">{{range .Repairs.Decisions}}<li><span>{{repairDecisionLabel .Code}}</span><strong>{{.Count}}</strong></li>{{end}}</ul>{{else}}<p class="report-note">No eligibility decisions recorded.</p>{{end}}
+      <p class="section-foot">Read-only. The gate setting does not show whether a remediator is running or a target is authorized; outcome counts include retained history, and decisions are not current source health.</p>
+      {{else}}<div class="notice" role="status">Collection repair data is unavailable. This does not indicate a healthy or disabled service.</div>{{end}}
+    </section>
+{{end}}

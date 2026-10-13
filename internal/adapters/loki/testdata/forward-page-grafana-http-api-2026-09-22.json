@@ -1,0 +1,23 @@
+{
+  "fixture": {
+    "source": "Grafana Loki HTTP API",
+    "version_assumption": "documentation retrieved 2026-09-22",
+    "contract_assumption": "query_range streams response; direction=forward orders oldest to newest; start is inclusive and end is exclusive; limit bounds returned log entries"
+  },
+  "response": {
+    "status": "success",
+    "data": {
+      "resultType": "streams",
+      "result": [
+        {
+          "stream": {"job": "kernel", "node": "comp001"},
+          "values": [["1000000000", "first"], ["3000000000", "third"]]
+        },
+        {
+          "stream": {"job": "kernel", "node": "comp002"},
+          "values": [["2000000000", "second"]]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,981 @@
+{
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "dcgm_gpu_ecc:",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "120+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "121+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "122+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "130+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "131+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "132+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "140+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "141+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "142+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "150+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "151+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "152+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "160+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "161+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "162+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "((DCGM_FI_DEV_ECC_SBE_VOL_TOTAL and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_DBE_VOL_TOTAL and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_SBE_AGG_TOTAL and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_DBE_AGG_TOTAL and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) \u003c= time())) or on(__name__) (DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ROW_REMAP_FAILURE and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE) \u003c= time())))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 102
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 122
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 130
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 131
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 132
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 140
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 141
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 142
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 150
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 151
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 152
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 160
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 161
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 162
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_ECC_SBE_VOL_TOTAL and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_DBE_VOL_TOTAL and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_SBE_AGG_TOTAL and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ECC_DBE_AGG_TOTAL and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL) \u003c= time())) or on(__name__) (DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) \u003c= time())) or on(__name__) (DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) \u003c= time())) or on(__name__) (DCGM_FI_DEV_ROW_REMAP_FAILURE and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE) \u003c= time())))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 122
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 130
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 131
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 132
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 140
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 141
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 142
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 150
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 151
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 152
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 160
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 161
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 162
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_ecc:node-a",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "120+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "121+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "122+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "130+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "131+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "132+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "140+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "141+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "142+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "150+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "151+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "152+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "160+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "161+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "162+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "(((DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 130
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 131
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 140
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 141
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 150
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 151
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 160
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 161
+            }
+          ]
+        },
+        {
+          "expr": "(((DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_VOL_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_SBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 130
+            },
+            {
+              "labels": "DCGM_FI_DEV_ECC_DBE_AGG_TOTAL{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 131
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 140
+            },
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 141
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 150
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 151
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 160
+            },
+            {
+              "labels": "DCGM_FI_DEV_ROW_REMAP_FAILURE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 161
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_memory:",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "120+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "121+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "122+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "((DCGM_FI_DEV_FB_USED and (timestamp(DCGM_FI_DEV_FB_USED) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED) \u003c= time())) or on(__name__) (DCGM_FI_DEV_FB_FREE and (timestamp(DCGM_FI_DEV_FB_FREE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE) \u003c= time())) or on(__name__) (DCGM_FI_DEV_FB_RESERVED and (timestamp(DCGM_FI_DEV_FB_RESERVED) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED) \u003c= time())))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 102
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 122
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_FB_USED and (timestamp(DCGM_FI_DEV_FB_USED) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED) \u003c= time())) or on(__name__) (DCGM_FI_DEV_FB_FREE and (timestamp(DCGM_FI_DEV_FB_FREE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE) \u003c= time())) or on(__name__) (DCGM_FI_DEV_FB_RESERVED and (timestamp(DCGM_FI_DEV_FB_RESERVED) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED) \u003c= time())))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 122
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_memory:node-a",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "120+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "121+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "122+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "(((DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_USED{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_USED{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            }
+          ]
+        },
+        {
+          "expr": "(((DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_USED{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_USED{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 120
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 121
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_power:",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "((DCGM_FI_DEV_POWER_USAGE and (timestamp(DCGM_FI_DEV_POWER_USAGE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE) \u003c= time())) or on(__name__) (DCGM_FI_DEV_POWER_MGMT_LIMIT and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT) \u003c= time())))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 102
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_POWER_USAGE and (timestamp(DCGM_FI_DEV_POWER_USAGE) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE) \u003c= time())) or on(__name__) (DCGM_FI_DEV_POWER_MGMT_LIMIT and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT) \u003c= time())))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_power:node-a",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "(((DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            }
+          ]
+        },
+        {
+          "expr": "(((DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_temperature:",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "((DCGM_FI_DEV_GPU_TEMP and (timestamp(DCGM_FI_DEV_GPU_TEMP) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP) \u003c= time())) or on(__name__) (DCGM_FI_DEV_MEMORY_TEMP and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) \u003c= time())))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 102
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_GPU_TEMP and (timestamp(DCGM_FI_DEV_GPU_TEMP) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP) \u003c= time())) or on(__name__) (DCGM_FI_DEV_MEMORY_TEMP and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) \u003c= time())))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+              "value": 112
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcgm_gpu_temperature:node-a",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "100+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "101+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "102+0x2 _ _ _"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+          "values": "110+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+          "values": "111+0x5"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-b\",UUID=\"GPU-b\"}",
+          "values": "112+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "(((DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 100
+            },
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 101
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            }
+          ]
+        },
+        {
+          "expr": "(((DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP{hostname=\"node-a\"}) \u003c= time()))) or on(__name__) ((DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\"}) \u003c= time())) or (DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"} and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"}) \u003e= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\"}) \u003c= time()))))",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-a1\"}",
+              "value": 110
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{hostname=\"node-a\",UUID=\"GPU-a2\"}",
+              "value": 111
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# Install as a USER service on the approved FixtureNetwork 2 head only.
+[Unit]
+Description=Sherlock continuous read-only InfiniBand monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/sherlock/collector-pop.env
+EnvironmentFile=%h/.config/sherlock/network-monitor.env
+ExecStart=%h/.local/bin/sherlock-network-monitor network-monitor
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=15s
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target
