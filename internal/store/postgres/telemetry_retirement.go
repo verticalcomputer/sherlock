@@ -67,6 +67,10 @@ func retirementAuthority(ctx context.Context, tx pgx.Tx, cluster domain.ClusterI
 	// Authority may have waited for an inventory writer. Validate signing/future
 	// times against a fresh database clock after that authoritative lock boundary.
 	err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&at)
+	// pgx may return time.Local even when its offset is UTC. JSON decodes a
+	// zero-offset receipt as time.UTC, so issue the same representation that
+	// immutable receipt replay returns without changing the timestamp instant.
+	at = at.UTC()
 	grant.NotBefore = at
 	grant.NotAfter = at.Add(telemetry.GrantLease)
 	return grant, at, err

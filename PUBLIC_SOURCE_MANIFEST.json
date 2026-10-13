@@ -4983,8 +4983,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_retirement.go",
-      "sha256": "f02a602739ce1f7fc5c2c403e3f0fef98ea501b5b80880cce68a5ae8ae008a5a",
-      "size": 22971
+      "sha256": "fabe4a9a31401380a21bf84ffeebe796881ba5b97facb34658c11ccd6f6d3c21",
+      "size": 23212
     },
     {
       "executable": false,
@@ -4997,6 +4997,12 @@
       "path": "internal/store/postgres/telemetry_retirement_integration_test.go",
       "sha256": "20d9e482823c6b3d9ed9563ec072731de20fe428a758b558c1bc97d66d4abef5",
       "size": 25251
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/telemetry_retirement_time_integration_test.go",
+      "sha256": "43dfa82b6d7591b678aac80789a47fd42214fee0d84dcb2ea39d1b2d9baefada",
+      "size": 5736
     },
     {
       "executable": false,
