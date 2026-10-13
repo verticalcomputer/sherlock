@@ -1,11 +1,12 @@
 # GP-06f ownership retirement contract
 
-Prepared October 8, 2026 before implementation. This extends the
-[fixture telemetry contract](GP06F_TELEMETRY_V1_CONTRACT.md) and the
-[node](GP06F_NODE_RUNTIME_CONTRACT.md) and
-[gateway](GP06F_GATEWAY_RUNTIME_CONTRACT.md) runtime contracts. The foundation
-backpressures without pruning; this document does not claim retirement delivery,
-client readiness, migration acceptance or installation authority.
+This implemented extension adds ownership release/completion to
+[telemetry v1](protocol.md) and the [node](node-runtime.md) and
+[gateway](gateway-runtime.md) runtimes. Earlier foundation acceptance is preserved;
+current qualification is tracked in [next.md](../../../next.md).
+Code owners are [protocol types](../../../internal/telemetry/release.go),
+[journal handshake](../../../internal/telemetryjournal/release_handshake.go), and
+[gateway orchestration](../../../internal/gatewaytelemetry/retirement.go).
 
 ## Purpose and compatibility
 
@@ -194,8 +195,8 @@ with the original signed node completion. Returned receipts must bind the exact
 request, phase, admission, preparation, commit and completion identities. A valid
 signature alone does not establish a known session or current authority.
 
-The local journal uses explicit schema 3. This candidate supports fresh fixture
-journals only: initialized schema-2 journals are refused and preserved. There is
+The local journal uses explicit schema 3 for fixture and Linux profiles.
+Initialized schema-1/schema-2 journals are refused and preserved. There is
 no in-place conversion or downgrade acceptance. PostgreSQL migration 79 adds
 retirement proof and archived-key state; unsafe populated rollback refuses to
 discard it. These are independent persistence boundaries.

@@ -2,6 +2,14 @@
   "version": 1,
   "documents": [
     {
+      "path": "docs/README.md",
+      "kind": "reference",
+      "topics": [
+        "overview"
+      ],
+      "summary": "Reader-oriented documentation index and document responsibilities."
+    },
+    {
       "path": "README.md",
       "kind": "current",
       "topics": [
@@ -21,20 +29,24 @@
       "path": "next.md",
       "kind": "current",
       "topics": [
-        "overview"
+        "overview",
+        "agent",
+        "release",
+        "investigation",
+        "repair"
       ],
-      "summary": "Current handoff and immediate remaining work."
+      "summary": "Current source capabilities, verified release state, delivery gaps and next work."
     },
     {
-      "path": "docs/KNOWLEDGE.md",
+      "path": "docs/development.md",
       "kind": "reference",
       "topics": [
         "development"
       ],
-      "summary": "Documentation lifecycle, context commands and cleanup decisions."
+      "summary": "Contributor context, factual review and optional checkpoint-record policy."
     },
     {
-      "path": "docs/PUBLIC_ARCHITECTURE.md",
+      "path": "docs/architecture.md",
       "kind": "current",
       "topics": [
         "agent",
@@ -43,7 +55,7 @@
       "summary": "System flow and qualification boundaries."
     },
     {
-      "path": "docs/LINUX_RESIDENT_SOURCES.md",
+      "path": "docs/reference/telemetry/linux-sources.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -51,7 +63,7 @@
       "summary": "Linux host/root profiles, permissions, failure semantics and open gates."
     },
     {
-      "path": "docs/GP06F_RESIDENT_TELEMETRY_AGENT.md",
+      "path": "docs/reference/telemetry/overview.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -59,7 +71,7 @@
       "summary": "Resident monitoring design and permission boundaries."
     },
     {
-      "path": "docs/GP06F_TELEMETRY_V1_CONTRACT.md",
+      "path": "docs/reference/telemetry/protocol.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -67,7 +79,7 @@
       "summary": "Versioned telemetry transport, fixture schema and durable intake."
     },
     {
-      "path": "docs/GP06F_NODE_IDENTITY_CONTRACT.md",
+      "path": "docs/reference/telemetry/node-identity.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -75,7 +87,7 @@
       "summary": "Node identity enrollment and certificate authority checks."
     },
     {
-      "path": "docs/GP06F_NODE_RUNTIME_CONTRACT.md",
+      "path": "docs/reference/telemetry/node-runtime.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -83,7 +95,7 @@
       "summary": "Node runtime, replay and bounded spool contract."
     },
     {
-      "path": "docs/GP06F_GATEWAY_RUNTIME_CONTRACT.md",
+      "path": "docs/reference/telemetry/gateway-runtime.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -91,7 +103,7 @@
       "summary": "Gateway ownership, authenticated relay and backpressure."
     },
     {
-      "path": "docs/GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md",
+      "path": "docs/reference/telemetry/ownership-retirement.md",
       "kind": "contract",
       "topics": [
         "agent"
@@ -115,7 +127,7 @@
       "summary": "Journal persistence and ownership model."
     },
     {
-      "path": "docs/GP06F_RELEASE_SIGNING.md",
+      "path": "docs/guides/release-signing.md",
       "kind": "contract",
       "topics": [
         "release"
@@ -123,15 +135,15 @@
       "summary": "Protected keyless signing and exact package approval."
     },
     {
-      "path": "docs/GP06F_CANDIDATE_REVIEW.md",
+      "path": "docs/guides/release-review.md",
       "kind": "contract",
       "topics": [
         "release"
       ],
-      "summary": "Candidate review, fixture scope and client distribution gates."
+      "summary": "Unsigned candidate preparation, payload review and client pinning/removal."
     },
     {
-      "path": "docs/PUBLIC_SOURCE_EXPORT.md",
+      "path": "docs/guides/source-export.md",
       "kind": "reference",
       "topics": [
         "release"

@@ -20,5 +20,5 @@ authority. Apache-2.0 with Vertical Computer Inc attribution is published;
 exact signed packages, provenance, SBOM, independent approval and client pinning/
 removal requirements still precede installation. Loki/Alloy remain deferred.
 
-The implemented host/root slice is specified in [the Linux source contract](docs/LINUX_RESIDENT_SOURCES.md).
-Use [next.md](next.md) for the current handoff and the [documentation guide](docs/KNOWLEDGE.md) for scoped context.
+The implemented host/root slice is specified in [the Linux source contract](docs/reference/telemetry/linux-sources.md).
+Use [next.md](next.md) for the current handoff and the [documentation guide](docs/development.md) for scoped context.

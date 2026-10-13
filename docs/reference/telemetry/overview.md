@@ -1,40 +1,34 @@
-# GP-06f — resident telemetry agent and cluster-local gateway
+# Resident telemetry design (GP-06f)
 
-October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
+This reference describes the resident monitoring boundary and remaining design
+requirements. The [current status](../../../next.md) separates implemented
+behavior from release and live qualification. GP-06f is step 4 of the
+[implementation sequence](../../../implementation.md); canary qualification is
+step 5. GP-06e retains its separately recorded legacy SSH acceptance.
 
-Status (2026-10-08): **fixture foundation repository-accepted; GP-06f open and not installed**. Step 4 of the
-private implementation history withheld; canary is step 5. Depends on GP-18c,
-GP-02 canonical identity/semantics, GP-03 typed ingestion and GP-23b spooling.
-GP-06e remains the separately accepted legacy SSH implementation.
+Implemented foundations include signed batches, node-bound enrollment, protected
+CSR relay/import, node mTLS, durable node/gateway queues, cloud history, fair
+replay, ownership retirement and bounded receipt pruning. The admitted profiles
+are synthetic `fixture.v1` and opt-in [Linux host/root](linux-sources.md).
+All resident profiles currently remain outside ordinary health projections.
 
-The detailed [telemetry v1 contract](GP06F_TELEMETRY_V1_CONTRACT.md) fixes routes,
-wire identity, signing, ownership, lifecycle, numeric bounds and staged repository
-acceptance before active implementation. It does not establish installation or
-hardware coverage.
-
-The active foundation now includes strict signed fixture messages, scoped cloud
-authority/history, atomic receipts, protected CSR-bound bootstrap, dedicated node
-TLS, runnable fixture node/gateway binaries, fair replay and shared physical
-storage limits. The private operational evidence withheld
-records actual binary outage/restart flow and the passing frozen-candidate full
-repository/isolated database gate. Receipt/session ownership retirement,
-long-term pruning, exact source/build review and client qualification remain open;
-the foundation safely backpressures at its documented receipt/session/key caps.
-The prepared [retirement contract](GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md),
-[node identity](GP06F_NODE_IDENTITY_CONTRACT.md),
-[node runtime](GP06F_NODE_RUNTIME_CONTRACT.md) and
-[gateway runtime](GP06F_GATEWAY_RUNTIME_CONTRACT.md) contracts separate these gates.
+The [protocol](protocol.md), [identity](node-identity.md), [node runtime](node-runtime.md),
+[gateway runtime](gateway-runtime.md) and [retirement](ownership-retirement.md)
+references define their respective interfaces. Source code owners are
+[the node entrypoint](../../../cmd/sherlock-node-agent/main.go),
+[the gateway entrypoint](../../../cmd/sherlock-gateway/main.go) and
+[central telemetry wiring](../../../cmd/sherlock-control/main.go).
 
 ## Authority and source boundary
 
 The node agent pushes telemetry to its cluster-local gateway. The gateway keeps
 Sherlock's outbound authenticated connection; cloud intake cannot initiate node
 commands. There is no remote command endpoint, arbitrary executable/configured
-shell, automatic update or repair authority. Client-controlled installation,
-version pinning, upgrade and removal are documented and reversible.
+shell, automatic update or repair authority. The release guides specify client
+version pinning, upgrade and removal requirements; they do not provide a qualified
+service installer.
+
+The following GPU/network/process coverage requirements are planned source work:
 
 Use a minimally privileged service and reviewed local read APIs for GPU/host,
 filesystem and network facts. Reuse local exporter/DCGM/NVML interfaces where
@@ -43,12 +37,13 @@ stress tests, device resets, workloads or driver changes. Declare every supporte
 driver/hardware/OS profile. GPU-process visibility is independently qualified;
 agent presence alone does not prove idleness or exact job attribution.
 BMC/Redfish credentials and polling stay at the head gateway (GP-23a).
-Continuous events/optional optics are separately qualified by private operational evidence withheld.
+Continuous events and optional optics are planned GP-06g sources; their resident
+adapters and live coverage remain open.
 
 ## Enrollment and identity interface
 
 An administrator approves cluster, expected node identity, inventory revision,
-source allow-list, resource policy and supported version range. Bootstrap is
+source allow-list, resource policy and exact agent version/build digest. Bootstrap is
 single-use, short-lived and node-bound; possession cannot enroll another node.
 Use mutually authenticated, pinned gateway identity and per-node credentials.
 Document issuance, expiry, rotation, revocation and local key permissions.
@@ -64,19 +59,19 @@ any re-enrollment recovery explicitly without silently transferring old authorit
 
 ## Versioned batch and acknowledgement contract
 
-Implement an additive node-ingress interface at the gateway and a separately
-versioned outbound telemetry-ingress interface in Sherlock. Final route names,
-wire schema, compatibility matrix and generated examples must be committed
-before implementation acceptance. The prepared v1 contract identifies the
-implemented synthetic foundation routes; hardware source APIs remain unqualified.
+The node-ingress and outbound collector interfaces are additive and versioned.
+The [protocol](protocol.md) and [retirement extension](ownership-retirement.md)
+define implemented routes, wire schemas and compatibility. Hardware coverage
+must be qualified separately for each source profile.
 Preserve existing v1 metrics, typed v2 collector plans/results and their leases;
 unsolicited agent batches cannot forge collection-run results or diagnostic grants.
 
 Each batch contains protocol/agent/source versions, cluster/node/enrollment
 revision, boot/session ID, monotonic sequence, sample/event identifiers, payload
-digest, collection and receipt times, units/semantics, applicability, expected
-coverage and explicit omissions/gaps. Version the identity and counter-reset
-rules. Bound compressed and decompressed bytes, rows, labels and timestamp skew.
+digest, observation/collection times, units/semantics, expected coverage and
+explicit omissions/gaps. Gateway and cloud receipts bind their own durability
+times separately. The protocol versions identity and counter-reset rules and
+bounds bytes, records and identifiers. Compressed request bodies are rejected.
 Reject foreign identities, digest conflicts, malformed values and unsupported
 versions with typed outcomes; never silently accept a partial batch as complete.
 
@@ -92,16 +87,20 @@ clear a newer fault or override a newer projection.
 
 ## Cadence, spooling and failure behavior
 
-Defaults are network samples every 10 seconds, GPU/host samples and heartbeats
-every 30 seconds. Use bounded concurrency, deadlines, jitter and backoff. A
-heartbeat reports service contact, queue health and source-specific freshness;
-it is not proof that every source works. Expired credentials/clock skew remain
-visible without trusting client wall time to erase gaps.
+The implemented collection loop defaults to 30 seconds for fixture and Linux
+sources, with bounded upload concurrency, deadlines, retry jitter and backoff.
+Network sampling every 10 seconds and GPU sampling/independent heartbeats every
+30 seconds remain design targets. There is no separate periodic heartbeat source
+in the current runtime. A future heartbeat must distinguish service contact,
+queue health and source freshness; contact cannot prove every source works.
+Expired credentials/clock skew must remain distinguishable from source health;
+client wall time cannot erase gaps.
 
 The node spool is capped at **256 MiB or 24 hours**, whichever binds first.
-Define an additional minimum-free-disk reserve before installation. Cap gateway
-aggregate/per-node spool, memory, CPU, bandwidth, batch size and replay rate with
-documented numeric configuration before canary; no unbounded queues or retries.
+The journal defaults to a 1 GiB minimum-free-disk reserve. The [numeric resource
+contract](protocol.md#numeric-resource-contract) records gateway aggregate/per-node
+storage, transport and concurrency bounds. OS CPU/memory enforcement and actual
+workload overhead still require reviewed deployment settings and canary evidence.
 Reserve space for loss records and current contact. Overflow/expiry records the
 source, sequence/time interval, reason and count where known; unknown counts
 stay unknown. Loss of durable storage prevents a success acknowledgement.
@@ -112,8 +111,9 @@ handling; never delete retained evidence implicitly on version upgrade.
 
 ## Source-audit/build gate before client installation
 
-Complete the installation subset of the six private operational evidence withheld:
-disclosure/secret inventory, reviewed public/private manifest, Apache-2.0 and
+Before client installation, complete the applicable [release review](../../guides/release-review.md)
+and [signing](../../guides/release-signing.md) gates: disclosure/secret inventory,
+reviewed public/private manifest, Apache-2.0 and
 ownership/dependency notices, auditable source for the exact candidate, reproducible
 builds, permission/payload/endpoint documentation, signed checksums, provenance,
 SBOM, independent review and pinning/removal instructions. Clients must be able

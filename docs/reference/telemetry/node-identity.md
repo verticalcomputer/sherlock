@@ -1,8 +1,11 @@
 # GP-06f node identity bootstrap and certificate lifecycle
 
-Prepared October 8, 2026 before implementation. This extends
-[the telemetry v1 contract](GP06F_TELEMETRY_V1_CONTRACT.md). Repository proof is
-separate from release-source review, client installation and live qualification.
+This extends [telemetry v1](protocol.md). Code owners are
+[identity primitives](../../../internal/nodeidentity),
+[transactional issuance](../../../internal/store/postgres/telemetry_identity.go),
+[local relay](../../../internal/gatewaytelemetry/identity.go), and
+[node commands](../../../cmd/sherlock-node-agent/identity.go).
+See [current status](../../../next.md) for qualification limits.
 
 ## Authority and bootstrap
 
@@ -72,11 +75,17 @@ corrupt or mismatched files fail closed; keys are never silently regenerated.
 An interrupted request resumes with its durable existing key. A failed import
 does not replace the current public identity. Errors use fixed redacted sentinels.
 
-Routine renewal uses a valid ACTIVE node mTLS identity and a new approved token
-bound to the same CSR/SPKI; gateway relay retains current cloud authority checks.
-No key change is inferred from renewal. Renew before expiry (recommended twelve
-hours); after expiry use the same offline protected relay procedure. VERIFY_ONLY
-keys receive no new certificate. An active TLS key can replay sealed batches
+Renewal is an operator-mediated token/CSR relay followed by node import. There
+is no automatic renewal loop or node-mTLS renewal HTTP endpoint. A new approved
+token can bind the same CSR/SPKI; current cloud authority is checked and no key
+change is inferred. Renew before expiry and qualify the reload/restart procedure;
+VERIFY_ONLY keys receive no new certificate.
+
+The current `relay-identity` helper requires a `fixture_only` gateway
+configuration: `RelayIdentity` rejects `resident_sources` configuration. This is
+a delivery gap for the Linux mode, not a claim that Linux telemetry replay lacks
+mTLS. Close and test that configuration gap before publishing a Linux enrollment
+procedure. Do not switch modes or reuse credentials as an undocumented workaround. An active TLS key can replay sealed batches
 signed by a separately authorized old key only for its exact known old session.
 Compromise revocation denies ingress and retrieval before deduplication. No
 automatic updates, commands, workload actions or repair authority are introduced.

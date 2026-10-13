@@ -1,14 +1,12 @@
 # Telemetry protocol v1
 
-October 13 extension: [Linux host/root filesystem sources](../../docs/LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
-
 This package defines unsolicited, signed telemetry. It does not carry collector
-work, leases, diagnostic grants or commands. The only admitted source profile is
-`fixture.v1`; its values are synthetic and must remain separate from hardware
-metrics, health evaluators and workload progress.
+work, leases, diagnostic grants or commands. [Profile definitions](profiles.go)
+admit synthetic `fixture.v1` and opt-in `linux.host.v1` / `linux.rootfs.v1`.
+All remain scoped history, separate from ordinary health/evaluator projections.
+The [protocol reference](../../docs/reference/telemetry/protocol.md) owns transport
+semantics and [Linux source reference](../../docs/reference/telemetry/linux-sources.md)
+owns host/root fields. This README documents the fixture vectors and canonical encoding.
 
 `ValidateNodeBatch` and `ValidateSessionMessage` check schema. `ValidateGrant`
 checks the issued current lease and scope shape. `ValidateBatchForGrant` checks
@@ -84,8 +82,8 @@ signs `sherlock.node-telemetry.session.signature.v1` plus NUL plus its digest.
 FINALIZE signs the exact prior target session and durably known terminal sequence
 at current signing time. Terminal zero is known empty; an absent terminal is
 unknown and rejected. Finalized and cloud-covered are distinct from gateway
-ownership retirement. Slice1 does not prune cloud sessions/keys/receipts or mark
-Retired=true; a later authenticated ownership-retirement handshake is required.
+ownership retirement. The implemented [retirement handshake](../../docs/reference/telemetry/ownership-retirement.md)
+separately proves release/completion before session/key/receipt reclamation.
 
 The JSON fixtures under testdata fix node, OPEN and FINALIZE digests/signatures.
 Their Ed25519 test seed is publicly specified as bytes 0 through 31. It is fixture

@@ -1,6 +1,6 @@
 # GP-06f Linux resident-source repository checkpoint — October 13, 2026
 
-This checkpoint implements the [prepared host/root contract](../LINUX_RESIDENT_SOURCES.md)
+This checkpoint implements the [prepared host/root contract](../reference/telemetry/linux-sources.md)
 in the existing GP sequence. It preserves fixture signatures/defaults, existing
 collector routes and ownership replay. GP-06f and R1 remain open.
 

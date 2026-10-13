@@ -1,19 +1,21 @@
-# Sherlock release signing — selected October 12, 2026
+# Sign and verify a reviewed release
 
 Vertical Computer Inc selected **GitHub Actions OIDC with Sigstore/Cosign keyless
 signing**. Public repository/module: `github.com/verticalcomputer/sherlock`.
 Security contact: `akash@vertical.computer`. No permanent private release key,
-password or commit-key reuse is needed. The October 9 recommendation is now a
-selected architecture; actual GitHub execution and signatures remain unqualified.
+password or commit-key reuse is needed. The workflow and verifier implement the
+policy below. [Current status](../../next.md) records whether hosted protections
+and actual signed releases have been verified; this guide is not that evidence.
 
 ## Local implementation and verification identity
 
-The [manual release workflow](../.github/workflows/release.yml) accepts only the
+The [manual release workflow](../../.github/workflows/release.yml) accepts only the
 public `verticalcomputer/sherlock` repository on an exact version tag. It has no
 push, pull-request or automatic tag trigger, no GitHub Release publication step,
 and no repository write permission. A `release-signing` environment and an exact
 reviewed artifact approval are required. Missing or false approval stops before
-signing. It does not sign the existing private fixture candidate.
+signing. Unsigned preparation output is rejected until it satisfies the exact
+public package approval contract.
 
 Clients trust these constraints, with the tag replaced by the exact approved release:
 
@@ -27,9 +29,12 @@ checksum and provenance files. Source mapping and reproducible builds are still
 required. See [Sigstore's CI quickstart](https://docs.sigstore.dev/quickstart/quickstart-ci/)
 and [blob signing](https://docs.sigstore.dev/cosign/signing/signing_with_blobs/).
 
-## GitHub configuration before the first run
+## Hosting and package prerequisites for every run
 
-These hosting settings have not been changed or verified locally:
+Verify these settings against the actual repository before signing. The workflow
+file alone cannot establish remote protection state; recheck after policy or
+reviewer changes. An independent reviewer must be able to approve the run when
+self-review is prevented.
 
 1. Complete the existing exact source/disclosure, dependency/notice and build
    review. Export only reviewed public material into the public repository; keep
@@ -37,9 +42,9 @@ These hosting settings have not been changed or verified locally:
 2. Put this workflow and verifier in the approved source commit and default
    branch, and create the reviewed version tag pointing to that commit. Protect
    release tags against unauthorized creation, movement and deletion.
-3. Create the `release-signing` environment with required reviewers, prevent
-   self-review/bypass where supported, and restrict deployment to reviewed release
-   tags. Keep signing permissions out of untrusted pull-request jobs.
+3. Verify the `release-signing` environment has required reviewers, prevents
+   self-review/admin bypass and restricts deployment to reviewed release tags.
+   Keep signing permissions out of untrusted pull-request jobs.
 4. Package the reviewed build as a GitHub Actions artifact named
    `sherlock-reviewed-release`, from a run on that exact source commit. Record its
    numeric artifact ID. The download is bound to that ID and commit; no latest-run
@@ -133,11 +138,9 @@ identities fail. It never installs or runs downloaded executables. See
 
 ## Acceptance boundary
 
-The private operational evidence withheld records offline policy,
-payload and command tests plus workflow lint. Tests stub Cosign and make no claim
-of successful certificate issuance or real cryptographic signature validation.
-A hosted run must prove actual OIDC issuance, exact verifier rejection for wrong
-identity/issuer and changed manifest/binary, protected tag/environment behavior
-and trusted client distribution. No persistent key, signature, public log entry,
-repository visibility change, installation or publication was created locally.
-Signing grants no node-enrollment, telemetry-signing, repair or update authority.
+[Offline policy tests](../../scripts/test_release_signing.py) stub Cosign; they
+cannot establish real certificate issuance or cryptographic verification. A
+hosted run must prove OIDC issuance, exact verifier rejection for wrong
+identity/issuer and changed manifest/binary, tag/environment protection and
+trusted client distribution. No GitHub Release is created by this workflow.
+Signing grants no node enrollment, telemetry-signing, repair or update authority.
