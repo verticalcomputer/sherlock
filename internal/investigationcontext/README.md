@@ -1,7 +1,8 @@
 # Entity-fair context selection
 
-The acceptance contract and measured fleet examples are in
-private operational evidence withheld.
+Measured fleet acceptance evidence is private and is not included in this
+repository. The behavior below describes the evidence-selection implementation,
+not live fleet acceptance or contributor documentation retrieval.
 
 Retrieval ranks eligible evidence deterministically: mandatory first, then
 relevance score descending, then evidence ID ascending. It identifies the

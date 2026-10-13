@@ -1,9 +1,9 @@
 # Sherlock architecture and qualification boundaries
 
-October 13 extension: [Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md)
-adds explicit source profiles and history-only intake. The dated fixture contract
-below retains its original scope; source publication is complete, while signed
-client release, native host/canary and fleet qualification remain open.
+The current source profiles include synthetic `fixture.v1` and opt-in
+[Linux host/root filesystem sources](LINUX_RESIDENT_SOURCES.md). Linux intake is
+history-only. Source publication is complete; signed client release, native
+host/canary and fleet qualification remain open.
 
 The central API and workers use PostgreSQL for durable work, leases, results,
 incident episodes and notification delivery state. The admin UI and API consume
@@ -17,7 +17,7 @@ across the outbound authenticated boundary. Identity enrollment, revocation,
 acknowledgement, replay, bounded spooling and ownership retirement are specified
 in the GP-06f contracts included with this source.
 
-The implemented resident source is synthetic fixture.v1. No hardware coverage,
+The resident sources do not establish qualified hardware coverage. No
 client installation, native Linux resource qualification, certificate lifecycle,
 backup/restore or fleet acceptance is implied. Continuous passive events and
 optical reads require separate source qualification. Head-local BMC collection

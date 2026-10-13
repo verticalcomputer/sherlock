@@ -3,8 +3,8 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "428ded40181e257d7db681320dcf4a999d373e874c05e1f0ed219b9762958058",
-      "size": 2309
+      "sha256": "3d2f751387466ed50c6d80ce8b4d52e8a2f6b0b96305caaa1e971abf03f32f7c",
+      "size": 2394
     },
     {
       "executable": false,
@@ -21,8 +21,8 @@
     {
       "executable": false,
       "path": "CONTRIBUTING.md",
-      "sha256": "f7a0fd70f0be1793c26646bba63267bfb4334986a3fa35dc2178cd52e204d073",
-      "size": 1431
+      "sha256": "6fea5a427a639bca61c5abc9a9ded0f4870574fcecf076bc59180e9cdd848fa6",
+      "size": 1756
     },
     {
       "executable": false,
@@ -33,8 +33,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "96fc70fb61c5c59f0cf38c96e98d76bb8c5bb422f9923d5dc4a5882576df4973",
-      "size": 1590
+      "sha256": "0590e585ca7d04e8dbf562542fcd5b370b67d03fd5d90daece17608a54f33af8",
+      "size": 1787
     },
     {
       "executable": false,
@@ -45,8 +45,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "3a1595e2c52297d3df309f04b2e31827502ef07c401c8c9c23bf0682b26bb18a",
-      "size": 3409
+      "sha256": "54920333c7b0dfa441053efcafc5dab5ea77ebe26af77ffd616750455620df7c",
+      "size": 3573
     },
     {
       "executable": false,
@@ -657,8 +657,8 @@
     {
       "executable": false,
       "path": "deploy/pilot/m15/PILOT_CHECKLIST.md",
-      "sha256": "fee5c5dbed8fad1e824801ff6350b7f4cbf36ece6a4dd8144b3e2aebb2637661",
-      "size": 822
+      "sha256": "d2e4a98dd78baf82c917b56990540ade8cd64fcd102a6199393441883bd41d8d",
+      "size": 1077
     },
     {
       "executable": false,
@@ -872,9 +872,9 @@
     },
     {
       "executable": false,
-      "path": "docs/LINUX_RESIDENT_CHECKPOINT_20261013.md",
-      "sha256": "811baf968dfb3407e4b4a5150613862f2805c9894f6cb67fd622cd7a4708ffd5",
-      "size": 3761
+      "path": "docs/KNOWLEDGE.md",
+      "sha256": "aa19826cc24261de672823ba70f9dc166b2d9625d5b3812ed00c0c655ba657c9",
+      "size": 3784
     },
     {
       "executable": false,
@@ -885,14 +885,26 @@
     {
       "executable": false,
       "path": "docs/PUBLIC_ARCHITECTURE.md",
-      "sha256": "9dec6cfb8bc5834cd593d0e1f2e68c1b16795b20511caa0b185258bcd420177a",
-      "size": 2164
+      "sha256": "ef753275b7632c49da3a6af3db48c5e681569a7bc97b1c9bcf15813adfaea642",
+      "size": 2112
     },
     {
       "executable": false,
       "path": "docs/PUBLIC_SOURCE_EXPORT.md",
       "sha256": "562c401c7b667d7f75c729235f6f4705a733bcc623baf96d6558bceb19b6536c",
       "size": 4606
+    },
+    {
+      "executable": false,
+      "path": "docs/history/LINUX_RESIDENT_CHECKPOINT_20261013.md",
+      "sha256": "64ee5b5368bb270045293c653b0f18e87e89ad2ed59f617e9c8aaed24a528251",
+      "size": 3767
+    },
+    {
+      "executable": false,
+      "path": "docs/knowledge.json",
+      "sha256": "d53304bc47784a4bed7d2263425d7792608d42bdea232f52d2bd5f9b7df75a22",
+      "size": 5484
     },
     {
       "executable": false,
@@ -909,8 +921,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "ea7fac6464430cf464ea35c69f101b7e0b4f13af49a21852aae27e284c1af215",
-      "size": 2032
+      "sha256": "967f0e04de7e32d6dddca9355adb74cc958b14e9d9321dd129fa9454885e8411",
+      "size": 2235
     },
     {
       "executable": false,
@@ -3615,8 +3627,8 @@
     {
       "executable": false,
       "path": "internal/investigationcontext/README.md",
-      "sha256": "024852841031b680f5ca46c13e27d6bc3cc21f8556ea30e29f9558a72815c7f4",
-      "size": 3031
+      "sha256": "63e9c314ebf1ec7b50c212c25cf2e76bf75c0048cba7510b9f2e9bd3f47281c6",
+      "size": 3153
     },
     {
       "executable": false,
@@ -6339,8 +6351,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "7caf6ced142bcbd168df80aed6fa2c873bd679a00362d0911bb95aa8cd6e9d0a",
-      "size": 679
+      "sha256": "8bc8922d6477c6dc9e9482c29b2713f20752764681d212ab9880d1e729442749",
+      "size": 687
     },
     {
       "executable": true,
@@ -6377,6 +6389,12 @@
       "path": "scripts/grafana_xid_recent.py",
       "sha256": "0075b566e37e6c4761609ed21b7e60f3693c441d6dca8117bee15f025b01d535",
       "size": 2805
+    },
+    {
+      "executable": false,
+      "path": "scripts/knowledge.py",
+      "sha256": "dff21e98dd194764a45cea61a6bf6794d0f5c877207d91d6183ccfeb8ae152ef",
+      "size": 6387
     },
     {
       "executable": true,
@@ -6455,6 +6473,12 @@
       "path": "scripts/test_grafana_xid_recent.py",
       "sha256": "013de65bd177307aa040e384b3fe33b91242df0072923e54017c09d5eacb7a1c",
       "size": 1723
+    },
+    {
+      "executable": false,
+      "path": "scripts/test_knowledge.py",
+      "sha256": "3948de0186d3ca68933b96dc88002e9634737a8d3ba09bcc9031dd96eda4932c",
+      "size": 4031
     },
     {
       "executable": false,

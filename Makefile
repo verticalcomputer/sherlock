@@ -1,6 +1,6 @@
 .PHONY: check check-sdk-sync check-typescript eval m11-acceptance test test-dev-pki test-integration test-integration-isolated run-fake-prometheus run-api-mock run-admin-ui run-runner run-investigator migrate-up
 
-check:
+check: check-docs
 	test -z "$$(gofmt -l .)"
 	python3 -m unittest discover -s scripts -p test_release_signing.py
 	python3 -m unittest discover -s scripts -p test_export_public_candidate.py
@@ -11,6 +11,14 @@ check:
 	./scripts/check-sdk-sync.sh
 	go test -race ./...
 	npm --prefix sdk/typescript run smoke
+
+.PHONY: check-docs context
+check-docs:
+	python3 -m unittest discover -s scripts -p test_knowledge.py
+	python3 scripts/knowledge.py check
+
+context:
+	python3 scripts/knowledge.py context
 
 test:
 	go test -race ./...

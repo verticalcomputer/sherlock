@@ -15,6 +15,9 @@ adapters remain open, as do native-host overhead and client qualification.
 See the [source contract](docs/LINUX_RESIDENT_SOURCES.md) and
 [implementation sequence](implementation.md).
 
+Start with the [documentation and context guide](docs/KNOWLEDGE.md) to find current
+contracts, the next checkpoint and dated evidence without mixing their scopes.
+
 ## Build and check
 
 Use the exact Go version in [go.mod](go.mod), Python 3, Node.js 22 and the pinned

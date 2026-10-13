@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "path": "README.md",
+      "kind": "current",
+      "topics": [
+        "overview"
+      ],
+      "summary": "Project capabilities, build entry points and trust boundaries."
+    },
+    {
+      "path": "implementation.md",
+      "kind": "current",
+      "topics": [
+        "overview"
+      ],
+      "summary": "Canonical GP order, dependencies and remaining acceptance gates."
+    },
+    {
+      "path": "next.md",
+      "kind": "current",
+      "topics": [
+        "overview"
+      ],
+      "summary": "Current handoff and immediate remaining work."
+    },
+    {
+      "path": "docs/KNOWLEDGE.md",
+      "kind": "reference",
+      "topics": [
+        "development"
+      ],
+      "summary": "Documentation lifecycle, context commands and cleanup decisions."
+    },
+    {
+      "path": "docs/PUBLIC_ARCHITECTURE.md",
+      "kind": "current",
+      "topics": [
+        "agent",
+        "investigation"
+      ],
+      "summary": "System flow and qualification boundaries."
+    },
+    {
+      "path": "docs/LINUX_RESIDENT_SOURCES.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Linux host/root profiles, permissions, failure semantics and open gates."
+    },
+    {
+      "path": "docs/GP06F_RESIDENT_TELEMETRY_AGENT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Resident monitoring design and permission boundaries."
+    },
+    {
+      "path": "docs/GP06F_TELEMETRY_V1_CONTRACT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Versioned telemetry transport, fixture schema and durable intake."
+    },
+    {
+      "path": "docs/GP06F_NODE_IDENTITY_CONTRACT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Node identity enrollment and certificate authority checks."
+    },
+    {
+      "path": "docs/GP06F_NODE_RUNTIME_CONTRACT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Node runtime, replay and bounded spool contract."
+    },
+    {
+      "path": "docs/GP06F_GATEWAY_RUNTIME_CONTRACT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Gateway ownership, authenticated relay and backpressure."
+    },
+    {
+      "path": "docs/GP06F_OWNERSHIP_RETIREMENT_CONTRACT.md",
+      "kind": "contract",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Ownership retirement and durable loss/receipt handling."
+    },
+    {
+      "path": "internal/telemetry/README.md",
+      "kind": "reference",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Telemetry package validation and scope."
+    },
+    {
+      "path": "internal/telemetryjournal/README.md",
+      "kind": "reference",
+      "topics": [
+        "agent"
+      ],
+      "summary": "Journal persistence and ownership model."
+    },
+    {
+      "path": "docs/GP06F_RELEASE_SIGNING.md",
+      "kind": "contract",
+      "topics": [
+        "release"
+      ],
+      "summary": "Protected keyless signing and exact package approval."
+    },
+    {
+      "path": "docs/GP06F_CANDIDATE_REVIEW.md",
+      "kind": "contract",
+      "topics": [
+        "release"
+      ],
+      "summary": "Candidate review, fixture scope and client distribution gates."
+    },
+    {
+      "path": "docs/PUBLIC_SOURCE_EXPORT.md",
+      "kind": "reference",
+      "topics": [
+        "release"
+      ],
+      "summary": "Explicit public source export and unsigned review assembly."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "kind": "reference",
+      "topics": [
+        "development"
+      ],
+      "summary": "Contribution, verification and disclosure requirements."
+    },
+    {
+      "path": "sdk/README.md",
+      "kind": "reference",
+      "topics": [
+        "development"
+      ],
+      "summary": "SDK generation and client usage."
+    },
+    {
+      "path": "internal/investigationcontext/README.md",
+      "kind": "reference",
+      "topics": [
+        "investigation"
+      ],
+      "summary": "Runtime evidence selection, fairness, bounds and omissions."
+    },
+    {
+      "path": "internal/adapters/gpuprocess/testdata/synthetic-v1/README.md",
+      "kind": "reference",
+      "topics": [
+        "fixtures"
+      ],
+      "summary": "Synthetic GPU process fixture provenance."
+    },
+    {
+      "path": "internal/adapters/slurm/testdata/upstream-data-parser-v0.0.40-hand-authored/README.md",
+      "kind": "reference",
+      "topics": [
+        "fixtures"
+      ],
+      "summary": "Hand-authored Slurm fixture provenance and scope."
+    },
+    {
+      "path": "deploy/pilot/m15/PILOT_CHECKLIST.md",
+      "kind": "reference",
+      "topics": [
+        "repair"
+      ],
+      "summary": "Legacy M15 single-target remediation checklist; separate authority required."
+    },
+    {
+      "path": "docs/history/LINUX_RESIDENT_CHECKPOINT_20261013.md",
+      "kind": "historical",
+      "topics": [
+        "agent",
+        "release"
+      ],
+      "summary": "Dated Linux source delivery evidence; not current live acceptance."
+    },
+    {
+      "path": "SECURITY.md",
+      "kind": "current",
+      "topics": [
+        "legal",
+        "release"
+      ],
+      "summary": "Private security reporting destination."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "kind": "legal",
+      "topics": [
+        "legal"
+      ],
+      "summary": "Third-party license and attribution notices."
+    }
+  ]
+}

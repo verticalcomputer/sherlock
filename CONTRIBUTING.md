@@ -1,5 +1,10 @@
 # Contributing
 
+Use [the documentation guide](docs/KNOWLEDGE.md) and `make context` for a bounded
+starting context. Run `make check-docs` after documentation changes. Register new
+first-party Markdown files in `docs/knowledge.json`; preserve historical evidence
+and keep current status in `next.md` rather than duplicating it in contracts.
+
 Use the exact Go version in go.mod, Python 3, Node.js 22 and the checked-in
 TypeScript lockfile. Run the repository checks described in README.md before
 proposing a change. Integration checks require a newly isolated PostgreSQL
