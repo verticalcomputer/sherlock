@@ -4,6 +4,21 @@ This is the current handoff for the public repository. The [roadmap](implementat
 owns GP order; [documentation](docs/README.md) links to the detailed interfaces.
 Statements below distinguish source behavior from release and live qualification.
 
+## Product priority
+
+As directed October 14, product development continues independently of release
+approval. Signing and installation gates apply to distribution; they do not block
+retrieval, context management, investigation quality or detection improvements.
+The immediate slice corrects evidence ranking: the investigation question and
+hypothesis queries now influence selection instead of being ignored. Bounded
+whole-term matching supplements existing scope/time/class ranking; hard filters,
+mandatory evidence, entity coverage and explicit omissions remain in force.
+[Contract and limits](internal/investigationcontext/README.md);
+[regressions](internal/investigationcontext/query_test.go). This is a retrieval
+bug fix, not evidence of improved live diagnosis or completion of R2.
+Validation: `make check`, focused context/investigation race tests and both
+`make eval` suites pass. The new regressions fail on the previous ranker.
+
 ## Implemented in the source tree
 
 | Area | Behavior and evidence to inspect |
@@ -17,11 +32,17 @@ Statements below distinguish source behavior from release and live qualification
 
 ## Release state
 
-As checked October 13, 2026, source is public with Apache-2.0 and Vertical Computer
-Inc attribution; Linux-source PR #2 and resident-identity PR #4 are merged,
-with both PR #4 CI checks passing. The GitHub `release-signing`
-environment exists with a required reviewer, self-review prevention and admin
-bypass disabled. These remote settings must be rechecked before any signing run.
+As checked October 14, 2026, source is public with Apache-2.0 and Vertical Computer
+Inc attribution; Linux-source PR #2, resident-identity PR #4 and unsigned
+preparation PR #5 are merged, with both PR #5 CI checks passing.
+[Hosted preparation run 38532137934](https://github.com/verticalcomputer/sherlock/actions/runs/38532137934)
+succeeded on source commit `efce1d4a2bf768adc7e83d5ec7dc3d38100b1060`,
+producing unsigned artifact `11878533127` for proposed tag `v0.1.0-rc.1`.
+That tag has not been created. Review and signing must retain this exact source
+commit and artifact identity even if documentation or main advances afterward.
+The GitHub `release-signing` environment requires AkMo3. The owner approved
+sole-maintainer self-review on October 14; admin bypass remains disabled.
+These remote settings must be rechecked before any signing run.
 No GitHub release is published as of this check. Unsigned reproducible preview
 packages and offline verifier tests are not an approved signed client release.
 Use the [release guide](docs/guides/release-signing.md) for exact package approval
@@ -29,21 +50,21 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. Review and merge the unsigned hosted-preparation workflow, then dispatch it
-   on main for the proposed release tag. Review its exact artifact and disabled
-   approval record before protected signing. The [release procedure](docs/guides/release-review.md)
-   separates preparation from approval; no hosted preparation or signing run has
-   yet qualified this workflow. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
-   describes the implemented steps; installation and native canary remain separate.
-2. Continue exact signed-release qualification and remaining resident GPU/network
-   adapters, GP-06g events/optics and gateway BMC qualification under the existing
-   GP sequence. Keep each source's permissions and failure semantics explicit.
-3. Add qualified health/evaluator integration for resident values and the advanced
-   detection/replay work. Historical replay must distinguish missing evidence
-   from missed detection.
-4. Run authorized native-host canaries with measured resource/workload limits,
-   then certificate lifecycle, outage/reconnect/restore and two-cluster soak.
-   Retire routine SSH per node only after replacement coverage is demonstrated.
+1. Evaluate retrieval on investigation scenarios: relevant versus irrelevant
+   evidence under tight context budgets, missing observations and contradictory
+   evidence. Measure relevant-evidence inclusion and omissions across turns.
+2. Improve the existing R2 (GP-12–17) context and investigation loop: verify
+   unresolved-question and prior-action context across turns, test recovery
+   across restarts, and prevent repeated diagnostics without new information.
+   Preserve immutable citations, action budgets and evidence-based closure.
+3. Continue resident adapters, qualified health integration and incident replay
+   under the existing GP sequence. Historical replay must distinguish missing
+   evidence from missed detection. Application progress remains opt-in.
+4. Keep signed distribution and native-host/fleet qualification as separate
+   operations. Exact artifact approval is pending; it is not the next coding
+   dependency. Installation, measured workload overhead, certificate lifecycle,
+   outage/reconnect/restore and two-cluster soak retain their acceptance gates.
+   Retire routine SSH only after verified replacement coverage.
 
 Application progress, complete authorization/UI qualification and R1 live gates
 remain open as described in the roadmap. Repository tests, source availability

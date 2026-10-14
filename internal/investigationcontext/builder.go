@@ -297,10 +297,15 @@ func (builder *Builder) Build(input Input) (Context, error) {
 			return positions[a.EvidenceID] - positions[b.EvidenceID]
 		})
 	} else {
-		query := RetrievalQuery{EntityIDs: input.Scope.EntityIDs, Start: input.Scope.Start, End: input.Scope.End, Text: input.Question}
+		query := RetrievalQuery{EntityIDs: input.Scope.EntityIDs, Start: input.Scope.Start, End: input.Scope.End, Text: input.Question, MaxSummaryBytes: builder.limits.MaxSummaryBytes, MaxExcerptBytes: builder.limits.MaxExcerptBytes}
 		sources := map[string]int{}
 		for _, item := range evidence {
 			sources[item.Source]++
+		}
+		terms := queryTerms(query.Text)
+		textScores := make(map[domain.EvidenceID]int64, len(evidence))
+		for _, item := range evidence {
+			textScores[item.EvidenceID] = queryMatchScore(item, query, terms)
 		}
 		slices.SortStableFunc(evidence, func(a, b EvidenceInput) int {
 			if evidenceMandatory(a) != evidenceMandatory(b) {
@@ -309,7 +314,8 @@ func (builder *Builder) Build(input Input) (Context, error) {
 				}
 				return 1
 			}
-			left, right := relevanceScore(a, query, sources[a.Source] == 1), relevanceScore(b, query, sources[b.Source] == 1)
+			left := relevanceScore(a, query, sources[a.Source] == 1) + textScores[a.EvidenceID]
+			right := relevanceScore(b, query, sources[b.Source] == 1) + textScores[b.EvidenceID]
 			if left > right {
 				return -1
 			}

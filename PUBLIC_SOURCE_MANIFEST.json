@@ -855,8 +855,8 @@
     {
       "executable": false,
       "path": "docs/guides/release-signing.md",
-      "sha256": "6faa630da83643284c93f88c486be938d9cfa72de2eb54b3576bb462c7a8818a",
-      "size": 8997
+      "sha256": "e358e5f5b4f84ffc4d5c8aa6bf18a54d06ec7edf10ddb39e062f8d3426283c7e",
+      "size": 9378
     },
     {
       "executable": false,
@@ -939,8 +939,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "26ea7d68b33d329bce73234be592b447471dd5c837f122ce447634bd31becbea",
-      "size": 2248
+      "sha256": "74de4d154ed4675cf52fd1a755ca7be2c52809ca83857c496b6a07918fb20f46",
+      "size": 2786
     },
     {
       "executable": false,
@@ -3645,14 +3645,14 @@
     {
       "executable": false,
       "path": "internal/investigationcontext/README.md",
-      "sha256": "63e9c314ebf1ec7b50c212c25cf2e76bf75c0048cba7510b9f2e9bd3f47281c6",
-      "size": 3153
+      "sha256": "7ae0ab5e1b9611e168268fbf03631108765ad158b3e8ec16257daefeb449b90b",
+      "size": 4832
     },
     {
       "executable": false,
       "path": "internal/investigationcontext/builder.go",
-      "sha256": "551a9fcd62f2b86ff6168058c01e525e70340973dfb69f3f0541fdbcd76c1857",
-      "size": 39695
+      "sha256": "a949b5c2b5295fad39cdba19bc740a0ba4c26d2393b9bd09ed2e0a47e16d4dfe",
+      "size": 40057
     },
     {
       "executable": false,
@@ -3704,9 +3704,21 @@
     },
     {
       "executable": false,
+      "path": "internal/investigationcontext/query.go",
+      "sha256": "605d99da7a53348a6eacd890c29a54ae5de888fc6ee7bd2759b81595abb79808",
+      "size": 2067
+    },
+    {
+      "executable": false,
+      "path": "internal/investigationcontext/query_test.go",
+      "sha256": "4bae528f29bfc9c19c1071b75d6006544358393c471f8738c7e33b27b04ac98e",
+      "size": 8536
+    },
+    {
+      "executable": false,
       "path": "internal/investigationcontext/retrieval.go",
-      "sha256": "85350bd66e190ce9207fc0d72fc04b8068b51bd04b4b5772ccda7db3d61004a5",
-      "size": 11977
+      "sha256": "099aac8dee6be9a406e16b9b0eab8c8c444c682ac2fa26bd02beff76663c1157",
+      "size": 12053
     },
     {
       "executable": false,
@@ -6369,8 +6381,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "c64cf240ea7000f5c5e6980fdd942686598ff7954415df11356ebd7162a5841b",
-      "size": 4272
+      "sha256": "54be9b7fae297770dcc877884e9bd3a79661f82aac4980ce12921b63122bfcb1",
+      "size": 5633
     },
     {
       "executable": true,

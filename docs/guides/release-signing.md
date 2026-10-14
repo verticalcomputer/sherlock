@@ -20,7 +20,7 @@ record; unbound local preparation output is rejected.
 Clients trust these constraints, with the tag replaced by the exact approved release:
 
 - Issuer: `https://token.actions.githubusercontent.com`.
-- Certificate workflow commit: the independently approved full 40-character source commit.
+- Certificate workflow commit: the explicitly approved full 40-character source commit.
 - Identity: `https://github.com/verticalcomputer/sherlock/.github/workflows/release.yml@refs/tags/<approved-tag>`.
 
 Both signature verifications enforce `--certificate-github-workflow-sha`; a moved or recreated tag cannot substitute a different signing commit. No owner-wide identity wildcard or verification bypass is used. A commit
@@ -33,8 +33,12 @@ and [blob signing](https://docs.sigstore.dev/cosign/signing/signing_with_blobs/)
 
 Verify these settings against the actual repository before signing. The workflow
 file alone cannot establish remote protection state; recheck after policy or
-reviewer changes. An independent reviewer must be able to approve the run when
-self-review is prevented.
+reviewer changes. The owner approved sole-maintainer review by AkMo3 on
+October 14, 2026, including approval of runs that account initiates. Self-review
+is allowed under that exception; manual package approval, required environment
+review and disabled admin bypass remain required. Revisit independent approval
+when another engineering reviewer is available. These are distribution gates,
+not prerequisites for ongoing product development.
 
 1. Complete the existing exact source/disclosure, dependency/notice and build
    review. Export only reviewed public material into the public repository; keep
@@ -49,8 +53,9 @@ self-review is prevented.
    with this workflow/verifier present. If main advanced after preparation, keep
    the reviewed commit. Protect release tags against unauthorized creation,
    movement and deletion.
-4. Verify the `release-signing` environment has required reviewers, prevents
-   self-review/admin bypass and restricts deployment to reviewed release tags.
+4. Verify the `release-signing` environment requires AkMo3, disables admin
+   bypass and restricts deployment to reviewed release tags. Self-review is
+   allowed under the sole-maintainer exception above.
    Keep signing permissions out of untrusted pull-request jobs.
 5. Set the environment variable `RELEASE_APPROVAL_JSON` to the review record
    below, with real exact values and `approved: true` only after package review.
