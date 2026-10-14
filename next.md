@@ -17,10 +17,15 @@ Statements below distinguish source behavior from release and live qualification
 
 ## Release state
 
-As checked October 13, 2026, source is public with Apache-2.0 and Vertical Computer
-Inc attribution; Linux-source PR #2 and resident-identity PR #4 are merged,
-with both PR #4 CI checks passing. The GitHub `release-signing`
-environment exists with a required reviewer, self-review prevention and admin
+As checked October 14, 2026, source is public with Apache-2.0 and Vertical Computer
+Inc attribution; Linux-source PR #2, resident-identity PR #4 and unsigned
+preparation PR #5 are merged, with both PR #5 CI checks passing.
+[Hosted preparation run 38532137934](https://github.com/verticalcomputer/sherlock/actions/runs/38532137934)
+succeeded on source commit `efce1d4a2bf768adc7e83d5ec7dc3d38100b1060`,
+producing unsigned artifact `11878533127` for proposed tag `v0.1.0-rc.1`.
+That tag has not been created. Review and signing must retain this exact source
+commit and artifact identity even if documentation or main advances afterward.
+The GitHub `release-signing` environment exists with a required reviewer, self-review prevention and admin
 bypass disabled. These remote settings must be rechecked before any signing run.
 No GitHub release is published as of this check. Unsigned reproducible preview
 packages and offline verifier tests are not an approved signed client release.
@@ -29,11 +34,11 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. Review and merge the unsigned hosted-preparation workflow, then dispatch it
-   on main for the proposed release tag. Review its exact artifact and disabled
-   approval record before protected signing. The [release procedure](docs/guides/release-review.md)
-   separates preparation from approval; no hosted preparation or signing run has
-   yet qualified this workflow. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
+1. Complete exact package approval for the hosted artifact and arrange distinct
+   signing initiator/reviewer identities; self-review remains prohibited. The approval record remains
+   disabled. The [release procedure](docs/guides/release-review.md) separates
+   successful unsigned preparation from signing; real OIDC/signature checks and
+   signed-release qualification remain open. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
    describes the implemented steps; installation and native canary remain separate.
 2. Continue exact signed-release qualification and remaining resident GPU/network
    adapters, GP-06g events/optics and gateway BMC qualification under the existing
