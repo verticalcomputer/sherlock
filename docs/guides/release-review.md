@@ -65,6 +65,43 @@ replace dependency-notice, secret, vulnerability, rights or disclosure reviews.
 See the [SPDX package specification](https://spdx.github.io/spdx-spec/v2.3/package-information/)
 and [Go build command documentation](https://pkg.go.dev/cmd/go).
 
+## Prepare a public Actions review artifact
+
+After this workflow is merged, manually dispatch
+[Prepare unsigned release candidate](../../.github/workflows/prepare-release.yml)
+on `main` with a proposed tag such as `v0.1.0-rc.1`. The proposed tag is a review
+input: preparation does not create a tag, sign, approve, publish a GitHub Release
+or install anything. Only the public repository's manual main-branch run is
+accepted. All action revisions are pinned; the job has `contents: read` and no
+OIDC permission, credentials persisted in checkout, signing environment or
+repository write access. See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
+
+The [preparation helper](../../scripts/prepare-hosted-release.py) builds twice,
+assembles only the seven public package files and binds every archived first-party
+file's bytes and executable mode to the exact checked-out Git commit. Dependencies
+remain bound by the builder's module checks and source manifest. Dirty tracked
+work is rejected before building; untracked or changed archived source is rejected
+by the final commit comparison. This does not replace a secret, vulnerability,
+license or native-host review.
+
+The uploaded artifact is named `sherlock-reviewed-release` for compatibility with
+the signer. Its name grants no approval. The job summary records its numeric
+artifact ID and an `approved: false` policy containing exact commit/tag and three
+package hashes. The full private builder directory, scan findings and operational
+evidence are excluded. Download and review that exact artifact; do not substitute
+a previous local package or rebuild after approving its hashes. Hosted and local
+source identities can differ because the manifest includes external toolchain
+metadata. Binary reproducibility proves two builds on the recorded toolchain,
+not equality across different toolchains or operating systems.
+
+The hosted package keeps `release_approved: false`, `signed: false`, and
+`package_state: UNSIGNED_REVIEW_ONLY`, with `approval_mode: external_exact_package`.
+Approval is supplied separately through the protected exact-hash record described
+in [signing](release-signing.md); no package rewrite is needed after review.
+Client verification checks both real signatures before accepting this provenance
+mode. Unbound local packages remain ineligible. No signing run or real Sigstore
+verification is established by offline tests or by preparation alone.
+
 ## Reviewable permissions, payload and endpoints
 
 The builder still stamps preview version `fixture.v1`; that version label is not

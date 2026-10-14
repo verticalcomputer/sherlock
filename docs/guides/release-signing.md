@@ -14,8 +14,8 @@ public `verticalcomputer/sherlock` repository on an exact version tag. It has no
 push, pull-request or automatic tag trigger, no GitHub Release publication step,
 and no repository write permission. A `release-signing` environment and an exact
 reviewed artifact approval are required. Missing or false approval stops before
-signing. Unsigned preparation output is rejected until it satisfies the exact
-public package approval contract.
+signing. Commit-bound preparation output can be approved through that external
+record; unbound local preparation output is rejected.
 
 Clients trust these constraints, with the tag replaced by the exact approved release:
 
@@ -39,16 +39,19 @@ self-review is prevented.
 1. Complete the existing exact source/disclosure, dependency/notice and build
    review. Export only reviewed public material into the public repository; keep
    customer evidence, operational records, credentials and private audits out.
-2. Put this workflow and verifier in the approved source commit and default
-   branch, and create the reviewed version tag pointing to that commit. Protect
-   release tags against unauthorized creation, movement and deletion.
-3. Verify the `release-signing` environment has required reviewers, prevents
+2. Use [unsigned preparation](release-review.md#prepare-a-public-actions-review-artifact)
+   on main to produce `sherlock-reviewed-release` at the intended commit. Review
+   that exact artifact and record the job summary's numeric artifact ID and
+   hashes before approving or creating its proposed tag. The download is bound
+   to that ID and commit; no latest-run lookup or package script execution occurs.
+   An expired artifact requires fresh review of the new artifact ID.
+3. Create the reviewed version tag pointing to the artifact's exact source commit,
+   with this workflow/verifier present. If main advanced after preparation, keep
+   the reviewed commit. Protect release tags against unauthorized creation,
+   movement and deletion.
+4. Verify the `release-signing` environment has required reviewers, prevents
    self-review/admin bypass and restricts deployment to reviewed release tags.
    Keep signing permissions out of untrusted pull-request jobs.
-4. Package the reviewed build as a GitHub Actions artifact named
-   `sherlock-reviewed-release`, from a run on that exact source commit. Record its
-   numeric artifact ID. The download is bound to that ID and commit; no latest-run
-   lookup or executable/package script execution occurs.
 5. Set the environment variable `RELEASE_APPROVAL_JSON` to the review record
    below, with real exact values and `approved: true` only after package review.
    This record contains public identifiers/hashes, not credentials. Missing or
@@ -94,13 +97,23 @@ file; this signing helper does not extract, execute or independently audit it.
 Existing private builder outputs must not be uploaded wholesale or relabeled as
 approved. Producing this approved public export remains a separate gate.
 
-The provenance object must include `schema_version: 1`, `release_approved: true`,
+The provenance object must include `schema_version: 1`,
 `repository`, `ref`, `source_commit`, `source_manifest_sha256`,
 `target: "linux/amd64"`, `byte_identical: true` and
 `two_independent_clean_builds`. The last field is two equal dictionaries mapping
 `sherlock-node-agent` and `sherlock-gateway` to the actual binary hashes. These
 claims require independently reviewed build evidence; the helper checks their
 consistency and signs them, without manufacturing a build attestation.
+
+The original `release_approved: true` provenance format remains supported. New
+hosted candidates instead preserve `release_approved: false`, `signed: false`,
+`package_state: UNSIGNED_REVIEW_ONLY` and `approval_mode: external_exact_package`.
+Those fields describe preparation, not a signing authorization. The signer accepts
+that mode only with the protected `approved: true` record bound to all three
+hashes and the exact artifact/source/tag. The client accepts it only after both
+signature bundles verify against the approved workflow identity and commit. This
+avoids altering reviewed package bytes merely to approve them. A package flag,
+artifact name or successful build alone cannot authorize signing.
 
 The workflow validates exact approved hashes before calling Cosign, signs both
 `SHA256SUMS` and `provenance.unsigned.json`, and verifies both signatures against

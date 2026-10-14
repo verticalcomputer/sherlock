@@ -18,7 +18,8 @@ Statements below distinguish source behavior from release and live qualification
 ## Release state
 
 As checked October 13, 2026, source is public with Apache-2.0 and Vertical Computer
-Inc attribution; Linux-source PR #2 is merged. The GitHub `release-signing`
+Inc attribution; Linux-source PR #2 and resident-identity PR #4 are merged,
+with both PR #4 CI checks passing. The GitHub `release-signing`
 environment exists with a required reviewer, self-review prevention and admin
 bypass disabled. These remote settings must be rechecked before any signing run.
 No GitHub release is published as of this check. Unsigned reproducible preview
@@ -28,10 +29,13 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. Complete protected review of the resident identity flow and its exact
-   source/build package. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
+1. Review and merge the unsigned hosted-preparation workflow, then dispatch it
+   on main for the proposed release tag. Review its exact artifact and disabled
+   approval record before protected signing. The [release procedure](docs/guides/release-review.md)
+   separates preparation from approval; no hosted preparation or signing run has
+   yet qualified this workflow. The [manual enrollment procedure](docs/guides/resident-enrollment.md)
    describes the implemented steps; installation and native canary remain separate.
-2. Continue exact signed-release preparation and remaining resident GPU/network
+2. Continue exact signed-release qualification and remaining resident GPU/network
    adapters, GP-06g events/optics and gateway BMC qualification under the existing
    GP sequence. Keep each source's permissions and failure semantics explicit.
 3. Add qualified health/evaluator integration for resident values and the advanced

@@ -5,6 +5,7 @@ check: check-docs
 	python3 -m unittest discover -s scripts -p test_release_signing.py
 	python3 -m unittest discover -s scripts -p test_export_public_candidate.py
 	python3 -m unittest discover -s scripts -p test_prepare_release_review.py
+	python3 -m unittest discover -s scripts -p test_prepare_hosted_release.py
 	python3 -m unittest discover -s scripts -p test_build_telemetry_candidate.py
 	go vet ./...
 	staticcheck ./...

@@ -28,6 +28,8 @@ jobs:
         run: python3 -m unittest discover -s scripts -p test_export_public_candidate.py
       - name: Check unsigned release assembly with synthetic data
         run: python3 -m unittest discover -s scripts -p test_prepare_release_review.py
+      - name: Check hosted unsigned preparation policy
+        run: python3 -m unittest discover -s scripts -p test_prepare_hosted_release.py
       - name: Check reproducible candidate builder with synthetic data
         run: python3 -m unittest discover -s scripts -p test_build_telemetry_candidate.py
       - run: go install honnef.co/go/tools/cmd/staticcheck@2026.2.2

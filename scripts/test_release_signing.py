@@ -152,6 +152,48 @@ class ReleaseSigningTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(release.ReleaseError):
                 release.payload(self.directory, self.policy)
 
+    def test_external_approval_mode_requires_exact_protected_policy_or_verified_signatures(self):
+        self.provenance.update(release_approved=False, signed=False,
+                               approval_mode="external_exact_package", package_state="UNSIGNED_REVIEW_ONLY")
+        (self.directory / release.PROVENANCE).write_text(json.dumps(self.provenance))
+        self.refresh_checksums()
+        release.context(self.policy, self.environment, self.event)
+        release.payload(self.directory, self.policy)
+        for approved in (False, None, "true", 1):
+            with self.subTest(approved=approved), self.assertRaises(release.ReleaseError):
+                release.payload(self.directory, dict(self.policy, approved=approved))
+        for key, value in (("approval_mode", None), ("package_state", "APPROVED"),
+                           ("signed", True), ("release_approved", "false")):
+            changed = dict(self.provenance, **{key: value})
+            (self.directory / release.PROVENANCE).write_text(json.dumps(changed))
+            self.refresh_checksums()
+            with self.subTest(key=key), self.assertRaises(release.ReleaseError):
+                release.payload(self.directory, self.policy)
+
+    def test_external_package_cannot_sign_without_approval_and_client_verifies_signatures_first(self):
+        self.provenance.update(release_approved=False, signed=False,
+                               approval_mode="external_exact_package", package_state="UNSIGNED_REVIEW_ONLY")
+        (self.directory / release.PROVENANCE).write_text(json.dumps(self.provenance))
+        self.refresh_checksums()
+        arguments = ["verify-release.py", "sign", "--directory", str(self.directory)]
+        with patch.dict(os.environ, {"RELEASE_APPROVAL_JSON": ""}, clear=True), \
+                patch("sys.argv", arguments), patch.object(release, "cosign") as invoke:
+            with self.assertRaisesRegex(release.ReleaseError, "release_approval_missing"):
+                release.main()
+            invoke.assert_not_called()
+        self.add_fake_bundles()
+        arguments = ["verify-release.py", "verify", "--directory", str(self.directory),
+                     "--tag", "v0.1.0-rc.1", "--commit", self.policy["source_commit"],
+                     "--source-sha256", self.policy["source_manifest_sha256"]]
+        with patch("sys.argv", arguments), patch.object(release, "cosign") as invoke:
+            release.main()
+            self.assertEqual(invoke.call_count, 2)
+        with patch("sys.argv", arguments), patch.object(release, "payload") as validate, \
+                patch.object(release, "cosign", side_effect=release.ReleaseError("invalid_signature")):
+            with self.assertRaisesRegex(release.ReleaseError, "invalid_signature"):
+                release.main()
+            validate.assert_not_called()
+
     def test_duplicate_json_fields_rejected(self):
         with self.assertRaisesRegex(release.ReleaseError, "duplicate_json_key"):
             release.object_json('{"approved":false,"approved":true}')

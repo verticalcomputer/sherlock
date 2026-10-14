@@ -1,0 +1,67 @@
+name: Prepare unsigned release candidate
+
+# Explicit source preparation only; no tag creation, signing or installation.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Proposed version tag for review (does not create the tag)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preparation-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      github.repository == 'verticalcomputer/sherlock' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install the pinned build toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.9'
+          cache: false
+      - name: Test preparation and signing policy
+        run: |
+          python3 -m unittest discover -s scripts -p test_prepare_hosted_release.py
+          python3 -m unittest discover -s scripts -p test_prepare_release_review.py
+          python3 -m unittest discover -s scripts -p test_release_signing.py
+          python3 -m unittest discover -s scripts -p test_build_telemetry_candidate.py
+      - name: Build twice and assemble exact unsigned package
+        run: python3 scripts/prepare-hosted-release.py build --root "$RUNNER_TEMP/sherlock-release-preparation"
+      - name: Retain only the seven public review files
+        id: package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # Compatible with the existing signer; approval is a separate exact policy.
+          name: sherlock-reviewed-release
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/sherlock-release-preparation/package/SHA256SUMS
+            ${{ runner.temp }}/sherlock-release-preparation/package/provenance.unsigned.json
+            ${{ runner.temp }}/sherlock-release-preparation/package/source-files.json
+            ${{ runner.temp }}/sherlock-release-preparation/package/source.tar.gz
+            ${{ runner.temp }}/sherlock-release-preparation/package/sbom.spdx.json
+            ${{ runner.temp }}/sherlock-release-preparation/package/sherlock-node-agent-linux-amd64
+            ${{ runner.temp }}/sherlock-release-preparation/package/sherlock-gateway-linux-amd64
+      - name: Record exact hashes and disabled approval template
+        env:
+          ARTIFACT_ID: ${{ steps.package.outputs.artifact-id }}
+        run: python3 scripts/prepare-hosted-release.py summary --root "$RUNNER_TEMP/sherlock-release-preparation"
