@@ -115,9 +115,10 @@ func SelectEvidence(candidates []EvidenceInput, query RetrievalQuery) (Retrieval
 	for _, candidate := range authorized {
 		sourceCounts[candidate.Source]++
 	}
+	terms := queryTerms(query.Text)
 	for _, candidate := range authorized {
 		ranked := RankedEvidence{Input: candidate, Mandatory: evidenceMandatory(candidate)}
-		ranked.Score = relevanceScore(candidate, query, sourceCounts[candidate.Source] == 1)
+		ranked.Score = relevanceScore(candidate, query, sourceCounts[candidate.Source] == 1) + queryMatchScore(candidate, query, terms)
 		result.Ranked = append(result.Ranked, ranked)
 	}
 	slices.SortFunc(result.Ranked, func(a, b RankedEvidence) int {

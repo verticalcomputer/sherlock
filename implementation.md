@@ -3,6 +3,14 @@
 This public roadmap continues existing GP IDs and preserves dated private
 acceptance history. Repository verification and live acceptance are separate.
 
+October 14 priority clarification: product improvements in the existing R2
+GP-12–17 scope proceed alongside monitoring work. Evidence retrieval, bounded
+context, useful next-action selection and evidence-based closure are coding
+priorities; release approval gates distribution and client installation, not
+these improvements. Start with query-aware evidence ranking and scenario
+regressions, then evaluate multi-turn context and repeated-action behavior.
+This does not reorder the monitoring dependencies below or waive live gates.
+
 | Order | Checkpoints | Remaining gate |
 | --- | --- | --- |
 | 1 | GP-01, GP-18a/b/c | Reliability corrections exist; deployed continuity, lease-aware rollout and preservation-first recovery remain separate operations. |
@@ -17,7 +25,7 @@ acceptance history. Repository verification and live acceptance are separate.
 R2 remains GP-12–17 investigation evidence, budget, applicability and closure.
 R3 remains GP-19/20c/21/22 and repair-specific GP-23. Monitoring grants no repair
 authority. Apache-2.0 with Vertical Computer Inc attribution is published;
-exact signed packages, provenance, SBOM, independent approval and client pinning/
+exact signed packages, provenance, SBOM, explicit owner approval and client pinning/
 removal requirements still precede installation. Loki/Alloy remain deferred.
 
 The implemented host/root slice is specified in [the Linux source contract](docs/reference/telemetry/linux-sources.md).
