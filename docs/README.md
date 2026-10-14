@@ -31,3 +31,6 @@ checkpoint order; it is not a deployment or acceptance record.
 The existing [Linux checkpoint record](history/LINUX_RESIDENT_CHECKPOINT_20261013.md)
 is retained as historical evidence. New per-change checkpoint files are not required;
 see [what to commit](development.md#what-to-commit).
+
+Use the [scenario test bed](guides/test-bed.md) for repeatable investigation/context
+regressions and comparison reports against synthetic incident worlds.

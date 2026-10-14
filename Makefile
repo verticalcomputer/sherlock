@@ -65,3 +65,7 @@ run-investigator:
 
 migrate-up:
 	go run ./cmd/sherlock-migrate -dir migrations
+
+.PHONY: testbed
+testbed:
+	TESTBED_OUTPUT="$(TESTBED_OUTPUT)" TESTBED_BASELINE="$(TESTBED_BASELINE)" ./scripts/run-testbed.sh

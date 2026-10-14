@@ -7,6 +7,8 @@ container="sherlock-integration-${RANDOM}-${RANDOM}"
 password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
 database="sherlock_test_${RANDOM}_${RANDOM}"
 port=""
+packages=("$@")
+if [ "${#packages[@]}" -eq 0 ]; then packages=(./...); fi
 
 fail() { echo "isolated integration: $*" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || fail "docker is required"
@@ -44,5 +46,5 @@ docker exec "$container" createdb -U sherlock_fixture "$database" >/dev/null
 
 echo "isolated integration: applying migrations and running tests"
 (cd "$repo_dir" && SHERLOCK_DATABASE_URL="$dsn" go run ./cmd/sherlock-migrate -dir migrations >/dev/null)
-(cd "$repo_dir" && SHERLOCK_TEST_DATABASE_URL="$dsn" go test -race -count=1 -tags=integration ./...)
+(cd "$repo_dir" && SHERLOCK_TEST_DATABASE_URL="$dsn" go test -race -count=1 -tags=integration "${packages[@]}")
 echo "isolated integration: passed; disposable database will be removed"

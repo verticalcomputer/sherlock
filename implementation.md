@@ -9,7 +9,11 @@ context, useful next-action selection and evidence-based closure are coding
 priorities; release approval gates distribution and client installation, not
 these improvements. Start with query-aware evidence ranking and scenario
 regressions, then evaluate multi-turn context and repeated-action behavior.
-This does not reorder the monitoring dependencies below or waive live gates.
+The [scenario test bed](docs/guides/test-bed.md) supplies repeatable R2
+context/controller regressions, exact-suite comparisons and explicit unmeasured
+stages. Timed intake, full incident delivery, live-model reasoning and native
+hardware qualification remain separate gates. This does not reorder the
+monitoring dependencies below or waive live gates.
 
 | Order | Checkpoints | Remaining gate |
 | --- | --- | --- |

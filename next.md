@@ -56,9 +56,15 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. Evaluate retrieval on investigation scenarios: relevant versus irrelevant
-   evidence under tight context budgets, missing observations and contradictory
-   evidence. Measure relevant-evidence inclusion and omissions across turns.
+1. The scenario test bed now exercises all six incident classes and two controls
+   through the real controller, context engine, budget manager and PostgreSQL.
+   It records two fresh worker processes and compares reconstructed context.
+   Use [the lab guide](docs/guides/test-bed.md) for running and comparing reports.
+   Detector/incident/outbox integration, live-model reasoning and native-agent
+   overhead remain explicitly unmeasured. Full repository checks, eight process-
+   restart scenarios, same-suite comparison and focused database regressions pass.
+   Next extend timed source ingestion and
+   crash fault injection before treating this as full pipeline qualification.
 2. Continue the existing R2 (GP-12–17) investigation-loop work: evaluate pending
    hypothesis updates across rejected proposals, action novelty, and whether
    closure is supported by evidence rather than merely producing a valid report.

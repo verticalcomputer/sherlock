@@ -13,6 +13,7 @@ make context
 python3 scripts/knowledge.py list
 python3 scripts/knowledge.py context --topic agent --max-chars 24000
 make check-docs
+make testbed TESTBED_OUTPUT=/tmp/sherlock-candidate.json
 ```
 
 Topics: `overview`, `agent`, `release`, `development`, `investigation`, `fixtures`,
@@ -69,3 +70,6 @@ prove prose accuracy or acceptance. Review those against evidence.
 Use the Git-reviewed index first. Consider semantic retrieval only if measured
 lookup failures justify another system. It must preserve exact citations,
 revision visibility, private/public separation and explicit missing evidence.
+
+The [scenario lab](guides/test-bed.md) validates runtime context and investigation
+mechanics with synthetic data and explicit stage coverage.
