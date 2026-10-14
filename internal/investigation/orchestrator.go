@@ -384,8 +384,11 @@ func (orchestrator *Orchestrator) planAttempt(ctx context.Context, snapshot appl
 		decision.Stop, decision.Outcome, decision.Reason = true, domain.InvestigationPartial, domain.StopNoUsefulAction
 		return decision, planRejection{}, nil
 	}
-	decision.Hypotheses, err = orchestrator.mapHypotheses(result.Response.HypothesisUpdates, snapshot)
+	decision.Hypotheses, err = orchestrator.mapHypotheses(result.Response.HypothesisUpdates, snapshot, request.Hypotheses)
 	if err != nil {
+		if auditErr := orchestrator.audit(ctx, snapshot, application.ModelCallPlanning, callKey, result.Metadata, application.ModelCallRejected, "HYPOTHESIS_CONTEXT_UPDATE_REJECTED", orchestrator.config.PlanningPrompt, payloadReferences); auditErr != nil {
+			return application.InvestigationDecision{}, planRejection{}, auditErr
+		}
 		return application.InvestigationDecision{}, planRejection{}, err
 	}
 	if result.Response.Stop {
@@ -1026,7 +1029,7 @@ func planningRequest(snapshot application.InvestigationSnapshot, context investi
 	request := snapshot.Investigation.Request()
 	budget, usage := request.Budget, snapshot.Investigation.Usage()
 	factoredTools, sharedArguments := factorToolSchemas(tools)
-	return modelprovider.PlanningRequest{SchemaVersion: modelprovider.PlanningSchemaVersion, InvestigationID: string(request.ID), Question: context.Header.Question, Scope: modelScope(request.Scope, request.ClusterID), StateSummary: "Select one novel read-only observation that closes an explicit coverage or hypothesis gap, or stop with explicit uncertainty. Never repeat a prior action that added no new evidence. A proposal larger than the per-action fan-out limit is executed in deterministic batches; continue until the success criteria are resolved or a hard safety limit prevents progress.", SuccessCriteria: slices.Clone(context.Header.SuccessCriteria), RemainingBudget: modelprovider.RemainingBudget{Decisions: budget.MaxDecisions - usage.Decisions, ToolCalls: budget.MaxToolCalls - usage.ToolCalls, DiagnosticCalls: budget.MaxDiagnosticCalls - usage.DiagnosticCalls, PrivilegedCalls: budget.MaxPrivilegedCalls - usage.PrivilegedCalls, FanOut: budget.MaxFanOut, ModelTokens: budget.MaxModelTokens - usage.ModelTokens, CostMicros: budget.MaxCostMicros - usage.CostMicros}, AvailableTools: factoredTools, SharedToolArguments: sharedArguments, Evidence: modelEvidence(context), Hypotheses: modelHypotheses(snapshot), PriorActions: modelPriorActions(snapshot, context), Coverage: modelCoverage(context, request.Scope), PromptVersion: config.PlanningPrompt, ToolSchemaVersion: config.ToolSchemaVersion, CheckpointDigest: context.CheckpointDigest, DeltaFromVersion: context.DeltaFromVersion, ContextMode: "STATELESS"}
+	return modelprovider.PlanningRequest{SchemaVersion: modelprovider.PlanningSchemaVersion, InvestigationID: string(request.ID), Question: context.Header.Question, Scope: modelScope(request.Scope, request.ClusterID), StateSummary: "Select one novel read-only observation that closes an explicit coverage or hypothesis gap, or stop with explicit uncertainty. Never repeat a prior action that added no new evidence. Prior action evidence_omitted counts recorded results excluded from this context, not an empty run. prior_actions_omitted means history was compacted, not that those actions never ran. Omitted or truncated hypothesis context does not mean the hypothesis or its unresolved tests have been resolved. The server preserves full shortened statements and unresolved tests you did not see in full when applying updates. A proposal larger than the per-action fan-out limit is executed in deterministic batches; continue until the success criteria are resolved or a hard safety limit prevents progress.", SuccessCriteria: slices.Clone(context.Header.SuccessCriteria), RemainingBudget: modelprovider.RemainingBudget{Decisions: budget.MaxDecisions - usage.Decisions, ToolCalls: budget.MaxToolCalls - usage.ToolCalls, DiagnosticCalls: budget.MaxDiagnosticCalls - usage.DiagnosticCalls, PrivilegedCalls: budget.MaxPrivilegedCalls - usage.PrivilegedCalls, FanOut: budget.MaxFanOut, ModelTokens: budget.MaxModelTokens - usage.ModelTokens, CostMicros: budget.MaxCostMicros - usage.CostMicros}, AvailableTools: factoredTools, SharedToolArguments: sharedArguments, Evidence: modelEvidence(context), Hypotheses: modelHypotheses(context), PriorActions: modelPriorActions(snapshot, context), Coverage: modelCoverage(context, request.Scope), PromptVersion: config.PlanningPrompt, ToolSchemaVersion: config.ToolSchemaVersion, CheckpointDigest: context.CheckpointDigest, DeltaFromVersion: context.DeltaFromVersion, ContextMode: "STATELESS"}
 }
 
 func factorToolSchemas(tools []modelprovider.AvailableTool) ([]modelprovider.AvailableTool, []byte) {
@@ -1090,13 +1093,14 @@ func modelPriorActions(snapshot application.InvestigationSnapshot, context inves
 			}
 		}
 		result = append(result, modelprovider.PriorAction{
-			ActionDigest: action.Digest.String(),
-			ToolID:       action.ToolID,
-			Outcome:      action.Outcome,
-			Targets:      slices.Clone(action.Targets),
-			Start:        action.Start,
-			End:          action.End,
-			EvidenceIDs:  evidenceIDs,
+			ActionDigest:    action.Digest.String(),
+			ToolID:          action.ToolID,
+			Outcome:         action.Outcome,
+			Targets:         slices.Clone(action.Targets),
+			Start:           action.Start,
+			End:             action.End,
+			EvidenceIDs:     evidenceIDs,
+			EvidenceOmitted: len(action.EvidenceIDs) - len(evidenceIDs),
 		})
 	}
 	return result
@@ -1169,7 +1173,7 @@ func synthesisRequest(snapshot application.InvestigationSnapshot, context invest
 	}
 	coverage := modelCoverage(context, request.Scope)
 	coverage.StopReason = string(snapshot.RequestedStop)
-	return modelprovider.SynthesisRequest{SchemaVersion: modelprovider.SynthesisSchemaVersion, InvestigationID: string(request.ID), Question: context.Header.Question, Scope: modelScope(request.Scope, request.ClusterID), Outcome: string(snapshot.RequestedOutcome), Evidence: evidence, Hypotheses: modelHypotheses(snapshot), Findings: findings, Coverage: coverage, PromptVersion: prompt, CheckpointDigest: context.CheckpointDigest, DeltaFromVersion: context.DeltaFromVersion, ContextMode: "STATELESS"}
+	return modelprovider.SynthesisRequest{SchemaVersion: modelprovider.SynthesisSchemaVersion, InvestigationID: string(request.ID), Question: context.Header.Question, Scope: modelScope(request.Scope, request.ClusterID), Outcome: string(snapshot.RequestedOutcome), Evidence: evidence, Hypotheses: modelHypotheses(context), Findings: findings, Coverage: coverage, PromptVersion: prompt, CheckpointDigest: context.CheckpointDigest, DeltaFromVersion: context.DeltaFromVersion, ContextMode: "STATELESS"}
 }
 
 func modelScope(scope domain.InvestigationScope, cluster domain.ClusterID) modelprovider.Scope {
@@ -1223,6 +1227,9 @@ func modelCoverage(context investigationcontext.Context, scope domain.Investigat
 	}
 	result := modelprovider.Coverage{ExpectedFrom: scope.Start, ExpectedTo: scope.End, Sources: sources, EvidenceSelected: len(context.Evidence)}
 	for _, omission := range context.Omissions {
+		if omission.Kind == investigationcontext.OmissionKindHypothesis {
+			result.HypothesesOmitted += omission.Count
+		}
 		if omission.Kind != investigationcontext.OmissionKindEvidence {
 			continue
 		}
@@ -1355,19 +1362,24 @@ func sortCoverageTargets(values []modelprovider.CoverageTarget) {
 	})
 }
 
-func modelHypotheses(snapshot application.InvestigationSnapshot) []modelprovider.HypothesisContext {
-	entries := snapshot.Hypotheses.Entries()
-	result := make([]modelprovider.HypothesisContext, 0, len(entries))
-	for _, item := range entries {
-		result = append(result, modelprovider.HypothesisContext{HypothesisID: string(item.ID), Statement: item.Statement, Status: string(item.Status), Confidence: item.Confidence, SupportingEvidence: evidenceStrings(item.SupportingEvidence), ContradictingEvidence: evidenceStrings(item.ContradictingEvidence), UnresolvedTests: slices.Clone(item.UnresolvedTests)})
+// Use the exact bounded projection, never rehydrate omitted hypotheses from
+// the durable ledger after the context builder has accounted for their bytes.
+func modelHypotheses(context investigationcontext.Context) []modelprovider.HypothesisContext {
+	result := make([]modelprovider.HypothesisContext, 0, len(context.Hypotheses))
+	for _, item := range context.Hypotheses {
+		result = append(result, modelprovider.HypothesisContext{HypothesisID: string(item.ID), Statement: item.Statement, Status: string(item.Status), Confidence: item.Confidence, SupportingEvidence: evidenceStrings(item.SupportingEvidence), ContradictingEvidence: evidenceStrings(item.ContradictingEvidence), UnresolvedTests: slices.Clone(item.UnresolvedTests), StatementTruncated: item.StatementTruncated, UnresolvedTestsOmitted: item.UnresolvedTestsOmitted, UnresolvedTestsTruncated: item.UnresolvedTestsTruncated})
 	}
 	return result
 }
 
-func (orchestrator *Orchestrator) mapHypotheses(updates []modelprovider.HypothesisUpdate, snapshot application.InvestigationSnapshot) ([]domain.Hypothesis, error) {
-	versions := map[string]int{}
+func (orchestrator *Orchestrator) mapHypotheses(updates []modelprovider.HypothesisUpdate, snapshot application.InvestigationSnapshot, presented []modelprovider.HypothesisContext) ([]domain.Hypothesis, error) {
+	currentByID := map[string]domain.Hypothesis{}
 	for _, current := range snapshot.Hypotheses.Entries() {
-		versions[string(current.ID)] = current.Version
+		currentByID[string(current.ID)] = current
+	}
+	presentedByID := map[string]modelprovider.HypothesisContext{}
+	for _, view := range presented {
+		presentedByID[view.HypothesisID] = view
 	}
 	result := make([]domain.Hypothesis, 0, len(updates))
 	for _, update := range updates {
@@ -1379,7 +1391,36 @@ func (orchestrator *Orchestrator) mapHypotheses(updates []modelprovider.Hypothes
 			}
 			hypothesisID = "hypothesis-" + id
 		}
-		result = append(result, domain.Hypothesis{ID: domain.HypothesisID(hypothesisID), InvestigationID: snapshot.Investigation.Request().ID, Statement: update.Statement, Status: domain.HypothesisStatus(update.Status), Confidence: update.Confidence, SupportingEvidence: domainEvidence(update.SupportingEvidence), ContradictingEvidence: domainEvidence(update.ContradictingEvidence), UnresolvedTests: slices.Clone(update.UnresolvedTests), Version: versions[hypothesisID] + 1})
+		current := currentByID[hypothesisID]
+		view := presentedByID[hypothesisID]
+		statement := update.Statement
+		tests := slices.Clone(update.UnresolvedTests)
+		if view.StatementTruncated {
+			statement = current.Statement
+		}
+		if view.UnresolvedTestsOmitted > 0 || view.UnresolvedTestsTruncated {
+			// Only fully presented tests may be removed by a model update. Hidden
+			// tests and the full originals of shortened tests remain durable. An echo
+			// of a shortened test is a projection, not a new unresolved question.
+			for index, original := range current.UnresolvedTests {
+				if index < len(view.UnresolvedTests) && view.UnresolvedTests[index] == original {
+					continue
+				}
+				if index < len(view.UnresolvedTests) {
+					fragment := view.UnresolvedTests[index]
+					if !slices.Contains(current.UnresolvedTests, fragment) {
+						tests = slices.DeleteFunc(tests, func(value string) bool { return value == fragment })
+					}
+				}
+				if !slices.Contains(tests, original) {
+					tests = append(tests, original)
+				}
+			}
+		}
+		if len(tests) > 32 {
+			return nil, fmt.Errorf("hypothesis update exceeds unresolved-test bound after preserving hidden context")
+		}
+		result = append(result, domain.Hypothesis{ID: domain.HypothesisID(hypothesisID), InvestigationID: snapshot.Investigation.Request().ID, Statement: statement, Status: domain.HypothesisStatus(update.Status), Confidence: update.Confidence, SupportingEvidence: domainEvidence(update.SupportingEvidence), ContradictingEvidence: domainEvidence(update.ContradictingEvidence), UnresolvedTests: tests, Version: current.Version + 1})
 	}
 	return result, nil
 }
@@ -1731,7 +1772,7 @@ func (source LedgerContextSource) InvestigationContext(ctx context.Context, snap
 		}
 	}
 	for _, hypothesis := range snapshot.Hypotheses.Entries() {
-		input.Hypotheses = append(input.Hypotheses, investigationcontext.HypothesisInput{ID: hypothesis.ID, Status: hypothesis.Status, Statement: hypothesis.Statement, SupportingEvidence: slices.Clone(hypothesis.SupportingEvidence), ContradictingEvidence: slices.Clone(hypothesis.ContradictingEvidence)})
+		input.Hypotheses = append(input.Hypotheses, investigationcontext.HypothesisInput{ID: hypothesis.ID, Status: hypothesis.Status, Statement: hypothesis.Statement, Confidence: hypothesis.Confidence, UnresolvedTests: slices.Clone(hypothesis.UnresolvedTests), SupportingEvidence: slices.Clone(hypothesis.SupportingEvidence), ContradictingEvidence: slices.Clone(hypothesis.ContradictingEvidence)})
 	}
 	return input, nil
 }

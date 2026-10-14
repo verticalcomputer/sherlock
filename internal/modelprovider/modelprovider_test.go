@@ -18,10 +18,19 @@ func TestPlanningRequestValidation(t *testing.T) {
 		"duplicate tool": func(value *PlanningRequest) {
 			value.AvailableTools = append(value.AvailableTools, value.AvailableTools[0])
 		},
-		"mutating tool":               func(value *PlanningRequest) { value.AvailableTools[0].ReadOnly = false },
-		"evidence outside scope":      func(value *PlanningRequest) { value.Evidence[0].EntityIDs = []string{"node-2"} },
-		"unknown hypothesis citation": func(value *PlanningRequest) { value.Hypotheses[0].SupportingEvidence = []string{"missing"} },
-		"negative budget":             func(value *PlanningRequest) { value.RemainingBudget.ToolCalls = -1 },
+		"mutating tool":                 func(value *PlanningRequest) { value.AvailableTools[0].ReadOnly = false },
+		"evidence outside scope":        func(value *PlanningRequest) { value.Evidence[0].EntityIDs = []string{"node-2"} },
+		"unknown hypothesis citation":   func(value *PlanningRequest) { value.Hypotheses[0].SupportingEvidence = []string{"missing"} },
+		"negative history omissions":    func(value *PlanningRequest) { value.PriorActionsOmitted = -1 },
+		"negative hypothesis omissions": func(value *PlanningRequest) { value.Coverage.HypothesesOmitted = -1 },
+		"negative test omissions":       func(value *PlanningRequest) { value.Hypotheses[0].UnresolvedTestsOmitted = -1 },
+		"too many omitted tests":        func(value *PlanningRequest) { value.Hypotheses[0].UnresolvedTestsOmitted = 33 },
+		"empty unresolved test":         func(value *PlanningRequest) { value.Hypotheses[0].UnresolvedTests = []string{""} },
+		"oversized unresolved test":     func(value *PlanningRequest) { value.Hypotheses[0].UnresolvedTests = []string{strings.Repeat("t", 513)} },
+		"negative result omissions": func(value *PlanningRequest) {
+			value.PriorActions = []PriorAction{{ActionDigest: strings.Repeat("a", 64), ToolID: "tool.v1", Outcome: "SUCCEEDED", Targets: []string{"node-1"}, Start: value.Scope.Start, End: value.Scope.End, EvidenceOmitted: -1}}
+		},
+		"negative budget": func(value *PlanningRequest) { value.RemainingBudget.ToolCalls = -1 },
 		"expected target marked observed and missing": func(value *PlanningRequest) {
 			value.Coverage.MissingTargets = slices.Clone(value.Coverage.ObservedTargets)
 		},

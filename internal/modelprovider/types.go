@@ -84,13 +84,16 @@ type CoverageTarget struct {
 }
 
 type HypothesisContext struct {
-	HypothesisID          string   `json:"hypothesis_id"`
-	Statement             string   `json:"statement"`
-	Status                string   `json:"status"`
-	Confidence            float64  `json:"confidence"`
-	SupportingEvidence    []string `json:"supporting_evidence_ids"`
-	ContradictingEvidence []string `json:"contradicting_evidence_ids"`
-	UnresolvedTests       []string `json:"unresolved_tests"`
+	HypothesisID             string   `json:"hypothesis_id"`
+	Statement                string   `json:"statement"`
+	Status                   string   `json:"status"`
+	Confidence               float64  `json:"confidence"`
+	SupportingEvidence       []string `json:"supporting_evidence_ids"`
+	ContradictingEvidence    []string `json:"contradicting_evidence_ids"`
+	UnresolvedTests          []string `json:"unresolved_tests"`
+	StatementTruncated       bool     `json:"statement_truncated,omitempty"`
+	UnresolvedTestsOmitted   int      `json:"unresolved_tests_omitted,omitempty"`
+	UnresolvedTestsTruncated bool     `json:"unresolved_tests_truncated,omitempty"`
 }
 
 type PriorAction struct {
@@ -101,6 +104,8 @@ type PriorAction struct {
 	Start        time.Time `json:"start"`
 	End          time.Time `json:"end"`
 	EvidenceIDs  []string  `json:"evidence_ids"`
+	// Recorded results excluded from this model context, not a failed or empty run.
+	EvidenceOmitted int `json:"evidence_omitted,omitempty"`
 }
 
 // MemoryContext is untrusted, derived prior knowledge. It may guide action
@@ -135,6 +140,7 @@ type PlanningRequest struct {
 	Evidence            []EvidenceContext   `json:"evidence"`
 	Hypotheses          []HypothesisContext `json:"hypotheses"`
 	PriorActions        []PriorAction       `json:"prior_actions"`
+	PriorActionsOmitted int                 `json:"prior_actions_omitted,omitempty"`
 	Memory              []MemoryContext     `json:"cluster_memory,omitempty"`
 	Coverage            Coverage            `json:"coverage"`
 	PromptVersion       string              `json:"prompt_version"`
@@ -193,15 +199,16 @@ type ValidatedFinding struct {
 }
 
 type Coverage struct {
-	TargetsChecked  []string         `json:"targets_checked"`
-	TargetsMissed   []string         `json:"targets_missed"`
-	ExpectedTargets []CoverageTarget `json:"expected_targets"`
-	ObservedTargets []CoverageTarget `json:"observed_targets"`
-	MissingTargets  []CoverageTarget `json:"missing_targets"`
-	ExpectedFrom    time.Time        `json:"expected_from"`
-	ExpectedTo      time.Time        `json:"expected_to"`
-	ObservedFrom    time.Time        `json:"observed_from,omitempty"`
-	ObservedTo      time.Time        `json:"observed_to,omitempty"`
+	HypothesesOmitted int              `json:"hypotheses_omitted,omitempty"`
+	TargetsChecked    []string         `json:"targets_checked"`
+	TargetsMissed     []string         `json:"targets_missed"`
+	ExpectedTargets   []CoverageTarget `json:"expected_targets"`
+	ObservedTargets   []CoverageTarget `json:"observed_targets"`
+	MissingTargets    []CoverageTarget `json:"missing_targets"`
+	ExpectedFrom      time.Time        `json:"expected_from"`
+	ExpectedTo        time.Time        `json:"expected_to"`
+	ObservedFrom      time.Time        `json:"observed_from,omitempty"`
+	ObservedTo        time.Time        `json:"observed_to,omitempty"`
 	// TimeComplete reports observed data density: evidence values exist across
 	// the whole requested period. Event evidence is sparse by nature, so a quiet
 	// window never satisfies it even when the period was fully checked.

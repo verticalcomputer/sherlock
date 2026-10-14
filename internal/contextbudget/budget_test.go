@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -128,4 +129,93 @@ func budgetSnapshot(t *testing.T, now time.Time) application.InvestigationSnapsh
 		t.Fatal(err)
 	}
 	return application.InvestigationSnapshot{Investigation: investigation}
+}
+
+func TestCompactionPreservesFailuresForDistinctActionScopes(t *testing.T) {
+	actions := []modelprovider.PriorAction{
+		{ActionDigest: strings.Repeat("a", 64), ToolID: "gpu.health.v1", Outcome: "FAILED", Targets: []string{"node-1"}},
+		{ActionDigest: strings.Repeat("b", 64), ToolID: "gpu.health.v1", Outcome: "FAILED", Targets: []string{"node-2"}},
+	}
+	if index := optionalPriorAction(actions); index != -1 {
+		t.Fatalf("would forget failure on a distinct scope at index %d", index)
+	}
+}
+
+func TestItemCapDoesNotDiscardUniqueFailedAction(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	sink := &manifestMemory{}
+	manager, err := New(DefaultConfig(), JSONHeuristicEstimator{}, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := modelprovider.PlanningRequest{SchemaVersion: 1, InvestigationID: "inv-1", Question: "why"}
+	request.PriorActions = append(request.PriorActions, modelprovider.PriorAction{ActionDigest: strings.Repeat("a", 64), ToolID: "gpu.health.v1", Outcome: "FAILED", Targets: []string{"node-1"}, Start: now.Add(-time.Hour), End: now})
+	for range 256 {
+		request.PriorActions = append(request.PriorActions, modelprovider.PriorAction{ActionDigest: strings.Repeat("b", 64), ToolID: "gpu.health.v1", Outcome: "SUCCEEDED", Targets: []string{"node-2"}, Start: now.Add(-time.Hour), End: now})
+	}
+	prepared, _, err := manager.PreparePlanning(t.Context(), budgetSnapshot(t, now), "call-1", request, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range prepared.PriorActions {
+		if action.Outcome == "FAILED" {
+			return
+		}
+	}
+	t.Fatal("item cap discarded the only failure on node-1")
+}
+
+func TestPriorActionCompactionReportsLossWithoutMutatingInput(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	sink := &manifestMemory{}
+	manager, err := New(Config{MaximumInputTokens: 1024}, JSONHeuristicEstimator{}, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := modelprovider.PlanningRequest{SchemaVersion: 1, InvestigationID: "inv-1", Question: "why", PriorActionsOmitted: 2}
+	for range 20 {
+		request.PriorActions = append(request.PriorActions, modelprovider.PriorAction{ActionDigest: strings.Repeat("a", 64), ToolID: "gpu.health.v1", Outcome: "SUCCEEDED", Targets: []string{"node-1"}, Start: now.Add(-time.Hour), End: now})
+	}
+	before, _ := json.Marshal(request)
+	prepared, manifest, err := manager.PreparePlanning(t.Context(), budgetSnapshot(t, now), "call-1", request, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prepared.PriorActions) >= 20 || prepared.PriorActionsOmitted != 2+20-len(prepared.PriorActions) || manifest.ExclusionReasons["prior_action_compaction"] != 20-len(prepared.PriorActions) {
+		t.Fatalf("loss not accounted: %+v %+v", prepared, manifest)
+	}
+	after, _ := json.Marshal(request)
+	if string(before) != string(after) {
+		t.Fatal("compaction mutated caller history")
+	}
+}
+
+func TestTooManyRequiredActionScopesFailBeforeManifestWrite(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	sink := &manifestMemory{}
+	manager, err := New(DefaultConfig(), JSONHeuristicEstimator{}, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := modelprovider.PlanningRequest{SchemaVersion: 1, InvestigationID: "inv-1", Question: "why"}
+	for i := range 257 {
+		request.PriorActions = append(request.PriorActions, modelprovider.PriorAction{ActionDigest: fmt.Sprintf("%064x", i+1), ToolID: "gpu.health.v1", Outcome: "FAILED", Targets: []string{"node-1"}, Start: now.Add(-time.Duration(i+1) * time.Second), End: now})
+	}
+	_, _, err = manager.PreparePlanning(t.Context(), budgetSnapshot(t, now), "call-1", request, Selection{})
+	if !errors.Is(err, ErrRequiredContextExceeded) || len(sink.values) != 0 {
+		t.Fatalf("required history loss admitted: err=%v manifests=%v", err, sink.values)
+	}
+}
+
+func TestOnlySupersededFailureWithSameDigestIsOptional(t *testing.T) {
+	for _, outcome := range []string{"FAILED", "NO_EVIDENCE", "REJECTED", "OUTCOME_UNKNOWN"} {
+		first := modelprovider.PriorAction{ActionDigest: strings.Repeat("a", 64), ToolID: "tool.v1", Outcome: outcome}
+		second := modelprovider.PriorAction{ActionDigest: strings.Repeat("b", 64), ToolID: "tool.v1", Outcome: outcome}
+		if got := optionalPriorAction([]modelprovider.PriorAction{first, second}); got != -1 {
+			t.Fatalf("%s forgot a distinct action", outcome)
+		}
+		if got := optionalPriorAction([]modelprovider.PriorAction{first, second, first}); got != 0 {
+			t.Fatalf("%s selected %d, want superseded first", outcome, got)
+		}
+	}
 }

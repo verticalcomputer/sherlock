@@ -2985,14 +2985,14 @@
     {
       "executable": false,
       "path": "internal/contextbudget/budget.go",
-      "sha256": "712c4f1b0df70e29b36a502e13f890573c259d23d8a4c6437287e6eaf61705ca",
-      "size": 17870
+      "sha256": "a29eab9907bccce71321430a5388b2542cd0dc70ce6cfd04e9c067d2858c125b",
+      "size": 18305
     },
     {
       "executable": false,
       "path": "internal/contextbudget/budget_test.go",
-      "sha256": "a7dfa98a42e6546a25bc4847468d3e6833d67c836d9f56eea246f96c3259703c",
-      "size": 7389
+      "sha256": "4e92e080e7c328e854f680d0e4e73371802e470e354b8d4a87a9654e3694b22b",
+      "size": 11898
     },
     {
       "executable": false,
@@ -3602,9 +3602,15 @@
     },
     {
       "executable": false,
+      "path": "internal/investigation/context_continuity_test.go",
+      "sha256": "fbd9fdda8834bd5084e74cb9d94d821a6750c1e686cdbe6f3a47f371bdd772be",
+      "size": 10770
+    },
+    {
+      "executable": false,
       "path": "internal/investigation/orchestrator.go",
-      "sha256": "0a080c8dea18037686042855135079da84c976fd792f885251102849a350490b",
-      "size": 92406
+      "sha256": "e422b9bd8dea54a065bfe6725f1c40fc9d5e48b3177b846bbe3b0e846f19bacf",
+      "size": 95075
     },
     {
       "executable": false,
@@ -3645,14 +3651,14 @@
     {
       "executable": false,
       "path": "internal/investigationcontext/README.md",
-      "sha256": "7ae0ab5e1b9611e168268fbf03631108765ad158b3e8ec16257daefeb449b90b",
-      "size": 4832
+      "sha256": "5645bdf40fe9369354c1eb7dd88321945a8f741f983824a3684117f331c13a7d",
+      "size": 7072
     },
     {
       "executable": false,
       "path": "internal/investigationcontext/builder.go",
-      "sha256": "a949b5c2b5295fad39cdba19bc740a0ba4c26d2393b9bd09ed2e0a47e16d4dfe",
-      "size": 40057
+      "sha256": "0351100d5fd69fef1548b8bdbf342b2c475e690c91d857b59c7633f556e1658a",
+      "size": 41359
     },
     {
       "executable": false,
@@ -3683,6 +3689,12 @@
       "path": "internal/investigationcontext/fairness_test.go",
       "sha256": "74b631ef3f20eb21a2be3a515b25aede59da6e5b5b095f86718db7d536b563da",
       "size": 28537
+    },
+    {
+      "executable": false,
+      "path": "internal/investigationcontext/hypothesis_test.go",
+      "sha256": "be7c35dca13a058b15bd1d32bbc9e7eea27c02ef9ac5d98c6f83d48fa33ba27b",
+      "size": 2032
     },
     {
       "executable": false,
@@ -3753,8 +3765,8 @@
     {
       "executable": false,
       "path": "internal/investigationeval/replay.go",
-      "sha256": "16a1a297f7b144939303c31ed8e8804cd4119b8896b5b5ce0ad4f7305e36f5ba",
-      "size": 25703
+      "sha256": "a5b741b8f2572f64dfcd7d57f39f9d160cf3003c003c7d226a14511e6bd090a9",
+      "size": 25797
     },
     {
       "executable": false,
@@ -3855,20 +3867,20 @@
     {
       "executable": false,
       "path": "internal/modelprovider/modelprovider_test.go",
-      "sha256": "3a880a69e77955070200497bb2cdc3704d8c3f23ac51c88c8ac2a1bb160bbc05",
-      "size": 16616
+      "sha256": "3826fab26e46eb57e133c216d76250e59dfb42991eec13da267d6280424cf889",
+      "size": 17598
     },
     {
       "executable": false,
       "path": "internal/modelprovider/types.go",
-      "sha256": "eec347a0053950d2f2ab6bf88b278995d5f343a80c1af4dae65d874bffff8577",
-      "size": 14678
+      "sha256": "c45d08f81c06b29b95d8991326cb57d855f834c8e5dc520b22bbba4b95507df4",
+      "size": 15246
     },
     {
       "executable": false,
       "path": "internal/modelprovider/validate.go",
-      "sha256": "d2e2be3f97e4164e63e57a09f98b7bb1b8b371a0a2531f049abc5acbb99a0861",
-      "size": 34135
+      "sha256": "7662484ce9e5c06e5c7c53fa14a65f1c7f5fa1d751a65c26eaaf54e062e67fef",
+      "size": 34498
     },
     {
       "executable": false,
@@ -6381,8 +6393,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "54be9b7fae297770dcc877884e9bd3a79661f82aac4980ce12921b63122bfcb1",
-      "size": 5633
+      "sha256": "77d2d62fb5378675575cec328f74cbb1fd41b4eb2ed45f89faeda6a634360273",
+      "size": 5888
     },
     {
       "executable": true,

@@ -175,9 +175,17 @@ func New(config Config, estimator Estimator, sink Sink) (*Manager, error) {
 
 func (manager *Manager) PreparePlanning(ctx context.Context, snapshot application.InvestigationSnapshot, callKey string, request modelprovider.PlanningRequest, selection Selection) (modelprovider.PlanningRequest, Manifest, error) {
 	manifest := manager.base(snapshot, callKey, application.ModelCallPlanning, selection)
-	if len(request.PriorActions) > 256 {
-		manifest.ExclusionReasons["prior_action_item_limit"] += len(request.PriorActions) - 256
-		request.PriorActions = slices.Clone(request.PriorActions[len(request.PriorActions)-256:])
+	// The caller's snapshot/request may be reused after a restart or retry.
+	// Compaction owns its slice and must not rewrite that prior-action history.
+	request.PriorActions = slices.Clone(request.PriorActions)
+	for len(request.PriorActions) > 256 {
+		index := optionalPriorAction(request.PriorActions)
+		if index < 0 {
+			return modelprovider.PlanningRequest{}, Manifest{}, ErrRequiredContextExceeded
+		}
+		request.PriorActions = slices.Delete(request.PriorActions, index, index+1)
+		request.PriorActionsOmitted++
+		manifest.ExclusionReasons["prior_action_item_limit"]++
 	}
 	if len(request.Memory) > manager.config.MaximumMemoryEntries {
 		manifest.ExclusionReasons["memory_entry_limit"] += len(request.Memory) - manager.config.MaximumMemoryEntries
@@ -187,15 +195,16 @@ func (manager *Manager) PreparePlanning(ctx context.Context, snapshot applicatio
 		request.Memory = request.Memory[:len(request.Memory)-1]
 		manifest.ExclusionReasons["memory_token_limit"]++
 	}
-	// Prior actions are ordered durably. Retain the newest suffix when the full
-	// provider request would exceed its allowance; failures and exact scope stay
-	// inside each retained action and are never summarized into free text.
+	// Prior actions are ordered durably. Remove older optional actions when
+	// needed, but keep the latest adverse outcome for each exact action digest.
+	// The digest binds the tool, targets and window, not just the tool name.
 	for !manager.fitsFallback(request) && len(request.PriorActions) > 0 {
 		index := optionalPriorAction(request.PriorActions)
 		if index < 0 {
 			return modelprovider.PlanningRequest{}, Manifest{}, ErrRequiredContextExceeded
 		}
 		request.PriorActions = slices.Delete(request.PriorActions, index, index+1)
+		request.PriorActionsOmitted++
 		manifest.ExclusionReasons["prior_action_compaction"]++
 	}
 	if err := manager.finishWithoutWrite(ctx, request, &manifest); err != nil {
@@ -224,13 +233,13 @@ func optionalPriorAction(values []modelprovider.PriorAction) int {
 	for index, action := range values {
 		switch action.Outcome {
 		case "NO_EVIDENCE", "FAILED", "REJECTED", "OUTCOME_UNKNOWN":
-			protected[action.Outcome+"\x00"+action.ToolID] = index
+			protected[action.Outcome+"\x00"+action.ToolID+"\x00"+action.ActionDigest] = index
 		}
 	}
 	for index, action := range values {
 		switch action.Outcome {
 		case "NO_EVIDENCE", "FAILED", "REJECTED", "OUTCOME_UNKNOWN":
-			if protected[action.Outcome+"\x00"+action.ToolID] == index {
+			if protected[action.Outcome+"\x00"+action.ToolID+"\x00"+action.ActionDigest] == index {
 				continue
 			}
 		}
