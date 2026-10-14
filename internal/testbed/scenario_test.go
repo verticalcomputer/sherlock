@@ -125,3 +125,13 @@ func TestComparisonDetectsLostDetectorCoverage(t *testing.T) {
 		t.Fatalf("lost detector coverage passed: %+v %v", result, err)
 	}
 }
+
+func TestHiddenQuestionGradeRejectsSameCountWrongQuestions(t *testing.T) {
+	expected := []string{"hidden-9", "hidden-10", "hidden-11", "hidden-12"}
+	if got := retainedQuestions(expected, []string{"visible-1", "visible-2", "visible-3", "visible-4"}); got != 0 {
+		t.Fatal("count-only continuity accepted")
+	}
+	if got := retainedQuestions(expected, expected); got != 4 {
+		t.Fatal("exact hidden questions not retained")
+	}
+}

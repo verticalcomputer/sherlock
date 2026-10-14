@@ -79,6 +79,16 @@ func Run(ctx context.Context, pool *pgxpool.Pool, suite Suite, digest string, la
 		if err = launch(ctx, id, 1); err != nil {
 			return report, fmt.Errorf("first worker %s: %w", s.ID, err)
 		}
+		beforeStore, _ := storepg.NewInvestigationStore(pool)
+		beforeSnapshot, found, err := beforeStore.LoadInvestigation(ctx, id)
+		if err != nil || !found {
+			return report, fmt.Errorf("restart boundary snapshot unavailable")
+		}
+		var hiddenTests []string
+		beforeHypotheses := beforeSnapshot.Hypotheses.Entries()
+		if len(beforeHypotheses) == 1 && len(beforeHypotheses[0].UnresolvedTests) > 8 {
+			hiddenTests = append([]string{}, beforeHypotheses[0].UnresolvedTests[8:]...)
+		}
 		before, err := probe(ctx, pool, id)
 		if err != nil {
 			return report, err
@@ -97,7 +107,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, suite Suite, digest string, la
 		if err = launch(ctx, id, 0); err != nil {
 			return report, fmt.Errorf("resumed worker %s: %w", s.ID, err)
 		}
-		result, err := grade(ctx, pool, s, id, prefix)
+		result, err := grade(ctx, pool, s, id, prefix, hiddenTests)
 		if err != nil {
 			return report, err
 		}
@@ -115,7 +125,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, suite Suite, digest string, la
 	}
 	return report, nil
 }
-func grade(ctx context.Context, pool *pgxpool.Pool, s Scenario, id domain.InvestigationID, prefix string) (Result, error) {
+func grade(ctx context.Context, pool *pgxpool.Pool, s Scenario, id domain.InvestigationID, prefix string, hiddenTests []string) (Result, error) {
 	result := Result{ScenarioID: s.ID, Violations: []string{}}
 	store, _ := storepg.NewInvestigationStore(pool)
 	snapshot, found, err := store.LoadInvestigation(ctx, id)
@@ -135,7 +145,7 @@ func grade(ctx context.Context, pool *pgxpool.Pool, s Scenario, id domain.Invest
 	}
 	hs := snapshot.Hypotheses.Entries()
 	if len(hs) == 1 {
-		result.HiddenTestsRetained = len(hs[0].UnresolvedTests)
+		result.HiddenTestsRetained = retainedQuestions(hiddenTests, hs[0].UnresolvedTests)
 		result.FullStatementRetained = hs[0].Statement == longStatement()
 	}
 	if result.HiddenTestsRetained < s.Oracle.MinimumHiddenTests || !result.FullStatementRetained {
@@ -295,4 +305,15 @@ func Compare(baseline, candidate Report) (Comparison, error) {
 	}
 	comparison.Passed = len(comparison.Regressions) == 0 && candidate.Passed
 	return comparison, nil
+}
+
+// Count exact original questions, not merely the size of the surviving list.
+func retainedQuestions(expected, actual []string) int {
+	count := 0
+	for _, question := range expected {
+		if slices.Contains(actual, question) {
+			count++
+		}
+	}
+	return count
 }

@@ -5475,8 +5475,8 @@
     {
       "executable": false,
       "path": "internal/testbed/report.go",
-      "sha256": "6d58d116db935205eded27f6ace1fb83e8c266e8d189feedafcdb830c7c63f3e",
-      "size": 12321
+      "sha256": "26b21a35392484b2cfd3879441be0760ba07a527143ec071f6a59355a1eabd41",
+      "size": 13122
     },
     {
       "executable": false,
@@ -5499,8 +5499,8 @@
     {
       "executable": false,
       "path": "internal/testbed/scenario_test.go",
-      "sha256": "4e86149776f8f0ced3ec8a88d92d2159c3b3950944420a4a1a8116ffaf9835d8",
-      "size": 4760
+      "sha256": "fade836b1ab543acb4320da9efea5a77caa11f503b38b1a5c420efe953ec180a",
+      "size": 5184
     },
     {
       "executable": false,
