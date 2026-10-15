@@ -69,6 +69,7 @@ func TestEvidenceExecutorDispatchesReviewedEvidenceClasses(t *testing.T) {
 		operation domain.EvidenceOperationID
 		maxWindow time.Duration
 	}{
+		{SlurmFailureToolID, "slurm.failure_correlation.v1", 24 * time.Hour},
 		{KernelEventsToolID, "loki.kernel_events.v1", time.Hour},
 		{GPUHealthToolID, domain.EvidenceOperationID(domain.QueryGPUTemperature), 15 * time.Minute},
 		{WorkloadToolID, "slurm.jobs.v1", 24 * time.Hour},

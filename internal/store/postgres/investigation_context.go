@@ -34,22 +34,35 @@ type metricAggregate struct {
 	unit             string
 }
 
-func (store *InvestigationStore) loadMetricContext(ctx context.Context, clusterID domain.ClusterID, runID domain.RunID, operation domain.EvidenceOperationID, start, end time.Time) (string, string, error) {
-	rows, err := store.pool.Query(ctx, `SELECT entity_key,metric,value,unit,observed_at FROM observations WHERE run_id=$1 AND cluster_id=$2 AND observed_at >= $3 AND observed_at <= $4 ORDER BY metric,entity_key,observed_at,observation_id LIMIT $5`, runID, clusterID, start.UTC(), end.UTC(), maxXIDContextRecords+1)
+func (store *InvestigationStore) loadMetricContext(ctx context.Context, clusterID domain.ClusterID, runID domain.RunID, operation domain.EvidenceOperationID, start, end time.Time, targets []string) (string, string, error) {
+	rows, err := store.pool.Query(ctx, `SELECT entity_key,metric,value,unit,observed_at,labels FROM observations WHERE run_id=$1 AND cluster_id=$2 AND observed_at >= $3 AND observed_at <= $4 ORDER BY metric,entity_key,observed_at,observation_id LIMIT $5`, runID, clusterID, start.UTC(), end.UTC(), maxXIDContextRecords+1)
 	if err != nil {
 		return "", "", fmt.Errorf("query bounded %s evidence: %w", operation, err)
 	}
 	defer rows.Close()
 	records := make([]metricContextRecord, 0, maxXIDContextRecords)
 	truncated := false
+	scanned := 0
 	for rows.Next() {
 		var record metricContextRecord
-		if err := rows.Scan(&record.EntityKey, &record.Metric, &record.Value, &record.Unit, &record.ObservedAt); err != nil {
+		var labelsRaw []byte
+		if err := rows.Scan(&record.EntityKey, &record.Metric, &record.Value, &record.Unit, &record.ObservedAt, &labelsRaw); err != nil {
 			return "", "", err
 		}
-		if len(records) == maxXIDContextRecords {
+		scanned++
+		if scanned > maxXIDContextRecords {
 			truncated = true
 			continue
+		}
+		if domain.QueryKind(operation).IsGPU() {
+			var labels []domain.Label
+			if json.Unmarshal(labelsRaw, &labels) != nil {
+				return "", "", fmt.Errorf("invalid metric identity labels")
+			}
+			node, gpu, valid := domain.DCGMIdentity(labels, domain.CollectionTask{})
+			if !valid || !slices.Contains(targets, node) && !slices.Contains(targets, gpu) {
+				continue
+			}
 		}
 		record.ObservedAt = record.ObservedAt.UTC()
 		records = append(records, record)
@@ -203,9 +216,40 @@ func (store *InvestigationStore) LoadInvestigationEvidenceContext(ctx context.Co
 			input.SummaryQuality = "MEANINGFUL"
 			input.Summary = fmt.Sprintf("Repeated Slurm job failures: %d distinct failed attempts are cited in this snapshot. Cancellations and preemption are excluded. Accounting coverage may be partial; the physical cause is unconfirmed.", len(attempts))
 			input.Excerpt = string(body)
+		} else if operation == slurmCorrelationOperation {
+			var raw []byte
+			if err := store.pool.QueryRow(ctx, `SELECT document FROM slurm_failure_correlations WHERE evidence_id=$1 AND incident_id=$2`, entry.EvidenceID, request.IncidentID).Scan(&raw); err != nil {
+				return nil, fmt.Errorf("slurm correlation snapshot unavailable")
+			}
+			var correlation slurmCorrelation
+			if len(raw) > 262144 || json.Unmarshal(raw, &correlation) != nil || correlation.Version != 1 {
+				return nil, fmt.Errorf("slurm correlation snapshot invalid")
+			}
+			input.SummaryQuality = "MEANINGFUL"
+			facts := []string{}
+			for _, v := range correlation.GPU {
+				if len(facts) == 3 {
+					break
+				}
+				facts = append(facts, fmt.Sprintf("%s/%s %s=%g %s at %s", v.Node, v.GPU, v.Metric, v.Value, v.Unit, v.ObservedAt.UTC().Format(time.RFC3339)))
+			}
+			for _, v := range correlation.Network {
+				if len(facts) >= 5 {
+					break
+				}
+				detail := v.Poll.Outcome
+				if len(v.Poll.Ports) > 0 {
+					p := v.Poll.Ports[0]
+					detail += fmt.Sprintf(" %s port=%d state=%s physical=%s", p.Key.Device, p.Key.Port, p.State, p.PhysicalState)
+				}
+				facts = append(facts, fmt.Sprintf("%s network %s at %s", v.Poll.Node, detail, v.Poll.ObservedAt.UTC().Format(time.RFC3339)))
+			}
+			input.Summary = fmt.Sprintf("Slurm correlation: %d failed attempts; %d GPU observations, %d network polls. %s. Missing attempt/source pairs=%d; limited GPU=%t network=%t. Partial sampled windows; polling is not lossless. Missing means unknown; coincidence is not cause or progress.", len(correlation.Attempts), len(correlation.GPU), len(correlation.Network), strings.Join(facts, "; "), len(correlation.Gaps), correlation.GPULimited, correlation.NetworkLimited)
+
+			input.Excerpt = string(raw)
 		} else if runID != "" {
 			input.SummaryQuality = "MEANINGFUL"
-			input.Summary, input.Excerpt, err = store.loadMetricContext(ctx, request.ClusterID, runID, operation, observedFrom, observedTo)
+			input.Summary, input.Excerpt, err = store.loadMetricContext(ctx, request.ClusterID, runID, operation, observedFrom, observedTo, entry.EntityIDs)
 			if err != nil {
 				return nil, err
 			}

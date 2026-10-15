@@ -317,7 +317,7 @@ func Compare(baseline, candidate Report) (Comparison, error) {
 	if baseline.Pipeline != nil {
 		comparison.TokenDelta += candidate.Pipeline.Investigation.SimulatedTokens - baseline.Pipeline.Investigation.SimulatedTokens
 	}
-	if baseline.SlurmFailures != nil && (baseline.SlurmFailures.Passed && !candidate.SlurmFailures.Passed || baseline.SlurmFailures.Mode != candidate.SlurmFailures.Mode || len(baseline.SlurmFailures.Cases) != len(candidate.SlurmFailures.Cases) || len(baseline.SlurmFailures.CrashPIDs) != len(candidate.SlurmFailures.CrashPIDs)) {
+	if baseline.SlurmFailures != nil && (baseline.SlurmFailures.Passed && !candidate.SlurmFailures.Passed || baseline.SlurmFailures.Mode != candidate.SlurmFailures.Mode || len(baseline.SlurmFailures.Cases) != len(candidate.SlurmFailures.Cases) || len(baseline.SlurmFailures.CrashPIDs) != len(candidate.SlurmFailures.CrashPIDs) || baseline.SlurmFailures.Investigation.Passed && !candidate.SlurmFailures.Investigation.Passed || len(baseline.SlurmFailures.Investigation.CrashPIDs) != len(candidate.SlurmFailures.Investigation.CrashPIDs)) {
 		comparison.Regressions = append(comparison.Regressions, "slurm-job-failures")
 	}
 	comparison.Passed = len(comparison.Regressions) == 0 && candidate.Passed

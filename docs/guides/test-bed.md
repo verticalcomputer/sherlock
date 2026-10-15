@@ -131,7 +131,14 @@ receiver. Three abrupt process exits cover incident commit, delivery claim and
 receiver acceptance before its receipt commits. One incident/outbox intent must
 survive replay; duplicate external delivery after the lost receipt is explicitly
 expected. This additional Slurm contract requires a new baseline and is included
-in comparison coverage. GPU monitoring episode/outbox delivery remains a separate
+in comparison coverage. Slurm contract v2 adds five investigation crash boundaries:
+reservation, unacknowledged start, read before save, evidence recording and terminal
+commit. It uses the production read-only executor/context loader and requires
+actual scoped GPU and network observations in the simulated synthesis. The
+network source is a normalized retained-cycle fixture; foreign/old observations
+are excluded, and deletion of the network ring after reservation must preserve
+the frozen snapshot. Missing-source and policy/failure-isolation database controls
+remain separate from live source qualification. GPU monitoring episode/outbox delivery remains a separate
 unmeasured stage; simulated Slurm delivery does not qualify a live Slack receiver.
 
 ## Scenarios and boundaries

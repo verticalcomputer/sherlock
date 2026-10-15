@@ -153,6 +153,9 @@ func (orchestrator *Orchestrator) Decide(ctx context.Context, snapshot applicati
 	if budget.MaxDecisions-usage.Decisions < 1 {
 		return application.InvestigationDecision{Stop: true, Outcome: domain.InvestigationPartial, Reason: domain.StopBudgetExceeded}, nil
 	}
+	if strings.HasPrefix(snapshot.Investigation.Request().IdempotencyKey, "auto-slurm-") {
+		return orchestrator.deterministicSlurmPlan(ctx, snapshot)
+	}
 	// The reviewed XID playbook needs authority and catalog bounds, but no model
 	// context or model budget. Resolve it before loading or encoding retained
 	// evidence so context growth cannot prevent the deterministic diagnostic pass.

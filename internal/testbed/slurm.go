@@ -18,7 +18,7 @@ import (
 	storepg "github.com/verticalcomputer/sherlock/internal/store/postgres"
 )
 
-const slurmContract = `{"version":"sherlock.testbed.slurm/v1","threshold":3,"window_seconds":1800,"controls":["distinct_attempts","same_attempt_repeated","cancellations_preemption","conflicting_outcomes","reused_job_id"],"crashes":["slurm_incident_committed","slurm_delivery_claimed","slurm_receiver_accepted"],"transport":"simulated_http_receiver","acceptances_after_lost_receipt":2}`
+const slurmContract = `{"version":"sherlock.testbed.slurm/v2","threshold":3,"window_seconds":1800,"controls":["distinct_attempts","same_attempt_repeated","cancellations_preemption","conflicting_outcomes","reused_job_id"],"crashes":["slurm_incident_committed","slurm_delivery_claimed","slurm_receiver_accepted"],"investigation_crashes":["slurm_investigation_reserved","slurm_start_committed","slurm_read_completed","slurm_evidence_recorded","slurm_terminal_committed"],"correlation":"real_frozen_gpu_and_normalized_network_fixture","transport":"simulated_http_receiver","acceptances_after_lost_receipt":2}`
 
 var slurmCrashBoundaries = []string{"slurm_incident_committed", "slurm_delivery_claimed", "slurm_receiver_accepted"}
 
@@ -29,21 +29,22 @@ type SlurmFailureCase struct {
 	Alerts    int    `json:"alerts"`
 }
 type SlurmFailureReport struct {
-	ReceiverMode        string             `json:"receiver_mode"`
-	SourceMode          string             `json:"source_mode"`
-	ContractSHA256      string             `json:"contract_sha256"`
-	Passed              bool               `json:"passed"`
-	Mode                string             `json:"mode"`
-	Cases               []SlurmFailureCase `json:"cases"`
-	CrashPIDs           []int              `json:"crash_pids"`
-	FinalPID            int                `json:"final_pid"`
-	Incidents           int                `json:"incidents"`
-	Alerts              int                `json:"alerts"`
-	ConsumedAttempts    int                `json:"consumed_attempts"`
-	DeliveryClaims      int                `json:"delivery_claims"`
-	DeliveryReceipts    int                `json:"delivery_receipts"`
-	ReceiverAcceptances int                `json:"receiver_acceptances"`
-	Violations          []string           `json:"violations"`
+	Investigation       SlurmInvestigationReport `json:"investigation"`
+	ReceiverMode        string                   `json:"receiver_mode"`
+	SourceMode          string                   `json:"source_mode"`
+	ContractSHA256      string                   `json:"contract_sha256"`
+	Passed              bool                     `json:"passed"`
+	Mode                string                   `json:"mode"`
+	Cases               []SlurmFailureCase       `json:"cases"`
+	CrashPIDs           []int                    `json:"crash_pids"`
+	FinalPID            int                      `json:"final_pid"`
+	Incidents           int                      `json:"incidents"`
+	Alerts              int                      `json:"alerts"`
+	ConsumedAttempts    int                      `json:"consumed_attempts"`
+	DeliveryClaims      int                      `json:"delivery_claims"`
+	DeliveryReceipts    int                      `json:"delivery_receipts"`
+	ReceiverAcceptances int                      `json:"receiver_acceptances"`
+	Violations          []string                 `json:"violations"`
 }
 
 func slurmSetup(ctx context.Context, pool *pgxpool.Pool) error {
@@ -92,7 +93,12 @@ func slurmPrepare(ctx context.Context, pool *pgxpool.Pool, kind string) (string,
 		}
 	default:
 		for i := 0; i < 3; i++ {
-			records = append(records, slurmLifecycle(prefix, "42", i, "FAILED", at))
+			l := slurmLifecycle(prefix, "42", i, "FAILED", at)
+			if kind == "missing_nodes" {
+				l.NodeIDs = nil
+				l.RecordIdentity = domain.CanonicalSlurmLifecycleRecordID(l)
+			}
+			records = append(records, l)
 		}
 	}
 	if err = submitSlurmFixture(ctx, pool, prefix, prefix+"-first", records); err != nil {
@@ -147,6 +153,10 @@ func SlurmWorker(ctx context.Context, pool *pgxpool.Pool, prefix, boundary strin
 		return fmt.Errorf("invalid Slurm lab prefix")
 	}
 	valid := boundary == ""
+	investigationMode := strings.HasPrefix(boundary, "slurm_investigation_") || strings.HasPrefix(boundary, "slurm_start_") || strings.HasPrefix(boundary, "slurm_read_") || strings.HasPrefix(boundary, "slurm_evidence_") || strings.HasPrefix(boundary, "slurm_terminal_")
+	for _, b := range slurmInvestigationCrashes {
+		valid = valid || boundary == b
+	}
 	for _, b := range slurmCrashBoundaries {
 		valid = valid || boundary == b
 	}
@@ -155,6 +165,13 @@ func SlurmWorker(ctx context.Context, pool *pgxpool.Pool, prefix, boundary strin
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO testbed_slurm_workers(prefix,boundary,process_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, prefix, boundary, os.Getpid()); err != nil {
 		return err
+	}
+	var hasCorrelationFixture bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gp09_network_monitors WHERE cluster_id=$1)`, prefix).Scan(&hasCorrelationFixture); err != nil {
+		return err
+	}
+	if investigationMode || boundary == "" && hasCorrelationFixture {
+		return slurmInvestigationWorker(ctx, pool, prefix, boundary, crash)
 	}
 	store := storepg.NewSlurmFailureStore(pool)
 	if err := store.Evaluate(ctx, domain.ClusterID(prefix), prefix+"-policy"); err != nil {
@@ -271,6 +288,13 @@ func RunSlurm(ctx context.Context, pool *pgxpool.Pool, launch PipelineLauncher, 
 		if len(pids) != 3 || pids[report.FinalPID] {
 			report.Violations = append(report.Violations, "distinct Slurm replacement processes missing")
 		}
+	}
+	report.Investigation, err = runSlurmInvestigation(ctx, pool, launch, processes)
+	if err != nil {
+		return report, err
+	}
+	if !report.Investigation.Passed {
+		report.Violations = append(report.Violations, report.Investigation.Violations...)
 	}
 	report.Passed = len(report.Violations) == 0
 	return report, nil

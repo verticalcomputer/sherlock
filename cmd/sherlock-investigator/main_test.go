@@ -11,10 +11,11 @@ import (
 
 func TestM94ToolDefinitionsAreBoundedReadOnlyAndArgumentFree(t *testing.T) {
 	definitions := toolDefinitions([]domain.ClusterID{"cluster-a"})
-	if len(definitions) != 8 {
-		t.Fatalf("definitions=%d; want 8", len(definitions))
+	if len(definitions) != 9 {
+		t.Fatalf("definitions=%d; want 9", len(definitions))
 	}
 	windows := map[investigationtools.ToolID]time.Duration{
+		investigationapi.SlurmFailureToolID:    24 * time.Hour,
 		investigationapi.KernelEventsToolID:    time.Hour,
 		investigationapi.GPUHealthToolID:       15 * time.Minute,
 		investigationapi.WorkloadToolID:        24 * time.Hour,

@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	SlurmFailureToolID       = "cluster.slurm_failure_evidence.v1"
 	EvidenceLookupToolID     = "evidence.lookup.v1"
 	XIDEvidenceToolID        = "metrics.xid_evidence.v1"
 	KernelEventsToolID       = "node.kernel_events.v1"
@@ -35,6 +36,8 @@ type reviewedEvidencePolicy struct {
 // command-pack identifiers that may have produced the committed envelope.
 func evidencePolicy(toolID string) (reviewedEvidencePolicy, bool) {
 	switch toolID {
+	case SlurmFailureToolID:
+		return reviewedEvidencePolicy{24 * time.Hour, []domain.EvidenceOperationID{"slurm.job_failures.v1", "slurm.failure_correlation.v1"}}, true
 	case XIDEvidenceToolID:
 		return reviewedEvidencePolicy{XIDEvidenceMaximumWindow, []domain.EvidenceOperationID{domain.EvidenceOperationID(domain.QueryGPUXID)}}, true
 	case KernelEventsToolID:

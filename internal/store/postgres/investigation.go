@@ -157,6 +157,12 @@ func findInvestigationEvidence(ctx context.Context, query investigationEvidenceQ
 		  AND (($10::text[] IS NOT NULL AND evidence_id=ANY($10::text[])) OR ($10::text[] IS NULL AND (NOT $9 OR (stream_rank=1 AND (status <> 'COMPLETE' OR artifact_availability NOT IN ('NONE','AVAILABLE'))))))
 		  AND operation NOT LIKE 'model\_%' ESCAPE '\'
 		  AND (COALESCE(cardinality($7::text[]),0)=0 OR operation=ANY($7::text[]))
+		  AND (NOT $11 OR EXISTS (
+		    SELECT 1 FROM investigations current_investigation JOIN incident_evidence ie
+		      ON ie.incident_id=current_investigation.incident_id
+		    WHERE current_investigation.investigation_id=$8 AND current_investigation.cluster_id=$1
+		      AND ie.evidence_id=evidence_envelopes.evidence_id
+		  ))
 		  AND ($10::text[] IS NOT NULL OR NOT EXISTS (
 		    SELECT 1 FROM investigation_evidence attached
 		    WHERE attached.investigation_id=$8 AND attached.evidence_id=evidence_envelopes.evidence_id
@@ -165,7 +171,8 @@ func findInvestigationEvidence(ctx context.Context, query investigationEvidenceQ
 		    SELECT 1 FROM jsonb_array_elements(coverage_expected || coverage_covered) AS target
 		    WHERE target->>'ID'=ANY($5::text[])
 		  ))
-		ORDER BY collected_at DESC,evidence_id DESC LIMIT $6`, clusterID, start.UTC(), end.UTC(), committedBefore.UTC(), targets, limit+1, operations, investigationID, currentWarnings, frozenIDs)
+		ORDER BY collected_at DESC,evidence_id DESC LIMIT $6`, clusterID, start.UTC(), end.UTC(), committedBefore.UTC(), targets, limit+1, operations, investigationID, currentWarnings, frozenIDs,
+		len(operations) == 2 && slices.Contains(operations, domain.EvidenceOperationID("slurm.job_failures.v1")) && slices.Contains(operations, domain.EvidenceOperationID(slurmCorrelationOperation)))
 	if err != nil {
 		return nil, false, fmt.Errorf("query investigation evidence: %w", err)
 	}

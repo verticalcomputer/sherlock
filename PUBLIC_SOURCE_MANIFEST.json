@@ -381,14 +381,14 @@
     {
       "executable": false,
       "path": "cmd/sherlock-investigator/main.go",
-      "sha256": "69553815e1018e14dcc8bdbf6d340687e62d3d55cdec1fc28f73d60d244d64a2",
-      "size": 18750
+      "sha256": "e767301643308f53e3ef6911968486028d0aea5a854c9692ba8bd7fa7c92d2d9",
+      "size": 19480
     },
     {
       "executable": false,
       "path": "cmd/sherlock-investigator/main_test.go",
-      "sha256": "2a3dad981a25092ba0ba5768adfa20aaef32e29bb3798c3afe36d904aed536cd",
-      "size": 2098
+      "sha256": "a4a0cca5444c5608d4f82de10953ee7ab0d7cc5e6fe7a470ea5f482b16c8f5e7",
+      "size": 2156
     },
     {
       "executable": false,
@@ -855,8 +855,8 @@
     {
       "executable": false,
       "path": "docs/README.md",
-      "sha256": "7282b464176b077ad19f20090581259af570f1705b65c24827d0a96566057d34",
-      "size": 2758
+      "sha256": "f6054d50825d4a227a5d5d91abe48b767a8a51909df795ed9d54ac756d3fd345",
+      "size": 2770
     },
     {
       "executable": false,
@@ -891,8 +891,8 @@
     {
       "executable": false,
       "path": "docs/guides/slurm-failure-monitoring.md",
-      "sha256": "7763b059e2794c1c6e9415a07f371a1f3d779823526b94ca9046530e90fb197f",
-      "size": 8393
+      "sha256": "6b8b1fd65bcacbe50484d7aa436ebdb54d2780b37f874d7555bd7ecc8b7c7c24",
+      "size": 13016
     },
     {
       "executable": false,
@@ -903,8 +903,8 @@
     {
       "executable": false,
       "path": "docs/guides/test-bed.md",
-      "sha256": "56f1b20deb3ff5425cb58cc87ba23545b266122533d55d70da6fb9ce98c6d110",
-      "size": 11633
+      "sha256": "f653add0bcbafb5efc7bfc0044ab58056ed0cd3ba597540a2294efccd3ebd700",
+      "size": 12221
     },
     {
       "executable": false,
@@ -915,8 +915,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "e1e7081ebc8dddf0c95fe48d01a350f5b5870b97834ef26aeb811b3971c22345",
-      "size": 6824
+      "sha256": "54e4fecdef960efc416832c5f62fd2d8f012d8d36fe877fb8ecf7d5552268d9a",
+      "size": 6829
     },
     {
       "executable": false,
@@ -975,8 +975,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "79e2c67704dcc86bf648a695809971104609e6cd8c5d858f34fcbcd10a4ee003",
-      "size": 3575
+      "sha256": "eced580f22cb2300bd1faf40ecb97cf1c121f6c4895abd68183bd53abe0a529c",
+      "size": 3739
     },
     {
       "executable": false,
@@ -1083,14 +1083,14 @@
     {
       "executable": false,
       "path": "internal/adapters/investigationapi/evidence_executor.go",
-      "sha256": "2070df624ba2f0f19dcaff4fdced6687b5d1dfa9a03e5262eaca67c42f5a8b37",
-      "size": 8654
+      "sha256": "2a079bfe2b41c085ec14f34e761718e7a8b16d1c7d4ff052e191d8bdf209b6e0",
+      "size": 8885
     },
     {
       "executable": false,
       "path": "internal/adapters/investigationapi/evidence_executor_test.go",
-      "sha256": "41533f4b9c77e217f3b4b76b4f533c0aa66a940c5b9ff95d04415d03ae177f06",
-      "size": 10676
+      "sha256": "578393901274ada27631283a030ad57cc4f3c2b2dbeb6b7f435ac428f4e9ca77",
+      "size": 10748
     },
     {
       "executable": false,
@@ -1977,8 +1977,8 @@
     {
       "executable": false,
       "path": "internal/application/anomaly.go",
-      "sha256": "9edad809938d61af60e3a0d8eb4d07db2ed0f9ec324d48ded6633e5645f89cb4",
-      "size": 10211
+      "sha256": "f9fef1a856f6205294d1ee7eb5a760fdeb90b23628c2805d08b063294f0ebf4a",
+      "size": 10796
     },
     {
       "executable": false,
@@ -3651,8 +3651,8 @@
     {
       "executable": false,
       "path": "internal/investigation/orchestrator.go",
-      "sha256": "e422b9bd8dea54a065bfe6725f1c40fc9d5e48b3177b846bbe3b0e846f19bacf",
-      "size": 95075
+      "sha256": "b9dc04a59da8fd46401184c6c0d829e51c9299d4c4abe2c96ee4a7730302e564",
+      "size": 95226
     },
     {
       "executable": false,
@@ -3683,6 +3683,18 @@
       "path": "internal/investigation/repair_proposal_test.go",
       "sha256": "60e998bcd41877a6574f6ac93d52b780906dd29b6bcd8ffc3f007e414c8da466",
       "size": 5599
+    },
+    {
+      "executable": false,
+      "path": "internal/investigation/slurm_policy.go",
+      "sha256": "514c36a4bdf1ab5927d0ae897537f4aab01c87ce5256d2a47ff425442f8a9a6a",
+      "size": 2266
+    },
+    {
+      "executable": false,
+      "path": "internal/investigation/slurm_policy_test.go",
+      "sha256": "4322834f11d73537cf4d473d2f73393b5523357eebba226b88c734b24f374566",
+      "size": 2484
     },
     {
       "executable": false,
@@ -4401,8 +4413,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/anomaly.go",
-      "sha256": "8c3ee98c9b56ef8ac3473239804aebb5915e0873911f875a04924eddd94ae184",
-      "size": 18564
+      "sha256": "362bfdc5cb9c874d3b407521f651335f1980abd83a8b81c19f61f069823af721",
+      "size": 19039
     },
     {
       "executable": false,
@@ -4605,8 +4617,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/investigation.go",
-      "sha256": "72c039e506b0c1edb550cdd50cf2748452409a1f6a27ac2212cd1378202ab9a4",
-      "size": 57082
+      "sha256": "015c49f7ab9ef0cbe67b6c0c6dffdbb84ac86fa621b9c8e94cf90a92bcffb1c9",
+      "size": 57607
     },
     {
       "executable": false,
@@ -4623,8 +4635,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/investigation_context.go",
-      "sha256": "3e929f008a647289c82c01e29c1a8886363a4b2d9e8b18f6e49f00e5ed03e263",
-      "size": 30035
+      "sha256": "01fb28d36ba3940ccebbf6fc4da0542971c4874399e5c99b87a98357683bd90d",
+      "size": 32262
     },
     {
       "executable": false,
@@ -5067,8 +5079,20 @@
     {
       "executable": false,
       "path": "internal/store/postgres/slurm_failures.go",
-      "sha256": "ed0388caa2cb5c74466c48fd7ae9f5aae47c94a2900da95795fb641073f2365c",
-      "size": 18630
+      "sha256": "b4e21416037070a931923f1479d8f3d15ee21e2e6555a966b1e834b24cf70535",
+      "size": 19042
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/slurm_investigation.go",
+      "sha256": "5f8a5e10be9a10013497c086438bb9c01d7054d6f5aed6f77b39b6819f234c89",
+      "size": 13730
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/slurm_investigation_test.go",
+      "sha256": "9b207fc25df27aaf7a8ed38564d5e1df407b717ac02f07a42f9cd77d2f18c73f",
+      "size": 1360
     },
     {
       "executable": false,
@@ -5541,8 +5565,8 @@
     {
       "executable": false,
       "path": "internal/testbed/report.go",
-      "sha256": "2b744504fa54d52736c7d826c8006bde44d618ae7570d002ebb2f9bb920d2260",
-      "size": 15065
+      "sha256": "ff60aa575107511a9b78e46db7000587c1b4274256ae59fac3dde5d0cc9ef814",
+      "size": 15272
     },
     {
       "executable": false,
@@ -5553,8 +5577,8 @@
     {
       "executable": false,
       "path": "internal/testbed/runtime.go",
-      "sha256": "a0142c0163e60e1f2c61454b63acffd5f75194fa2f1f161d2f3265c0eacaf86c",
-      "size": 11652
+      "sha256": "59a75199bd89b3b1866dc3181c36330ebc8e118bb8249a3e3523e69f7cf4e09d",
+      "size": 12397
     },
     {
       "executable": false,
@@ -5565,14 +5589,14 @@
     {
       "executable": false,
       "path": "internal/testbed/scenario_test.go",
-      "sha256": "f4c14f46dcf20f27f8508577ddfc0f1b3da051290f4ab9533d0b1bf1e5457330",
-      "size": 7451
+      "sha256": "12d7f54d95899a3e75d75436c54692f9c2f8ef0a319897cba6185a196e172bb4",
+      "size": 8494
     },
     {
       "executable": false,
       "path": "internal/testbed/slurm.go",
-      "sha256": "ef80debed115ce6db1d2fd8c549143e793c7814b486dbe84feea186f53f3bfe1",
-      "size": 12893
+      "sha256": "c1fa62b6a76abd511aa834e14ca26fcfa75d6d396b944e6ba2a12768f13dc7a3",
+      "size": 14341
     },
     {
       "executable": false,
@@ -5585,6 +5609,18 @@
       "path": "internal/testbed/slurm_integration_test.go",
       "sha256": "ae60bb1abd7b37cb6139e6c4948d15a926416564dbba045c267441b184c87c2d",
       "size": 11028
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/slurm_investigation.go",
+      "sha256": "a5f3be879e7c304567d371a972fdf4ea2be2bb5f650247af1883988ed3e267e6",
+      "size": 15245
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/slurm_investigation_integration_test.go",
+      "sha256": "3cf068725604f271607ef74fd93b602fc8f746ba1f07dd305190b93ec225ca4a",
+      "size": 15590
     },
     {
       "executable": false,
@@ -6554,9 +6590,21 @@
     },
     {
       "executable": false,
+      "path": "migrations/000082_slurm_failure_correlations.down.sql",
+      "sha256": "fe7f2d1600715bbeaf0bc863458a30ca04e4548b2348fb3bd621caa817733c5d",
+      "size": 295
+    },
+    {
+      "executable": false,
+      "path": "migrations/000082_slurm_failure_correlations.up.sql",
+      "sha256": "15393b8748df6618d205ea224f214bd0ab0533059f613ef799f6f5322158a447",
+      "size": 945
+    },
+    {
+      "executable": false,
       "path": "next.md",
-      "sha256": "8859b50f40ca6178c0026ced930b9411c9655155cba71a2be3bcfdc2c06cb39f",
-      "size": 6792
+      "sha256": "5abdc9c3c8a03f6b8a1daa20298eb3a20d8e3ad0603b5fe39e5f62b42a7ff3fe",
+      "size": 7069
     },
     {
       "executable": true,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/verticalcomputer/sherlock/internal/adapters/investigationapi"
 	"github.com/verticalcomputer/sherlock/internal/application"
 	"github.com/verticalcomputer/sherlock/internal/auth"
 	"github.com/verticalcomputer/sherlock/internal/contextbudget"
@@ -59,6 +60,9 @@ func faultComponents(ctx context.Context, pool *pgxpool.Pool, id domain.Investig
 			definitions = append(definitions, investigationtools.Definition{SchemaVersion: 1, ID: tool, Description: "Simulated unavailable diagnostic; no node access", Operation: investigationtools.OperationDiagnostic, MinimumReexecutionInterval: time.Minute, AllowedClusters: []domain.ClusterID{request.ClusterID}, RequiredCapabilities: []auth.Capability{auth.CapabilityInvestigationsRun}, RequiredClusterCapabilities: []investigationtools.ClusterCapability{"testbed.read"}, Scope: investigationtools.ScopePolicy{EntityKinds: []string{request.Scope.EntityKind}, MaxTargets: 1, MaxWindow: time.Hour}, Timeout: time.Second, CostWeight: 1})
 		}
 	}
+	if strings.HasPrefix(string(request.ClusterID), "tb-slurm-") {
+		definitions = []investigationtools.Definition{slurmTool(request.ClusterID)}
+	}
 	catalog, err := investigationtools.NewCatalog(definitions)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -73,7 +77,11 @@ func faultComponents(ctx context.Context, pool *pgxpool.Pool, id domain.Investig
 	}
 	adapter := worldAdapter{pool: pool, id: id}
 	c := clock{request.RequestedAt.Add(time.Minute)}
-	planner, err := investigation.NewOrchestrator(simulator{pool}, catalog, investigation.StaticAuthority{Actor: []auth.Capability{auth.CapabilityInvestigationsRun}, Cluster: []investigationtools.ClusterCapability{"testbed.read"}}, store, ledgerSource(adapter), builder, audits, c, platform.RandomIDGenerator{}, investigation.Config{Provider: "testbed", Model: PlannerVersion, ModelConfigVersion: SchemaVersion, PlanningPrompt: "planning-v2", SynthesisPrompt: "synthesis-v2", ToolSchemaVersion: "catalog-v1", ModelCallReservationTTL: time.Minute})
+	source := ledgerSource(adapter)
+	if strings.HasPrefix(string(request.ClusterID), "tb-slurm-") {
+		source = investigation.LedgerContextSource{Loader: store}
+	}
+	planner, err := investigation.NewOrchestrator(simulator{pool}, catalog, investigation.StaticAuthority{Actor: []auth.Capability{auth.CapabilityInvestigationsRun}, Cluster: []investigationtools.ClusterCapability{"testbed.read"}}, store, source, builder, audits, c, platform.RandomIDGenerator{}, investigation.Config{Provider: "testbed", Model: PlannerVersion, ModelConfigVersion: SchemaVersion, PlanningPrompt: "planning-v2", SynthesisPrompt: "synthesis-v2", ToolSchemaVersion: "catalog-v1", ModelCallReservationTTL: time.Minute})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -107,6 +115,17 @@ func faultComponents(ctx context.Context, pool *pgxpool.Pool, id domain.Investig
 	if fault != nil {
 		controllerStore = crashInvestigationStore{InvestigationStore: store, fault: fault}
 		executor = crashExecutor{adapter, fault}
+	}
+	if strings.HasPrefix(string(request.ClusterID), "tb-slurm-") {
+		controllerStore = store
+		executor, err = investigationapi.NewEvidenceExecutor(store, []domain.ClusterID{request.ClusterID})
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if fault != nil {
+			controllerStore = slurmCrashStore{store, fault}
+			executor = slurmReadObserver{executor, pool, fault}
+		}
 	}
 	controller, err := application.NewInvestigationController(controllerStore, planner, executor, c, platform.RandomIDGenerator{})
 	return controller, store, engine, builder, err
