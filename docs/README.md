@@ -33,4 +33,4 @@ is retained as historical evidence. New per-change checkpoint files are not requ
 see [what to commit](development.md#what-to-commit).
 
 Use the [scenario test bed](guides/test-bed.md) for repeatable investigation/context
-regressions and comparison reports against synthetic incident worlds.
+regressions, telemetry-to-incident recovery, and comparison reports against synthetic worlds.

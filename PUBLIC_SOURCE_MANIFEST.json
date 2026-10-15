@@ -513,8 +513,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-testbed/main.go",
-      "sha256": "b611309203135ec45301ff997f7cf08e208f79c10a25c2e432d3b050d97b6133",
-      "size": 4278
+      "sha256": "335133acdc8cb2cb554c79e95940fd3306b9ef808b78890b0e86c2ac35423e39",
+      "size": 5981
     },
     {
       "executable": false,
@@ -843,8 +843,8 @@
     {
       "executable": false,
       "path": "docs/README.md",
-      "sha256": "af5cead9bdb231885c2058b52f9f4cd1e9f5c539599e59fd58552bf0427938f2",
-      "size": 2628
+      "sha256": "e4afa70b20a95953d6c8d5945ed2600456cae4ce649ab46c085b870a97c4cd09",
+      "size": 2652
     },
     {
       "executable": false,
@@ -885,8 +885,8 @@
     {
       "executable": false,
       "path": "docs/guides/test-bed.md",
-      "sha256": "bbd7ffb9cd9a42b2ee2edd4381046c3dd1ca83cb05de3fb0c376195be2d86a28",
-      "size": 6265
+      "sha256": "8d26751597936c35e3a7a71e7e81e894268fe85a38a737257601da18332c23d5",
+      "size": 10875
     },
     {
       "executable": false,
@@ -897,8 +897,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "a594c8e1e5fe9294f5621d2afe40615a17316ce5efcf235234098377ed7d7d7b",
-      "size": 6424
+      "sha256": "0bf7c9a96b58292dcce41ee76b9e106c4f2630c7893cafb85dda6f984dc0d31b",
+      "size": 6459
     },
     {
       "executable": false,
@@ -957,8 +957,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "4d810ab0c49e1c81f5876aeb52c7a280e2d296270d7e3a7adee017c409faf6b2",
-      "size": 3062
+      "sha256": "5a1cbf2fdaf792795d72d01f426c3b0e0eb6daa7b680b9a389a636421e88d895",
+      "size": 3343
     },
     {
       "executable": false,
@@ -2553,14 +2553,20 @@
     {
       "executable": false,
       "path": "internal/collectorexecution/prometheus/executor.go",
-      "sha256": "74aea194297a41c9e5132b2c8c6fc105ef0c13d65893bda5dbc4054090291840",
-      "size": 7781
+      "sha256": "e296c81915fb6ddce2faa9207c7a185ab371a0220b88737c61b25266a5f40c56",
+      "size": 8186
     },
     {
       "executable": false,
       "path": "internal/collectorexecution/prometheus/executor_test.go",
       "sha256": "b541bf8acc7a42fee9983774a131e7044bd857a1ff98bd750aa930a730781c7a",
       "size": 3739
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorexecution/prometheus/xid_identity_test.go",
+      "sha256": "0771b91447ae9606c55feb3b8c52f832fa84c3c678c9a44d5be9f25fd5d7f714",
+      "size": 852
     },
     {
       "executable": false,
@@ -5468,6 +5474,30 @@
     },
     {
       "executable": false,
+      "path": "internal/testbed/pipeline.go",
+      "sha256": "0bcfda37682a6ef2a20f7f67a3ed9af2ef18207c1a85f0400dd9123e2b7ddc32",
+      "size": 10160
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/pipeline_fault.go",
+      "sha256": "e4ec653d48a2b6034389b456cc47fd211d4881165b6058be823a8261221933cf",
+      "size": 2806
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/pipeline_report.go",
+      "sha256": "d035662c61c6553164a2fb5da52fe7bc716e6e9acaae756573ee9e50a4e9681f",
+      "size": 12457
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/pipeline_world.go",
+      "sha256": "b9c7ff3a61a09ab538f1de98b2755eee2feae3ae192a8c9e417afb959fda24c4",
+      "size": 8224
+    },
+    {
+      "executable": false,
       "path": "internal/testbed/provider.go",
       "sha256": "da52968f92027435c0592d9dd9471691062c23c0e818de59e0e8c58556f968a9",
       "size": 4992
@@ -5475,20 +5505,20 @@
     {
       "executable": false,
       "path": "internal/testbed/report.go",
-      "sha256": "26b21a35392484b2cfd3879441be0760ba07a527143ec071f6a59355a1eabd41",
-      "size": 13122
+      "sha256": "d67e1eced16a8ae989c2b3464950a8d4fd9e193200eca7435f80803231091bc3",
+      "size": 14243
     },
     {
       "executable": false,
       "path": "internal/testbed/run_integration_test.go",
-      "sha256": "3d05ed80082afe3070403c09670a8f22d32a0dcac902d3d2374ee6e84b7781b0",
-      "size": 3141
+      "sha256": "1965e437fac52a8704dd7a5123225442d15a6eaaa17866c22a8f1527d43e6898",
+      "size": 8881
     },
     {
       "executable": false,
       "path": "internal/testbed/runtime.go",
-      "sha256": "45b1e378068c747a8a9ffe7695792ffdf8b66755acf439f13ee6d72c971c13c4",
-      "size": 10252
+      "sha256": "a0142c0163e60e1f2c61454b63acffd5f75194fa2f1f161d2f3265c0eacaf86c",
+      "size": 11652
     },
     {
       "executable": false,
@@ -5499,14 +5529,14 @@
     {
       "executable": false,
       "path": "internal/testbed/scenario_test.go",
-      "sha256": "fade836b1ab543acb4320da9efea5a77caa11f503b38b1a5c420efe953ec180a",
-      "size": 5184
+      "sha256": "a08eb250643ef05bee2186a0b71526268696420970765a4bbd279fefaded37e0",
+      "size": 6430
     },
     {
       "executable": false,
       "path": "internal/testbed/world.go",
-      "sha256": "2de92e3c4fe404b7d60d2fe91cc1fe05d4a9b473e428d761225c9e943904319a",
-      "size": 5087
+      "sha256": "dd989ccbb39448c4fcab19767217a58d6b5b3183373476df548ad89d1b587f9f",
+      "size": 7074
     },
     {
       "executable": false,
@@ -6459,8 +6489,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "54acbb3b06424ff586945f00470e3a29ca4bbf08cace8b37d3c26235dd3efd7e",
-      "size": 6337
+      "sha256": "2a5b907b44507af0eaa8c5e2a88333a2222f9ac4ca6922f69fffef1a4e4bb8c5",
+      "size": 6467
     },
     {
       "executable": true,

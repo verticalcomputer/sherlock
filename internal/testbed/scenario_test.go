@@ -135,3 +135,26 @@ func TestHiddenQuestionGradeRejectsSameCountWrongQuestions(t *testing.T) {
 		t.Fatal("exact hidden questions not retained")
 	}
 }
+
+func TestComparisonRejectsLostOrChangedPipelineQualification(t *testing.T) {
+	base := Report{SchemaVersion: SchemaVersion, SuiteSHA256: strings.Repeat("a", 64), Mode: "SIMULATED_PLANNER", Passed: true, Pipeline: &PipelineResult{ContractSHA256: strings.Repeat("b", 64), Passed: true}}
+	candidate := base
+	candidate.Pipeline = &PipelineResult{ContractSHA256: base.Pipeline.ContractSHA256, Passed: true, Investigation: Result{SimulatedTokens: 40}}
+	comparison, err := Compare(base, candidate)
+	if err != nil || comparison.TokenDelta != 40 {
+		t.Fatalf("pipeline tokens omitted: %+v %v", comparison, err)
+	}
+	candidate.Pipeline = nil
+	if _, err := Compare(base, candidate); err == nil {
+		t.Fatal("lost pipeline coverage compared as equivalent")
+	}
+	candidate.Pipeline = &PipelineResult{ContractSHA256: strings.Repeat("c", 64), Passed: true}
+	if _, err := Compare(base, candidate); err == nil {
+		t.Fatal("changed pipeline contract compared as equivalent")
+	}
+	candidate.Pipeline = &PipelineResult{ContractSHA256: base.Pipeline.ContractSHA256, Passed: false}
+	comparison, err = Compare(base, candidate)
+	if err != nil || comparison.Passed || len(comparison.Regressions) != 1 {
+		t.Fatalf("pipeline regression ignored: %+v %v", comparison, err)
+	}
+}
