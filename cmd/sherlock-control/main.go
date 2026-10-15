@@ -128,6 +128,15 @@ func run(ctx context.Context, cfg config.Control, logger *slog.Logger) error {
 		_ = runMonitoringRefresh(monitoringCtx, monitoringStore, logger, time.Second, 5*time.Second)
 	}()
 	defer func() { monitoringCancel(); <-monitoringDone }()
+	// Separate supervision prevents a Slurm accounting/rule failure from delaying
+	// GPU monitoring, collector admission or notification delivery.
+	slurmDone := make(chan struct{})
+	go func() {
+		defer close(slurmDone)
+		_ = runMonitoringRefresh(monitoringCtx, storepg.NewSlurmFailureStore(pool), logger.With("monitoring_family", "slurm_job_failures"), time.Second, 5*time.Second)
+	}()
+	defer func() { monitoringCancel(); <-slurmDone }()
+
 	// Execution is opt-in per collector. With no allow-list the diagnostic
 	// endpoints are never registered, so a control plane that grants nobody
 	// execution exposes no execution surface -- not an authenticated one that

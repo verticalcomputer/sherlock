@@ -158,3 +158,26 @@ func TestComparisonRejectsLostOrChangedPipelineQualification(t *testing.T) {
 		t.Fatalf("pipeline regression ignored: %+v %v", comparison, err)
 	}
 }
+
+func TestComparisonRejectsLostSlurmCoverageAndRecovery(t *testing.T) {
+	base := Report{SchemaVersion: SchemaVersion, SuiteSHA256: strings.Repeat("a", 64), Mode: "SIMULATED_PLANNER", Passed: true, SlurmFailures: &SlurmFailureReport{ContractSHA256: strings.Repeat("b", 64), Passed: true, Mode: "ABRUPT_PROCESS_EXIT", CrashPIDs: []int{1, 2, 3}}}
+	candidate := base
+	candidate.SlurmFailures = nil
+	if _, err := Compare(base, candidate); err == nil {
+		t.Fatal("lost Slurm coverage compared as equivalent")
+	}
+	copy := *base.SlurmFailures
+	candidate.SlurmFailures = &copy
+	candidate.SlurmFailures.Passed = false
+	comparison, err := Compare(base, candidate)
+	if err != nil || comparison.Passed {
+		t.Fatalf("Slurm failure ignored: %+v %v", comparison, err)
+	}
+	copy = *base.SlurmFailures
+	candidate.SlurmFailures = &copy
+	candidate.SlurmFailures.CrashPIDs = []int{1}
+	comparison, err = Compare(base, candidate)
+	if err != nil || comparison.Passed {
+		t.Fatalf("lost crash qualification ignored: %+v %v", comparison, err)
+	}
+}

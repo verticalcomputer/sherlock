@@ -62,7 +62,11 @@ and signing prerequisites; this status page cannot authorize a run.
    collection replay, reserved-start recovery, action receipt replay, evidence
    recording and terminal report recovery. Independent checks reject corrupted
    observations, missing crash markers and conflicting XID identity aliases.
-   Native diagnostics are explicitly unavailable simulations; GP-09 outbox,
+   The Slurm extension now covers repeated failures across distinct attempts,
+   cancellation/preemption, conflicting outcomes, reused job IDs and three
+   notification crash boundaries. It reuses the durable outbox/sender with a
+   simulated receiver. [Enrollment and limits](docs/guides/slurm-failure-monitoring.md).
+   Native diagnostics are explicitly unavailable simulations; GPU episode/outbox,
    resident mTLS intake, worker lease expiry, in-transaction kills and uncertain
    provider outcomes remain open lab slices. Use [the lab guide](docs/guides/test-bed.md)
    for coverage, running and same-contract comparisons. Release signing stays parked.

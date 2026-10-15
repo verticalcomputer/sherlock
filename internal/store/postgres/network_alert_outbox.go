@@ -89,9 +89,21 @@ type AlertClaim struct {
 // a previous HTTP acceptance can therefore be delivered twice if its result
 // was lost before Finish committed.
 func (store *AlertOutboxStore) Claim(ctx context.Context) (AlertClaim, bool, error) {
+	return store.claim(ctx, "")
+}
+
+// ClaimForCluster bounds lab/tenant-specific delivery without consuming another
+// cluster's alerts. Ordinary alert-worker delivery retains its existing scope.
+func (store *AlertOutboxStore) ClaimForCluster(ctx context.Context, cluster string) (AlertClaim, bool, error) {
+	if cluster == "" || len(cluster) > 128 || strings.ContainsAny(cluster, "\r\n\x00") {
+		return AlertClaim{}, false, errors.New("invalid alert cluster scope")
+	}
+	return store.claim(ctx, cluster)
+}
+func (store *AlertOutboxStore) claim(ctx context.Context, cluster string) (AlertClaim, bool, error) {
 	if _, err := store.pool.Exec(ctx, `UPDATE gp09_alert_outbox SET status='FAILED',lease_token=NULL,
 		lease_until=NULL,last_code='RECEIPT_LOST_AFTER_ATTEMPT_LIMIT',updated_at=clock_timestamp()
-		WHERE status='LEASED' AND attempt_count>=8 AND lease_until<=clock_timestamp()`); err != nil {
+		WHERE status='LEASED' AND attempt_count>=8 AND lease_until<=clock_timestamp() AND ($1='' OR cluster_id=$1)`, cluster); err != nil {
 		return AlertClaim{}, false, fmt.Errorf("expire exhausted GP-09 delivery leases: %w", err)
 	}
 	var tokenBytes [16]byte
@@ -102,7 +114,7 @@ func (store *AlertOutboxStore) Claim(ctx context.Context) (AlertClaim, bool, err
 	var claim AlertClaim
 	err := store.pool.QueryRow(ctx, `WITH candidate AS (
 		SELECT alert_id FROM gp09_alert_outbox
-		WHERE attempt_count < 8 AND
+		WHERE ($2='' OR cluster_id=$2) AND attempt_count < 8 AND
 			((status='PENDING' AND available_at<=clock_timestamp()) OR
 			 (status='LEASED' AND lease_until<=clock_timestamp()))
 		ORDER BY available_at,alert_id FOR UPDATE SKIP LOCKED LIMIT 1
@@ -110,7 +122,7 @@ func (store *AlertOutboxStore) Claim(ctx context.Context) (AlertClaim, bool, err
 	UPDATE gp09_alert_outbox o SET status='LEASED',attempt_count=o.attempt_count+1,
 		lease_token=$1,lease_until=clock_timestamp()+interval '30 seconds',updated_at=clock_timestamp()
 	FROM candidate c WHERE o.alert_id=c.alert_id
-	RETURNING o.alert_id,o.cluster_id,o.message,o.attempt_count,o.lease_until`, token).
+	RETURNING o.alert_id,o.cluster_id,o.message,o.attempt_count,o.lease_until`, token, cluster).
 		Scan(&claim.ID, &claim.ClusterID, &claim.Message, &claim.Attempt, &claim.LeaseUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AlertClaim{}, false, nil
