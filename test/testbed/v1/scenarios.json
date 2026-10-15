@@ -1,0 +1,477 @@
+{
+  "schema_version": "sherlock.testbed/v1",
+  "scenarios": [
+    {
+      "id": "thermal-context",
+      "description": "Thermal investigation with unrelated evidence, long hypotheses and a real worker restart.",
+      "world": {
+        "question": "Why did GPU temperature increase at matched power?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "GPU temperature increased from 52 C to 69 C at matched power.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "GPU temperature remains 19 C above sibling GPUs at similar power; fans and inlet temperature are normal.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "gpu_thermal",
+        "temperature": 69
+      }
+    },
+    {
+      "id": "filesystem-pressure",
+      "description": "Root filesystem capacity pressure with absent per-user attribution.",
+      "world": {
+        "question": "Why are filesystem writes failing under storage pressure?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "Filesystem capacity is 99 percent used with 9 GB available.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Filesystem writes failed with ENOSPC; per-user usage was not collected.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "not_exercised",
+        "temperature": 0
+      }
+    },
+    {
+      "id": "nccl-stall",
+      "description": "NCCL remote failure and no progress despite high utilization; cause remains unproven.",
+      "world": {
+        "question": "Why did NCCL training progress stall despite high GPU utilization?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "NCCL remote errors occurred while 110 GPUs remained at 100 percent utilization.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Training progress remained unchanged for 14 minutes; available IB counters showed no increase.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "not_exercised",
+        "temperature": 0
+      }
+    },
+    {
+      "id": "ib-dark-lane",
+      "description": "One inactive rail and a dark receive lane; exact failed component remains unknown.",
+      "world": {
+        "question": "Why is the InfiniBand rail inactive with a dark optical lane?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "InfiniBand rail 8 is Polling while the other seven rails are Active.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Optical receive lane 3 reports minus 40 dBm; transmit lanes are normal; far-end measurements are unavailable.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "not_exercised",
+        "temperature": 0
+      }
+    },
+    {
+      "id": "node-unavailable",
+      "description": "Source silence is evaluated without a new sample; physical cause is unavailable.",
+      "world": {
+        "question": "Why is the node unavailable with missing telemetry?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "Node telemetry stopped; the scheduler reports the node DOWN.",
+            "status": "PARTIAL",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Telemetry and out-of-band reachability are unavailable; power state was not observed.",
+            "status": "PARTIAL",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": true
+      },
+      "detection": {
+        "kind": "telemetry_loss",
+        "temperature": 0
+      }
+    },
+    {
+      "id": "thermal-slowdown",
+      "description": "Thermal slowdown with clocks and qualified application progress evidence.",
+      "world": {
+        "question": "Why is GPU thermal slowdown reducing training progress?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "GPU thermal slowdown is asserted at 87 C with SM clock 420 MHz.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Training step duration increased from 19.2 to 48 seconds while sibling GPU temperatures remained normal.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": true
+      },
+      "detection": {
+        "kind": "gpu_thermal",
+        "temperature": 87
+      }
+    },
+    {
+      "id": "healthy-thermal-control",
+      "description": "Normal absolute temperature under changing load must not open the thermal rule.",
+      "world": {
+        "question": "Is GPU temperature consistent with power under normal workload?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "GPU temperature is 55 C while power increases with workload.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "Sibling GPU temperature and clock readings are similar; application progress continues.",
+            "status": "COMPLETE",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "gpu_thermal",
+        "temperature": 55
+      }
+    },
+    {
+      "id": "missing-sensor-control",
+      "description": "Missing sensor values stay unknown, never healthy zeroes.",
+      "world": {
+        "question": "What GPU temperature and power observations are available?",
+        "start": "2026-10-01T11:00:00Z",
+        "end": "2026-10-01T12:00:00Z",
+        "evidence": [
+          {
+            "id": "z-observation",
+            "role": "PRIMARY",
+            "summary": "GPU temperature and power fields are unsupported by this source.",
+            "status": "PARTIAL",
+            "available_after_action": 0
+          },
+          {
+            "id": "z-detail",
+            "role": "DETAIL",
+            "summary": "No independent sensor or application progress observations were collected.",
+            "status": "PARTIAL",
+            "available_after_action": 1
+          },
+          {
+            "id": "a-noise-1",
+            "role": "PRIMARY",
+            "summary": "Login activity is unchanged over the recorded period.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-2",
+            "role": "PRIMARY",
+            "summary": "Package cache metadata was read successfully.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          },
+          {
+            "id": "a-noise-3",
+            "role": "PRIMARY",
+            "summary": "The terminal configuration has not changed.",
+            "status": "COMPLETE",
+            "available_after_action": 0
+          }
+        ]
+      },
+      "oracle": {
+        "required_evidence": [
+          "z-observation",
+          "z-detail"
+        ],
+        "expected_outcome": "PARTIAL",
+        "minimum_hidden_tests": 4,
+        "expect_detection": false
+      },
+      "detection": {
+        "kind": "not_exercised",
+        "temperature": 0
+      }
+    }
+  ]
+}

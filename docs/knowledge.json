@@ -232,6 +232,16 @@
         "legal"
       ],
       "summary": "Third-party license and attribution notices."
+    },
+    {
+      "path": "docs/guides/test-bed.md",
+      "kind": "reference",
+      "topics": [
+        "investigation",
+        "development",
+        "fixtures"
+      ],
+      "summary": "Disposable scenario lab, real controller/context persistence, worker restart, comparison reports and explicit unmeasured stages."
     }
   ]
 }

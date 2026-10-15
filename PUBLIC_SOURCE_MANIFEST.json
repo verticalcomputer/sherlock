@@ -3,8 +3,8 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "eb6c42b6a100f2e85c009bd064bc75aad8ece365dc05d8920cdd7bd62266ad60",
-      "size": 2536
+      "sha256": "dce65944add2be8683ae142bbb6b925d9cd1679181ea83bdbcf3addecd1db2f3",
+      "size": 2932
     },
     {
       "executable": false,
@@ -39,8 +39,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "15c0b90f4d7f00fa0a3194449f13b0085d62e3ebd61b067f541d29389ebca835",
-      "size": 1862
+      "sha256": "eaeba112309de6dec3890266481e6049b643839b655cf8e182d4efb413e614bc",
+      "size": 1988
     },
     {
       "executable": false,
@@ -512,6 +512,18 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-testbed/main.go",
+      "sha256": "b611309203135ec45301ff997f7cf08e208f79c10a25c2e432d3b050d97b6133",
+      "size": 4278
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-testbed/main_test.go",
+      "sha256": "69c7dcf91392f51be35caaa334591880738cfe7c6fb82c8362f1e570432b43b6",
+      "size": 890
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-worker/dcgm_discovery.go",
       "sha256": "945c04eea0920343164d5867009974f8f0e2c35b4f5e38f069c5136852a7fc88",
       "size": 1646
@@ -831,8 +843,8 @@
     {
       "executable": false,
       "path": "docs/README.md",
-      "sha256": "6d47bda7f98764a42c567480460e2817534a287e750aff38461ddd1415b5de2e",
-      "size": 2472
+      "sha256": "af5cead9bdb231885c2058b52f9f4cd1e9f5c539599e59fd58552bf0427938f2",
+      "size": 2628
     },
     {
       "executable": false,
@@ -843,8 +855,8 @@
     {
       "executable": false,
       "path": "docs/development.md",
-      "sha256": "bb7429c172c7173e28a095c0c78d3f19c5c9540ddcb7e12245846b50dcaeac94",
-      "size": 4071
+      "sha256": "262cbc724f1f630df9a4c5857b8659ab18b08a6f45d2c84859c9ea2687723f94",
+      "size": 4271
     },
     {
       "executable": false,
@@ -872,6 +884,12 @@
     },
     {
       "executable": false,
+      "path": "docs/guides/test-bed.md",
+      "sha256": "bbd7ffb9cd9a42b2ee2edd4381046c3dd1ca83cb05de3fb0c376195be2d86a28",
+      "size": 6265
+    },
+    {
+      "executable": false,
       "path": "docs/history/LINUX_RESIDENT_CHECKPOINT_20261013.md",
       "sha256": "d67a23d067f16610dae6d63c5166e2d8459804a9eb72b1cd7db30d1f1294f5e1",
       "size": 3778
@@ -879,8 +897,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "aab1953334bbf9496dd4f71455c47665d4df68031c4c4c4cc91eb9fd60266086",
-      "size": 6101
+      "sha256": "a594c8e1e5fe9294f5621d2afe40615a17316ce5efcf235234098377ed7d7d7b",
+      "size": 6424
     },
     {
       "executable": false,
@@ -939,8 +957,8 @@
     {
       "executable": false,
       "path": "implementation.md",
-      "sha256": "74de4d154ed4675cf52fd1a755ca7be2c52809ca83857c496b6a07918fb20f46",
-      "size": 2786
+      "sha256": "4d810ab0c49e1c81f5876aeb52c7a280e2d296270d7e3a7adee017c409faf6b2",
+      "size": 3062
     },
     {
       "executable": false,
@@ -5444,6 +5462,54 @@
     },
     {
       "executable": false,
+      "path": "internal/testbed/detection.go",
+      "sha256": "a0ba421fd841729e9b81a327193e15439883fd98e3535f79089ffcc3ee4031b2",
+      "size": 3945
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/provider.go",
+      "sha256": "da52968f92027435c0592d9dd9471691062c23c0e818de59e0e8c58556f968a9",
+      "size": 4992
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/report.go",
+      "sha256": "26b21a35392484b2cfd3879441be0760ba07a527143ec071f6a59355a1eabd41",
+      "size": 13122
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/run_integration_test.go",
+      "sha256": "3d05ed80082afe3070403c09670a8f22d32a0dcac902d3d2374ee6e84b7781b0",
+      "size": 3141
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/runtime.go",
+      "sha256": "45b1e378068c747a8a9ffe7695792ffdf8b66755acf439f13ee6d72c971c13c4",
+      "size": 10252
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/scenario.go",
+      "sha256": "7f37e66a1e904b010fff3b94f83d8ea28361b6f36bd26b07f262adbeaaa479b6",
+      "size": 4887
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/scenario_test.go",
+      "sha256": "fade836b1ab543acb4320da9efea5a77caa11f503b38b1a5c420efe953ec180a",
+      "size": 5184
+    },
+    {
+      "executable": false,
+      "path": "internal/testbed/world.go",
+      "sha256": "2de92e3c4fe404b7d60d2fe91cc1fe05d4a9b473e428d761225c9e943904319a",
+      "size": 5087
+    },
+    {
+      "executable": false,
       "path": "migrations/000001_m1_collection.down.sql",
       "sha256": "e819e95de57b1787404aba6e5441661300aeebe9ef55e7780968eb8f65095894",
       "size": 336
@@ -6393,8 +6459,8 @@
     {
       "executable": false,
       "path": "next.md",
-      "sha256": "77d2d62fb5378675575cec328f74cbb1fd41b4eb2ed45f89faeda6a634360273",
-      "size": 5888
+      "sha256": "54acbb3b06424ff586945f00470e3a29ca4bbf08cace8b37d3c26235dd3efd7e",
+      "size": 6337
     },
     {
       "executable": true,
@@ -6483,8 +6549,14 @@
     {
       "executable": true,
       "path": "scripts/run-isolated-integration.sh",
-      "sha256": "0a447e58b453a83a8b6f211c8c36fffdb88dad63d1102109b677c265ffff1782",
-      "size": 2139
+      "sha256": "9eeba73c3e878e611e588bd24c8a9d3b9ba3b8dbdb5352afb448d4a7f3c74c56",
+      "size": 2224
+    },
+    {
+      "executable": true,
+      "path": "scripts/run-testbed.sh",
+      "sha256": "9903231b06d6a8300550cb1cf7673d7525429ed70499cacce8c8f329f4b8150a",
+      "size": 1711
     },
     {
       "executable": true,
@@ -6713,6 +6785,12 @@
       "path": "test/integration/m4_public_query_test.go",
       "sha256": "4e6cf81e6ec0f3882ed891be8c800dfb728dd2b9919d5617a53261383b5bfe3e",
       "size": 3868
+    },
+    {
+      "executable": false,
+      "path": "test/testbed/v1/scenarios.json",
+      "sha256": "5c6289311fa85b08b4ec6672fdccc996882ddb595efad714e9143252779811d5",
+      "size": 15387
     },
     {
       "executable": false,

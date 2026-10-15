@@ -71,3 +71,12 @@ jobs:
       - run: go mod download
       - run: go run ./cmd/sherlock-migrate -dir migrations
       - run: go test -race -tags=integration ./...
+      - name: Run scenario test bed with fresh worker processes
+        run: make testbed TESTBED_OUTPUT="${{ runner.temp }}/sherlock-testbed.json"
+      - name: Preserve scenario test-bed report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherlock-testbed
+          path: ${{ runner.temp }}/sherlock-testbed.json
+          if-no-files-found: warn
