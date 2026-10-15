@@ -81,8 +81,8 @@ complete accounting coverage or a physical cause. Snapshots retain the threshold
 number of qualifying attempts and their original immutable record/run references;
 the incident reports the full observed qualifying count. The investigation context
 loader exposes that structured snapshot when the evidence is attached to an
-authorized investigation. This feature grants no automatic investigation or repair
-authority.
+authorized investigation. Monitoring enrollment grants no investigation or repair
+authority; the separate investigation handoff below requires its own policy.
 
 One active incident suppresses additional opening notifications. Newly observed
 qualifying attempts during that episode are consumed. Missing data or a window
@@ -116,6 +116,58 @@ code; raw database/source errors are not persisted or logged. Collection continu
 Rollback refuses to discard published Slurm monitoring history; preserve/archive
 that history before a schema rollback.
 
+## Investigation handoff and correlation
+
+Slurm incidents can enter the existing durable investigation loop. This remains
+separately opt-in: configure `SHERLOCK_AUTO_INVESTIGATION_ENABLED=true`, include
+`slurm.job_failures.v1` in `SHERLOCK_AUTO_INVESTIGATION_RULES`, and explicitly allow
+partial coverage with `SHERLOCK_AUTO_INVESTIGATION_ALLOW_PARTIAL_COVERAGE=true`.
+Keep any other desired rules in the list. Configure the existing bounded worker
+and investigator services, model, cluster authority and budgets; this document
+does not enable a deployment. The default rule list and default-off policy remain
+unchanged. Detection and notification delivery do not depend on model availability.
+
+The bridge reserves one stable investigation for each committed Slurm episode,
+using the existing severity, freshness, coverage, cooldown, concurrency and daily
+token/cost gates. Outstanding reservations count against concurrency. Admission
+is serialized across automatic detector families in a cluster. Status includes
+`investigation_decision` and `investigation_id`; blocked decisions remain visible.
+Disabled policy/rule does not consume an episode. Other policy blocks are recorded
+once; a later policy change does not silently retry a blocked episode. An authorized
+manual investigation or a new episode remains possible. `source_event_id` in the
+shared reservation table is the Slurm episode occurrence, scoped by incident ID.
+
+Before admission, the bridge freezes a bounded correlation snapshot. It resolves
+only the cited immutable lifecycle facts and uses their exact node IDs, attempt
+keys and end times. Each window starts at the later of known start time and 30
+minutes before failure, and ends five minutes after failure, capped at admission.
+These windows describe sampled context, not full job history. Missing node
+membership blocks automatic admission; no cluster-wide fallback is granted. Missing
+incident/evidence links or immutable attempt facts produce visible unavailable
+decisions rather than manufacturing evidence or repeatedly stalling the bridge.
+Scope is capped at 64 source/node identities and 24 hours. Each GPU observation
+and network poll lists the attempt keys whose node/window it actually matched.
+
+GPU correlation uses committed XID, temperature, power, ECC and utilization
+observations, with unambiguous node/UUID labels. It scans at most 1,024 candidates
+and freezes at most 128 matched records. Network correlation uses at most four
+retained GP-09 network cycles and 64 matched polls. It includes read failures as
+unavailable observations, preserves cycle IDs, and survives subsequent ring
+pruning. The resident agent's separate telemetry history is not yet a correlation
+source. Missing, stale/out-of-window, ambiguous and foreign observations are never
+converted into healthy/zero measurements. Input limits and missing per-attempt
+source coverage are explicit. Polling cannot establish lossless transient coverage.
+
+A deterministic read-only `cluster.slurm_failure_evidence.v1` pass attaches only that incident's
+failure/correlation evidence before model synthesis. Other episodes on the same
+source/window cannot enter through this reviewed pass. Slurm admission grants zero
+native diagnostic and privileged calls. The model sees bounded, cited normalized
+facts and gaps; coincidence does not establish a hardware cause, progress or
+GPU efficiency. A partial result does not resolve the incident automatically.
+Reservation replay resumes the same request if a worker dies before acknowledging
+the start. Migration 82 stores immutable correlation history and refuses rollback
+when that history exists. No repair authority is added.
+
 ## Verification and boundaries
 
 `make testbed` includes five Slurm controls: distinct attempts, repeated snapshots
@@ -128,6 +180,18 @@ requires one incident/alert intent, three consumed attempts, three delivery clai
 one committed receipt and two simulated receiver acceptances after the lost receipt.
 The real HTTP sender uses a durable simulated transport; no external Slack call is
 made and no Slurm host is contacted.
+
+Five additional abrupt exits cover investigation reservation, start before
+acknowledgement, read completion before controller save, evidence recording and
+terminal report commit. The lab requires one investigation/correlation snapshot,
+one completed read action, two ledger entries, one identical read replay and one
+simulated synthesis. GPU observations pass through the production Prometheus parser
+and collection store. Network input is an explicitly simulated normalized cycle
+fixture in the real retained-cycle table; native collection/enrollment is not
+qualified. Foreign nodes and old polls are distracting evidence and must be excluded.
+The actual production evidence executor, context loader, controller and orchestrator
+must deliver XID 79, temperature 87, and the recorded DOWN/Polling port to synthesis.
+The model remains simulated and its report retains causal uncertainty.
 
 The isolated database tests additionally cover atomic rollback, safe error status,
 concurrent evaluators, receiver retry visibility, collector revocation, legacy

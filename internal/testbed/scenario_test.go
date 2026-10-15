@@ -181,3 +181,21 @@ func TestComparisonRejectsLostSlurmCoverageAndRecovery(t *testing.T) {
 		t.Fatalf("lost crash qualification ignored: %+v %v", comparison, err)
 	}
 }
+
+func TestComparisonRejectsLostSlurmInvestigationRecovery(t *testing.T) {
+	base := Report{SchemaVersion: SchemaVersion, SuiteSHA256: strings.Repeat("a", 64), Mode: "SIMULATED_PLANNER", Passed: true, SlurmFailures: &SlurmFailureReport{ContractSHA256: strings.Repeat("b", 64), Passed: true, Mode: "ABRUPT_PROCESS_EXIT", Investigation: SlurmInvestigationReport{Passed: true, CrashPIDs: []int{1, 2, 3, 4, 5}}}}
+	candidate := base
+	copy := *base.SlurmFailures
+	candidate.SlurmFailures = &copy
+	candidate.SlurmFailures.Investigation.CrashPIDs = []int{1, 2, 3, 4}
+	comparison, err := Compare(base, candidate)
+	if err != nil || comparison.Passed {
+		t.Fatalf("missing Slurm investigation crash compared as equivalent: %+v %v", comparison, err)
+	}
+	candidate.SlurmFailures.Investigation = base.SlurmFailures.Investigation
+	candidate.SlurmFailures.Investigation.Passed = false
+	comparison, err = Compare(base, candidate)
+	if err != nil || comparison.Passed {
+		t.Fatalf("failed Slurm investigation compared as equivalent: %+v %v", comparison, err)
+	}
+}

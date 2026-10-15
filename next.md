@@ -65,7 +65,10 @@ and signing prerequisites; this status page cannot authorize a run.
    The Slurm extension now covers repeated failures across distinct attempts,
    cancellation/preemption, conflicting outcomes, reused job IDs and three
    notification crash boundaries. It reuses the durable outbox/sender with a
-   simulated receiver. [Enrollment and limits](docs/guides/slurm-failure-monitoring.md).
+   simulated receiver. Slurm incidents now have a separately opt-in automatic
+   investigation handoff, frozen GPU/network correlation with explicit gaps, and
+   five more abrupt process recovery gates through cited partial synthesis. Native
+   diagnostic/repair grants remain zero for that handoff. [Enrollment and limits](docs/guides/slurm-failure-monitoring.md).
    Native diagnostics are explicitly unavailable simulations; GPU episode/outbox,
    resident mTLS intake, worker lease expiry, in-transaction kills and uncertain
    provider outcomes remain open lab slices. Use [the lab guide](docs/guides/test-bed.md)

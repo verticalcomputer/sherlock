@@ -270,6 +270,19 @@ func (bridge *AnomalyBridge) RunOnce(ctx context.Context) (bool, error) {
 	} else if pending != nil {
 		return true, bridge.start(ctx, *pending, now)
 	}
+	// Monitoring publishes incidents independently. Optional source bridges only
+	// reserve bounded starts after those incidents and their evidence are durable.
+	if source, ok := bridge.store.(interface {
+		ReserveSlurmFailureInvestigation(context.Context, domain.ClusterID, AutomaticInvestigationPolicy, time.Time) (*PendingAutomaticInvestigation, error)
+	}); ok {
+		pending, err := source.ReserveSlurmFailureInvestigation(ctx, bridge.cluster, bridge.policy, now)
+		if err != nil {
+			return false, err
+		}
+		if pending != nil {
+			return true, bridge.start(ctx, *pending, now)
+		}
+	}
 	collection, found, err := bridge.store.NextCommittedCollection(ctx, bridge.consumer, bridge.cluster)
 	if err != nil || !found {
 		return false, err

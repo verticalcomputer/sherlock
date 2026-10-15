@@ -19,13 +19,15 @@ type SlurmFailureStore struct{ pool *pgxpool.Pool }
 func NewSlurmFailureStore(pool *pgxpool.Pool) *SlurmFailureStore { return &SlurmFailureStore{pool} }
 
 type SlurmFailureNotification struct {
-	Snapshot   []slurmfailures.Attempt `json:"attempt_evidence"`
-	IncidentID string                  `json:"incident_id"`
-	EvidenceID string                  `json:"evidence_id"`
-	AlertID    string                  `json:"alert_id"`
-	Status     string                  `json:"status"`
-	LastCode   string                  `json:"last_code"`
-	Attempts   int                     `json:"attempts"`
+	InvestigationID       *string                 `json:"investigation_id"`
+	InvestigationDecision string                  `json:"investigation_decision"`
+	Snapshot              []slurmfailures.Attempt `json:"attempt_evidence"`
+	IncidentID            string                  `json:"incident_id"`
+	EvidenceID            string                  `json:"evidence_id"`
+	AlertID               string                  `json:"alert_id"`
+	Status                string                  `json:"status"`
+	LastCode              string                  `json:"last_code"`
+	Attempts              int                     `json:"attempts"`
 }
 type SlurmFailureStatus struct {
 	Notifications       []SlurmFailureNotification `json:"notifications"`
@@ -146,7 +148,7 @@ func (s *SlurmFailureStore) Status(ctx context.Context, cluster domain.ClusterID
 		return status, err
 	}
 	status.Notifications = []SlurmFailureNotification{}
-	rows, err := s.pool.Query(ctx, `SELECT e.incident_id,e.evidence_id,e.alert_id,o.status,o.last_code,o.attempt_count,e.snapshot FROM slurm_failure_episodes e JOIN slurm_failure_policies p USING(policy_id) JOIN gp09_alert_outbox o USING(alert_id) WHERE p.cluster_id=$1 AND p.policy_id=$2 ORDER BY e.occurrence DESC LIMIT 20`, cluster, id)
+	rows, err := s.pool.Query(ctx, `SELECT e.incident_id,e.evidence_id,e.alert_id,o.status,o.last_code,o.attempt_count,e.snapshot,a.investigation_id,coalesce(a.decision_code,'NOT_EVALUATED') FROM slurm_failure_episodes e JOIN slurm_failure_policies p USING(policy_id) JOIN gp09_alert_outbox o USING(alert_id) LEFT JOIN automatic_investigation_attempts a ON a.incident_id=e.incident_id WHERE p.cluster_id=$1 AND p.policy_id=$2 ORDER BY e.occurrence DESC LIMIT 20`, cluster, id)
 	if err != nil {
 		return status, err
 	}
@@ -154,7 +156,7 @@ func (s *SlurmFailureStore) Status(ctx context.Context, cluster domain.ClusterID
 	for rows.Next() {
 		var n SlurmFailureNotification
 		var snapshot []byte
-		if err = rows.Scan(&n.IncidentID, &n.EvidenceID, &n.AlertID, &n.Status, &n.LastCode, &n.Attempts, &snapshot); err != nil {
+		if err = rows.Scan(&n.IncidentID, &n.EvidenceID, &n.AlertID, &n.Status, &n.LastCode, &n.Attempts, &snapshot, &n.InvestigationID, &n.InvestigationDecision); err != nil {
 			return status, err
 		}
 		if err = json.Unmarshal(snapshot, &n.Snapshot); err != nil {

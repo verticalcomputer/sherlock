@@ -241,7 +241,7 @@
         "development",
         "fixtures"
       ],
-      "summary": "Disposable scenario and telemetry-to-incident lab, automatic investigation admission, six abrupt process exits, independent grading and explicit unmeasured stages."
+      "summary": "Disposable scenarios and Prometheus/Slurm incident-to-investigation labs; scoped correlation, abrupt process recovery and explicit unmeasured sources."
     },
     {
       "path": "docs/guides/slurm-failure-monitoring.md",
@@ -252,7 +252,7 @@
         "development",
         "investigation"
       ],
-      "summary": "Opt-in distinct Slurm attempt failure detection, enrollment, durable incidents/outbox, partial evidence and replay/crash qualification."
+      "summary": "Opt-in Slurm attempt failure detection, durable notification and investigation handoff, scoped GPU/network evidence, gaps and replay/crash qualification."
     }
   ]
 }

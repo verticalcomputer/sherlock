@@ -13,7 +13,7 @@ checkpoint order; it is not a deployment or acceptance record.
 | Enroll or renew a resident identity | [Manual enrollment](guides/resident-enrollment.md) |
 | Integrate telemetry transport | [Protocol](reference/telemetry/protocol.md), [node identity](reference/telemetry/node-identity.md) |
 | Review durability, replay or resource bounds | [Node runtime](reference/telemetry/node-runtime.md), [gateway runtime](reference/telemetry/gateway-runtime.md), [ownership retirement](reference/telemetry/ownership-retirement.md) |
-| Alert on repeated Slurm job failures | [Slurm failure monitoring](guides/slurm-failure-monitoring.md) |
+| Alert on and investigate repeated Slurm failures | [Slurm failure monitoring](guides/slurm-failure-monitoring.md) |
 | Prepare or verify a release | [Candidate review](guides/release-review.md), [signing and verification](guides/release-signing.md) |
 | Export reviewed private source for publication | [Source export](guides/source-export.md) |
 | Use generated API clients | [SDK guide](../sdk/README.md) |

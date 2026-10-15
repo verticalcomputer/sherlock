@@ -235,6 +235,10 @@ func (store *AnomalyBridgeStore) reconcileSignal(ctx context.Context, tx pgx.Tx,
 }
 
 func automaticDecision(ctx context.Context, tx pgx.Tx, incidentID string, cluster domain.ClusterID, signal application.AnomalySignal, evidenceCreated time.Time, coverage domain.EvidenceStatus, policy application.AutomaticInvestigationPolicy, now time.Time) (string, error) {
+	// Serialize admission across detector families, including outstanding starts.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "automatic-investigation:"+string(cluster)); err != nil {
+		return "", err
+	}
 	facts := application.AutomaticInvestigationFacts{EvidenceCreatedAt: evidenceCreated, Coverage: coverage, CooldownElapsed: true}
 	var recentStarts int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM automatic_investigation_attempts WHERE incident_id=$1 AND status='STARTED' AND created_at>($2::timestamptz-make_interval(secs=>$3))`, incidentID, now, policy.Cooldown.Seconds()).Scan(&recentStarts); err != nil {
@@ -249,6 +253,11 @@ func automaticDecision(ctx context.Context, tx pgx.Tx, incidentID string, cluste
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM investigations WHERE cluster_id=$1 AND requested_by=$2 AND status NOT IN ('COMPLETED','PARTIAL','BLOCKED','CANCELLED')`, cluster, policy.ServiceActor).Scan(&facts.Concurrent); err != nil {
 		return "", fmt.Errorf("check automatic investigation concurrency: %w", err)
 	}
+	var reserved int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM automatic_investigation_attempts WHERE cluster_id=$1 AND status='RESERVED'`, cluster).Scan(&reserved); err != nil {
+		return "", err
+	}
+	facts.Concurrent += reserved
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(max_model_tokens),0),COALESCE(sum(max_cost_microunits),0) FROM automatic_investigation_attempts WHERE cluster_id=$1 AND status IN ('RESERVED','STARTED') AND created_at>=date_trunc('day',$2 AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`, cluster, now).Scan(&facts.DailyReservedTokens, &facts.DailyReservedCost); err != nil {
 		return "", fmt.Errorf("load automatic daily budgets: %w", err)
 	}
