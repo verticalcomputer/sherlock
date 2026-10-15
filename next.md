@@ -56,15 +56,16 @@ and signing prerequisites; this status page cannot authorize a run.
 
 ## Next implementation work
 
-1. The scenario test bed now exercises all six incident classes and two controls
-   through the real controller, context engine, budget manager and PostgreSQL.
-   It records two fresh worker processes and compares reconstructed context.
-   Use [the lab guide](docs/guides/test-bed.md) for running and comparing reports.
-   Detector/incident/outbox integration, live-model reasoning and native-agent
-   overhead remain explicitly unmeasured. Full repository checks, eight process-
-   restart scenarios, same-suite comparison and focused database regressions pass.
-   Next extend timed source ingestion and
-   crash fault injection before treating this as full pipeline qualification.
+1. The scenario test bed retains the six incident classes and two controls, and
+   now adds a production Prometheus parsing/storage → XID incident → automatic
+   investigation → cited partial-report path. Six abrupt process exits exercise
+   collection replay, reserved-start recovery, action receipt replay, evidence
+   recording and terminal report recovery. Independent checks reject corrupted
+   observations, missing crash markers and conflicting XID identity aliases.
+   Native diagnostics are explicitly unavailable simulations; GP-09 outbox,
+   resident mTLS intake, worker lease expiry, in-transaction kills and uncertain
+   provider outcomes remain open lab slices. Use [the lab guide](docs/guides/test-bed.md)
+   for coverage, running and same-contract comparisons. Release signing stays parked.
 2. Continue the existing R2 (GP-12–17) investigation-loop work: evaluate pending
    hypothesis updates across rejected proposals, action novelty, and whether
    closure is supported by evidence rather than merely producing a valid report.

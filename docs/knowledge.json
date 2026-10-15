@@ -241,7 +241,7 @@
         "development",
         "fixtures"
       ],
-      "summary": "Disposable scenario lab, real controller/context persistence, worker restart, comparison reports and explicit unmeasured stages."
+      "summary": "Disposable scenario and telemetry-to-incident lab, automatic investigation admission, six abrupt process exits, independent grading and explicit unmeasured stages."
     }
   ]
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -25,6 +26,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	suitePath := flags.String("suite", "test/testbed/v1/scenarios.json", "synthetic scenario suite")
 	output := flags.String("output", "-", "JSON report path or stdout")
 	baseline := flags.String("baseline", "", "prior report from the exact same suite")
+	pipeline := flags.String("pipeline-worker", "", "internal telemetry pipeline worker prefix")
+	crash := flags.String("crash-at", "", "internal durable crash boundary")
 	worker := flags.String("worker", "", "internal fresh-process worker investigation ID")
 	stop := flags.Int("stop-after-actions", 0, "internal worker restart boundary")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
@@ -50,6 +53,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var database string
 	if err = pool.QueryRow(ctx, `SELECT current_database()`).Scan(&database); err != nil || !strings.HasPrefix(database, "sherlock_testbed_") {
 		fmt.Fprintln(stderr, "a dedicated sherlock_testbed_ database is required")
+		return 2
+	}
+	if *pipeline != "" {
+		if err = testbed.PipelineWorker(ctx, pool, *pipeline, *crash, func() error { os.Exit(testbed.CrashExitCode); return nil }); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+	if *crash != "" {
+		fmt.Fprintln(stderr, "crash-at requires pipeline-worker")
 		return 2
 	}
 	if *worker != "" {
@@ -82,6 +96,31 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	pipelineLaunch := func(ctx context.Context, prefix, boundary string) error {
+		command := exec.CommandContext(ctx, exe, "-pipeline-worker", prefix, "-crash-at", boundary)
+		command.Env = os.Environ()
+		raw, err := command.CombinedOutput()
+		if boundary != "" {
+			var exited *exec.ExitError
+			if errors.As(err, &exited) && exited.ExitCode() == testbed.CrashExitCode {
+				return nil
+			}
+			return fmt.Errorf("pipeline worker did not crash at %s: %v: %s", boundary, err, raw)
+		}
+		if err != nil {
+			return fmt.Errorf("pipeline worker: %w: %s", err, raw)
+		}
+		return nil
+	}
+	pipelineResult, err := testbed.RunPipeline(ctx, pool, pipelineLaunch, true)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		pipelineResult.Passed = false
+		pipelineResult.Violations = append(pipelineResult.Violations, "pipeline did not complete: "+err.Error())
+	}
+	report.Pipeline = &pipelineResult
+	report.Passed = report.Passed && pipelineResult.Passed
+	report.UnmeasuredStages = []string{"scenario_fixture_incident_admission", "resident_mtls_intake", "monitoring_episode_outbox_delivery", "investigator_lease_expiry", "transaction_in_flight_kill", "crash_after_provider_uncertainty", "live_model_quality", "native_agent_overhead"}
 	if binary, readErr := os.ReadFile(exe); readErr == nil {
 		report.BinarySHA256 = domain.ChecksumSHA256(binary).String()
 	}

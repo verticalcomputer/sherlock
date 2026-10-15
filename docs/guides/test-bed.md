@@ -16,10 +16,11 @@ build directory on success or failure; the JSON report remains. It never reads
 Release signing and client installation are independent of this lab.
 
 The report records the binary SHA-256, embedded source revision/dirty state,
-exact suite SHA-256, simulator version, per-case results and explicit unmeasured
+exact suite and pipeline-contract SHA-256, simulator version, per-case results and explicit unmeasured
 stages. Retain the actual source revision with reports from dirty checkouts;
 a commit label alone cannot reproduce uncommitted code. Comparisons reject a
-changed suite, case set or model mode. They identify newly failing cases,
+changed suite, case set, pipeline contract/coverage or model mode. Reports made
+before pipeline coverage was added intentionally require a new baseline. Comparisons identify newly failing cases,
 critical-evidence recall loss, lost full hypothesis content and restart mismatch.
 Simulated token deltas are diagnostic; there is no claim about actual provider
 cost or tokenization. A failed candidate cannot pass by improving an average.
@@ -41,7 +42,8 @@ PostgreSQL pool and starts a second worker process. Worker PIDs are recorded and
 the CLI requires two distinct processes. Exact reconstructed context JSON must
 match. This tests a restart at a durable transition boundary; abrupt process
 termination inside a transaction, worker lease expiry and crash-after-provider
-uncertainty are separate acceptance scenarios.
+uncertainty remain separate acceptance scenarios. The additional pipeline case
+below exercises abrupt exits after six committed writes.
 
 The context-driven planner simulator has no queued reply sequence or oracle
 input. It chooses two fixed, reviewed read-only simulator tools from the request,
@@ -64,6 +66,62 @@ Grades come from captured actual model requests, durable findings, hypotheses,
 checkpoints, manifests, audited calls and execution receipts. Required citation
 recall is checked separately from whether a report merely has valid citations.
 
+## Telemetry to incident to investigation
+
+An additional, separately graded pipeline case runs in the same disposable lab:
+
+1. A loopback HTTP Prometheus fixture returns XID 79 and GPU temperature 87 °C.
+   The production allowlisted client/executor parses the responses. Expected
+   inventory is explicitly seeded; collection storage normalizes identities,
+   commits observations and creates immutable collection evidence.
+2. The production anomaly bridge consumes committed collection events, detects
+   the XID edge, creates an incident with its evidence and reserves an automatic
+   investigation under an explicitly enabled, bounded lab policy.
+3. The real investigation controller follows the existing four-step XID
+   diagnostic policy, commits action/evidence history and synthesizes a cited
+   `PARTIAL` report through the real context/budget/audit path.
+
+The XID rule triggers this case; the temperature is corroborating telemetry.
+This case does **not** qualify automatic thermal incident admission. The lab has
+no native diagnostic access. Four explicit `UNAVAILABLE` evidence fixtures and
+terminal failed diagnostic-run attributions represent that gap; no work is
+queued, no command pack executes and no node is contacted. Incoming XID and
+thermal evidence remain distinct from those simulated diagnostic results.
+The XID policy makes deterministic decisions, so this case uses one simulated
+synthesis call; the original eight cases exercise multi-turn model planning,
+long hypotheses and distractor ranking.
+
+The parent launches a new process for each crash boundary. The child immediately
+exits with a reserved exit code after recording a durable marker; deferred Go
+cleanup does not run. A clean exit or unrelated failure cannot count as the
+requested crash. The parent reads PostgreSQL before starting each replacement:
+
+| Crash boundary | Required durable facts before replacement |
+| --- | --- |
+| Telemetry committed | Two collection runs/observations and their envelopes; no incident or investigation. Four explicit missing-diagnostic fixtures also exist. |
+| Incident committed | One incident and one reserved automatic start; no investigation yet. |
+| Investigation start committed | One initializing investigation; the automatic-start acknowledgement is still reserved. |
+| Action receipt committed | One execution effect, state `EXECUTING`; the controller has not saved its receipt. |
+| Evidence-recording transition committed | Replayed receipt, state `RECORDING_EVIDENCE`; the production store has committed the first action and two evidence entries. |
+| Terminal report committed | One incident/investigation, four distinct effects/actions, six evidence entries, one acknowledged start and a cited `PARTIAL` report. |
+
+Every replacement replays collection and resumes the bridge/controller from
+PostgreSQL. The final check requires exactly one execution-receipt replay and
+no duplicate effects, incident or investigation. Receipts are bound to the exact
+action payload; a changed action cannot reuse a key. A fresh database pool must
+reconstruct identical terminal context.
+
+The grader checks the committed numeric values against an independent oracle,
+then checks their citations and statements in the durable report. It also
+requires the missing diagnostic classes and causal uncertainty to remain visible.
+Integration regressions deliberately change committed temperature to 88 °C,
+corrupt an entity key and remove the incident-evidence link; each must fail.
+The grader verifies the source event, incident evidence and automatic-start
+lineage, as well as consistency between stored entity keys and identity labels. Other controls send a healthy XID value, no samples,
+malformed JSON and conflicting identity aliases through parsing, storage and
+the bridge; none may create an XID incident. These controls run in the database
+integration suite; the JSON pipeline report describes the positive recovery case.
+
 ## Scenarios and boundaries
 
 The [synthetic suite](../../test/testbed/v1/scenarios.json) covers the six reported
@@ -80,9 +138,11 @@ sample for source silence. This qualifies evaluator behavior only. The below-
 threshold cooling-change scenario correctly records no absolute-threshold alert;
 that result does not qualify advanced power-matched cooling detection.
 Other detectors are explicitly `NOT_EXERCISED`, rather than declared healthy or
-passing. Incidents are explicitly admitted as fixture inputs. Real source
-intake, detector enrollment/incident/outbox integration, receiver delivery,
-live-model quality and native-agent overhead are listed as unmeasured stages.
+passing. The eight scenario incidents are still explicitly admitted as fixture
+inputs. The additional pipeline exercises loopback Prometheus intake and XID
+incident/automatic investigation admission. Resident-agent mTLS intake,
+GP-09 enrollment/episode/outbox and receiver delivery, live-model quality and
+native-agent overhead remain unmeasured by this lab.
 No scenario creates repair authority.
 
 ## Verification and extending the suite
@@ -90,14 +150,17 @@ No scenario creates repair authority.
 `go test -race ./internal/testbed ./cmd/sherlock-testbed` checks fixture bounds,
 comparison integrity and evaluator controls. The isolated integration suite
 exercises the real controller, lost-critical-evidence grading, scope/window
-filtering and later-evidence withholding. CI also runs `make testbed` and retains
-its report as an artifact, proving the actual process restart path.
+filtering, later-evidence withholding, intake controls, corrupt-observation
+rejection and crash recovery through fresh component construction. CI also runs
+`make testbed` and retains its report, proving the original process restart and
+six abrupt process-exit recovery boundaries. In-process database tests explicitly
+report `IN_PROCESS_RECONSTRUCTION`; CLI results report `ABRUPT_PROCESS_EXIT`.
 
 Add synthetic scenario input and independently reviewed expected observations
 separately. Never infer an absent observation, copy a candidate report into the
 oracle or silently regenerate a baseline to make a regression pass. Changes to
 the suite intentionally require a new baseline and review of the new hash.
 Customer-derived scenarios belong in approved private storage until sanitized.
-Future slices should add timed ingestion and detector/incident/outbox integration,
-crash fault injection, and an opt-in live-model adapter with fixed budgets and
-repeated runs. Native hardware/resource qualification remains a separate mode.
+Future slices should add resident transport, GP-09 episode/outbox delivery,
+worker lease expiry, process death inside an open transaction, uncertain model
+outcomes, and an opt-in live-model adapter with fixed budgets and repeated runs. Native hardware/resource qualification remains a separate mode.

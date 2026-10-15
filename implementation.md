@@ -11,8 +11,12 @@ these improvements. Start with query-aware evidence ranking and scenario
 regressions, then evaluate multi-turn context and repeated-action behavior.
 The [scenario test bed](docs/guides/test-bed.md) supplies repeatable R2
 context/controller regressions, exact-suite comparisons and explicit unmeasured
-stages. Timed intake, full incident delivery, live-model reasoning and native
-hardware qualification remain separate gates. This does not reorder the
+stages. It also exercises production Prometheus ingestion, XID incident and
+automatic investigation admission, and six committed-write crash boundaries.
+Native diagnostic results remain unavailable simulations. Resident intake,
+GP-09 episode/outbox delivery, worker leases, in-transaction crashes, uncertain
+provider outcomes, live-model reasoning and native hardware qualification
+remain separate gates. This does not reorder the
 monitoring dependencies below or waive live gates.
 
 | Order | Checkpoints | Remaining gate |

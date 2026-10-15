@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,10 @@ type clock struct{ at time.Time }
 func (c clock) Now() time.Time { return c.at }
 
 func components(ctx context.Context, pool *pgxpool.Pool, id domain.InvestigationID) (*application.InvestigationController, *storepg.InvestigationStore, *investigationcontext.Engine, *investigationcontext.Builder, error) {
+	return faultComponents(ctx, pool, id, nil)
+}
+
+func faultComponents(ctx context.Context, pool *pgxpool.Pool, id domain.InvestigationID, fault *pipelineFault) (*application.InvestigationController, *storepg.InvestigationStore, *investigationcontext.Engine, *investigationcontext.Builder, error) {
 	store, err := storepg.NewInvestigationStore(pool)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -46,7 +51,13 @@ func components(ctx context.Context, pool *pgxpool.Pool, id domain.Investigation
 	request := snapshot.Investigation.Request()
 	definitions := []investigationtools.Definition{}
 	for _, tool := range []string{"evidence.lookup.v1", "node.detail.v1"} {
-		definitions = append(definitions, investigationtools.Definition{SchemaVersion: 1, ID: investigationtools.ToolID(tool), Description: "Read bounded simulated source evidence", Operation: investigationtools.OperationReadOnly, AllowedClusters: []domain.ClusterID{request.ClusterID}, RequiredCapabilities: []auth.Capability{auth.CapabilityInvestigationsRun}, RequiredClusterCapabilities: []investigationtools.ClusterCapability{"testbed.read"}, Scope: investigationtools.ScopePolicy{EntityKinds: []string{"node"}, MaxTargets: 1, MaxWindow: time.Hour}, Timeout: time.Second, CostWeight: 1})
+		definitions = append(definitions, investigationtools.Definition{SchemaVersion: 1, ID: investigationtools.ToolID(tool), Description: "Read bounded simulated source evidence", Operation: investigationtools.OperationReadOnly, AllowedClusters: []domain.ClusterID{request.ClusterID}, RequiredCapabilities: []auth.Capability{auth.CapabilityInvestigationsRun}, RequiredClusterCapabilities: []investigationtools.ClusterCapability{"testbed.read"}, Scope: investigationtools.ScopePolicy{EntityKinds: []string{request.Scope.EntityKind}, MaxTargets: 1, MaxWindow: time.Hour}, Timeout: time.Second, CostWeight: 1})
+	}
+	if strings.HasPrefix(string(request.ClusterID), "tb-pipeline-") {
+		definitions = nil
+		for _, tool := range investigationtools.XIDRequiredEvidenceTools() {
+			definitions = append(definitions, investigationtools.Definition{SchemaVersion: 1, ID: tool, Description: "Simulated unavailable diagnostic; no node access", Operation: investigationtools.OperationDiagnostic, MinimumReexecutionInterval: time.Minute, AllowedClusters: []domain.ClusterID{request.ClusterID}, RequiredCapabilities: []auth.Capability{auth.CapabilityInvestigationsRun}, RequiredClusterCapabilities: []investigationtools.ClusterCapability{"testbed.read"}, Scope: investigationtools.ScopePolicy{EntityKinds: []string{request.Scope.EntityKind}, MaxTargets: 1, MaxWindow: time.Hour}, Timeout: time.Second, CostWeight: 1})
+		}
 	}
 	catalog, err := investigationtools.NewCatalog(definitions)
 	if err != nil {
@@ -91,7 +102,13 @@ func components(ctx context.Context, pool *pgxpool.Pool, id domain.Investigation
 	if err = planner.ConfigureContextEngine(engine); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	controller, err := application.NewInvestigationController(store, planner, adapter, c, platform.RandomIDGenerator{})
+	var controllerStore application.InvestigationStore = store
+	var executor application.InvestigationExecutor = adapter
+	if fault != nil {
+		controllerStore = crashInvestigationStore{InvestigationStore: store, fault: fault}
+		executor = crashExecutor{adapter, fault}
+	}
+	controller, err := application.NewInvestigationController(controllerStore, planner, executor, c, platform.RandomIDGenerator{})
 	return controller, store, engine, builder, err
 }
 

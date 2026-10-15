@@ -202,6 +202,13 @@ func entityKey(task domain.CollectionTask, labels map[string]string) (string, er
 		}
 		return "source/" + string(task.SourceID), nil
 	}
+	// Legacy XID does not use expanded DCGM normalization. Preserve its index-
+	// based compatibility while rejecting contradictory identity aliases here.
+	for _, pair := range [][2]string{{"Hostname", "hostname"}, {"UUID", "uuid"}} {
+		if labels[pair[0]] != "" && labels[pair[1]] != "" && labels[pair[0]] != labels[pair[1]] {
+			return "", fmt.Errorf("GPU sample has conflicting identity aliases")
+		}
+	}
 	host := labels["Hostname"]
 	if host == "" {
 		host = labels["hostname"]
