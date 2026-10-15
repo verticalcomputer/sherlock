@@ -35,17 +35,18 @@ type Result struct {
 	Violations             []string        `json:"violations"`
 }
 type Report struct {
-	Pipeline         *PipelineResult `json:"pipeline,omitempty"`
-	SchemaVersion    string          `json:"schema_version"`
-	SuiteSHA256      string          `json:"suite_sha256"`
-	BinarySHA256     string          `json:"binary_sha256,omitempty"`
-	SourceRevision   string          `json:"source_revision,omitempty"`
-	SourceDirty      bool            `json:"source_dirty"`
-	PlannerVersion   string          `json:"planner_version"`
-	Mode             string          `json:"mode"`
-	Passed           bool            `json:"passed"`
-	Cases            []Result        `json:"cases"`
-	UnmeasuredStages []string        `json:"unmeasured_stages"`
+	SlurmFailures    *SlurmFailureReport `json:"slurm_failures,omitempty"`
+	Pipeline         *PipelineResult     `json:"pipeline,omitempty"`
+	SchemaVersion    string              `json:"schema_version"`
+	SuiteSHA256      string              `json:"suite_sha256"`
+	BinarySHA256     string              `json:"binary_sha256,omitempty"`
+	SourceRevision   string              `json:"source_revision,omitempty"`
+	SourceDirty      bool                `json:"source_dirty"`
+	PlannerVersion   string              `json:"planner_version"`
+	Mode             string              `json:"mode"`
+	Passed           bool                `json:"passed"`
+	Cases            []Result            `json:"cases"`
+	UnmeasuredStages []string            `json:"unmeasured_stages"`
 }
 
 // A Launcher must start a fresh OS process when process restart qualification is
@@ -285,6 +286,9 @@ func Compare(baseline, candidate Report) (Comparison, error) {
 	if (baseline.Pipeline == nil) != (candidate.Pipeline == nil) || baseline.Pipeline != nil && baseline.Pipeline.ContractSHA256 != candidate.Pipeline.ContractSHA256 {
 		return Comparison{}, fmt.Errorf("comparison requires identical pipeline contract and coverage")
 	}
+	if (baseline.SlurmFailures == nil) != (candidate.SlurmFailures == nil) || baseline.SlurmFailures != nil && baseline.SlurmFailures.ContractSHA256 != candidate.SlurmFailures.ContractSHA256 {
+		return Comparison{}, fmt.Errorf("comparison requires identical Slurm failure contract and coverage")
+	}
 	comparison := Comparison{SuiteSHA256: candidate.SuiteSHA256, Regressions: []string{}, Passed: true}
 	old := map[string]Result{}
 	for _, c := range baseline.Cases {
@@ -312,6 +316,9 @@ func Compare(baseline, candidate Report) (Comparison, error) {
 	}
 	if baseline.Pipeline != nil {
 		comparison.TokenDelta += candidate.Pipeline.Investigation.SimulatedTokens - baseline.Pipeline.Investigation.SimulatedTokens
+	}
+	if baseline.SlurmFailures != nil && (baseline.SlurmFailures.Passed && !candidate.SlurmFailures.Passed || baseline.SlurmFailures.Mode != candidate.SlurmFailures.Mode || len(baseline.SlurmFailures.Cases) != len(candidate.SlurmFailures.Cases) || len(baseline.SlurmFailures.CrashPIDs) != len(candidate.SlurmFailures.CrashPIDs)) {
+		comparison.Regressions = append(comparison.Regressions, "slurm-job-failures")
 	}
 	comparison.Passed = len(comparison.Regressions) == 0 && candidate.Passed
 	return comparison, nil

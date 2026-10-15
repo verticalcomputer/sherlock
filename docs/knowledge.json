@@ -242,6 +242,17 @@
         "fixtures"
       ],
       "summary": "Disposable scenario and telemetry-to-incident lab, automatic investigation admission, six abrupt process exits, independent grading and explicit unmeasured stages."
+    },
+    {
+      "path": "docs/guides/slurm-failure-monitoring.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "slurm",
+        "development",
+        "investigation"
+      ],
+      "summary": "Opt-in distinct Slurm attempt failure detection, enrollment, durable incidents/outbox, partial evidence and replay/crash qualification."
     }
   ]
 }

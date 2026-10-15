@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/verticalcomputer/sherlock/internal/application"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/slurmfailures"
 )
 
 func recordSlurmSnapshotTx(ctx context.Context, tx pgx.Tx, runID domain.RunID, payload domain.SlurmSnapshotPayload) error {
@@ -104,6 +106,14 @@ func recordSlurmLifecycleTx(ctx context.Context, tx pgx.Tx, runID domain.RunID, 
 		return err
 	}
 	if err := insertImmutableSlurmDocument(ctx, tx, `goodput_slurm_lifecycle_facts`, lifecycle.ClusterID, lifecycle.SourceID, recordID, document, digest, runID); err != nil {
+		return err
+	}
+	var ended *time.Time
+	if lifecycle.EndQuality == domain.SlurmFieldPresent {
+		value := lifecycle.EndAt
+		ended = &value
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO slurm_failure_inputs(cluster_id,source_id,record_identity,scheduler_namespace,job_id,submit_at,attempt,ended_at,failed) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`, lifecycle.ClusterID, lifecycle.SourceID, recordID, lifecycle.Job.SchedulerNamespace, lifecycle.Job.JobID, lifecycle.Job.SubmitAt, lifecycle.Job.Attempt, ended, slurmfailures.Class(lifecycle.RawState) == "FAILURE"); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO goodput_slurm_lifecycle_observations(cluster_id,source_id,record_identity,run_id) VALUES($1,$2,$3,$4)`, lifecycle.ClusterID, lifecycle.SourceID, recordID, runID); err != nil {

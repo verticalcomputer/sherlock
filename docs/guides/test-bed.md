@@ -122,6 +122,18 @@ malformed JSON and conflicting identity aliases through parsing, storage and
 the bridge; none may create an XID incident. These controls run in the database
 integration suite; the JSON pipeline report describes the positive recovery case.
 
+## Repeated Slurm failure coverage
+
+The [Slurm monitoring guide](slurm-failure-monitoring.md) owns the rule and its
+five new controls. The CLI runs those controls through real typed collection
+finalization and the deployed outbox/sender interfaces, with a simulated HTTP
+receiver. Three abrupt process exits cover incident commit, delivery claim and
+receiver acceptance before its receipt commits. One incident/outbox intent must
+survive replay; duplicate external delivery after the lost receipt is explicitly
+expected. This additional Slurm contract requires a new baseline and is included
+in comparison coverage. GPU monitoring episode/outbox delivery remains a separate
+unmeasured stage; simulated Slurm delivery does not qualify a live Slack receiver.
+
 ## Scenarios and boundaries
 
 The [synthetic suite](../../test/testbed/v1/scenarios.json) covers the six reported

@@ -15,6 +15,7 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/domain"
 	"github.com/verticalcomputer/sherlock/internal/investigationcontext"
 	"github.com/verticalcomputer/sherlock/internal/investigationtools"
+	"github.com/verticalcomputer/sherlock/internal/slurmfailures"
 )
 
 const maxXIDContextRecords = 256
@@ -189,6 +190,19 @@ func (store *InvestigationStore) LoadInvestigationEvidenceContext(ctx context.Co
 			if err != nil {
 				return nil, err
 			}
+		} else if operation == domain.EvidenceOperationID(slurmfailures.RuleID) {
+			var body []byte
+			err = store.pool.QueryRow(ctx, `SELECT e.snapshot FROM slurm_failure_episodes e JOIN slurm_failure_policies p USING(policy_id) WHERE e.evidence_id=$1 AND p.cluster_id=$2`, entry.EvidenceID, request.ClusterID).Scan(&body)
+			if err != nil {
+				return nil, fmt.Errorf("slurm failure snapshot unavailable")
+			}
+			var attempts []slurmfailures.Attempt
+			if len(body) > 65536 || json.Unmarshal(body, &attempts) != nil || len(attempts) < 2 || len(attempts) > 32 {
+				return nil, fmt.Errorf("slurm failure snapshot invalid")
+			}
+			input.SummaryQuality = "MEANINGFUL"
+			input.Summary = fmt.Sprintf("Repeated Slurm job failures: %d distinct failed attempts are cited in this snapshot. Cancellations and preemption are excluded. Accounting coverage may be partial; the physical cause is unconfirmed.", len(attempts))
+			input.Excerpt = string(body)
 		} else if runID != "" {
 			input.SummaryQuality = "MEANINGFUL"
 			input.Summary, input.Excerpt, err = store.loadMetricContext(ctx, request.ClusterID, runID, operation, observedFrom, observedTo)

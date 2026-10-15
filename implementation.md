@@ -13,6 +13,9 @@ The [scenario test bed](docs/guides/test-bed.md) supplies repeatable R2
 context/controller regressions, exact-suite comparisons and explicit unmeasured
 stages. It also exercises production Prometheus ingestion, XID incident and
 automatic investigation admission, and six committed-write crash boundaries.
+The GP-05/GP-09 Slurm extension adds opt-in repeated-attempt failure detection
+and transactional notification intents, with typed ingestion/replay and delivery
+crash regressions; [contract](docs/guides/slurm-failure-monitoring.md).
 Native diagnostic results remain unavailable simulations. Resident intake,
 GP-09 episode/outbox delivery, worker leases, in-transaction crashes, uncertain
 provider outcomes, live-model reasoning and native hardware qualification

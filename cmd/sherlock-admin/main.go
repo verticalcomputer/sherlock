@@ -65,6 +65,9 @@ Control revisions fence enrollment changes; occurrence and episode version fence
 Reviewed recovery records an evidence-bound disposition, not measured recovery.`
 
 func run(arguments []string, stdout, stderr io.Writer) int {
+	if len(arguments) > 0 && arguments[0] == "slurm-failures" {
+		return runSlurmFailureAdmin(arguments[1:], stdout, stderr)
+	}
 	if len(arguments) >= 1 && arguments[0] == "telemetry" {
 		return runTelemetryAdmin(arguments[1:], stdout, stderr)
 	}
