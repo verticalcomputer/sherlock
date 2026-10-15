@@ -71,3 +71,38 @@ bytes in multi-entity scope; if that canonical projection fits, an item or
 byte cap does not replace it with a cheaper alternative. Fixed-point JSON
 tests still ensure that a tighter byte ceiling cannot pass where a larger one
 fails only because the decimal `encoded_bytes` field gains a digit.
+
+## Hypothesis and action continuity
+
+Planning and synthesis use the hypotheses selected by the context builder.
+They do not reload the entire ledger after context compaction. Confidence,
+citations and unresolved tests travel in that projection. Each hypothesis
+carries up to eight unresolved tests, each capped at 256 UTF-8 bytes, within
+the existing total encoded-context ceiling. Statement truncation, shortened
+tests and omitted-test counts are explicit. Whole-hypothesis omissions reach
+model coverage and the existing report-omission path. Durable hypotheses and
+checkpoint projections retain their full contents.
+
+An update can resolve tests that were shown in full. Tests omitted or shortened
+in the request survive the update in full; a shortened statement also retains
+its durable original. New tests can be added within the existing 32-test domain
+bound. If merging hidden tests would exceed that bound, the response is rejected
+and audited before any action is admitted. Projection fragments do not become
+new tests. These rules prevent a bounded recap from overwriting authoritative
+history and are independent of any provider session cache.
+
+Prior actions distinguish recorded evidence omitted from context from a run
+that returned no evidence. Provider compaction reports the number of omitted
+history entries and keeps the newest adverse outcome (`FAILED`, `NO_EVIDENCE`,
+`REJECTED`, `OUTCOME_UNKNOWN`) for each tool/action digest. The canonical digest
+binds targets and the requested window; a failure on one node cannot replace a
+failure on another. Both item and token limits preserve that rule. If required
+history cannot fit, admission returns `REQUIRED_CONTEXT_EXCEEDS_ALLOWANCE`
+before writing a manifest or calling the provider. Compaction copies the action
+slice, so preparing a request does not mutate a caller's retry input.
+
+`hypothesis_test.go`, `../investigation/context_continuity_test.go` and
+`../contextbudget/budget_test.go` cover encoded accounting, fresh-worker replay,
+hidden-field preservation, distinct action scopes, item limits and explicit
+loss. These are repository regressions; live root-cause accuracy, diagnostic
+novelty and provider-specific quality still require measured investigation runs.

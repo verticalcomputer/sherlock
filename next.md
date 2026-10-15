@@ -9,15 +9,21 @@ Statements below distinguish source behavior from release and live qualification
 As directed October 14, product development continues independently of release
 approval. Signing and installation gates apply to distribution; they do not block
 retrieval, context management, investigation quality or detection improvements.
-The immediate slice corrects evidence ranking: the investigation question and
-hypothesis queries now influence selection instead of being ignored. Bounded
-whole-term matching supplements existing scope/time/class ranking; hard filters,
-mandatory evidence, entity coverage and explicit omissions remain in force.
+Query-aware evidence ranking is merged in PR #6 with both CI checks passing.
+The current source changes address context continuity and repeated-work prevention:
+
+- Planning and synthesis use bounded hypothesis context, retaining confidence,
+  unresolved tests and explicit truncation/omission markers.
+- Model updates preserve full statements and tests hidden by that projection;
+  oversized merged updates are rejected and audited before action admission.
+- History compaction preserves adverse outcomes per exact action scope under
+  both item and token limits, reports omitted history/results, and leaves retry
+  inputs unchanged.
+
 [Contract and limits](internal/investigationcontext/README.md);
-[regressions](internal/investigationcontext/query_test.go). This is a retrieval
-bug fix, not evidence of improved live diagnosis or completion of R2.
-Validation: `make check`, focused context/investigation race tests and both
-`make eval` suites pass. The new regressions fail on the previous ranker.
+[continuity regressions](internal/investigation/context_continuity_test.go).
+Validation: full `make check`, focused race/restart regressions and both
+`make eval` suites pass. Live diagnosis and R2 qualification remain open.
 
 ## Implemented in the source tree
 
@@ -53,9 +59,9 @@ and signing prerequisites; this status page cannot authorize a run.
 1. Evaluate retrieval on investigation scenarios: relevant versus irrelevant
    evidence under tight context budgets, missing observations and contradictory
    evidence. Measure relevant-evidence inclusion and omissions across turns.
-2. Improve the existing R2 (GP-12–17) context and investigation loop: verify
-   unresolved-question and prior-action context across turns, test recovery
-   across restarts, and prevent repeated diagnostics without new information.
+2. Continue the existing R2 (GP-12–17) investigation-loop work: evaluate pending
+   hypothesis updates across rejected proposals, action novelty, and whether
+   closure is supported by evidence rather than merely producing a valid report.
    Preserve immutable citations, action budgets and evidence-based closure.
 3. Continue resident adapters, qualified health integration and incident replay
    under the existing GP sequence. Historical replay must distinguish missing

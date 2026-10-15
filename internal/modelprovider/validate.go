@@ -186,7 +186,7 @@ func (request PlanningRequest) Validate() error {
 	if err := request.Scope.validate(); err != nil {
 		return err
 	}
-	if len(request.SuccessCriteria) == 0 || len(request.SuccessCriteria) > 32 || len(request.AvailableTools) > 64 || len(request.Evidence) > 256 || len(request.Hypotheses) > 128 || len(request.PriorActions) > 256 || len(request.Memory) > 12 {
+	if request.PriorActionsOmitted < 0 || len(request.SuccessCriteria) == 0 || len(request.SuccessCriteria) > 32 || len(request.AvailableTools) > 64 || len(request.Evidence) > 256 || len(request.Hypotheses) > 128 || len(request.PriorActions) > 256 || len(request.Memory) > 12 {
 		return fmt.Errorf("planning request collection bounds are invalid")
 	}
 	if request.RemainingBudget.Decisions < 0 || request.RemainingBudget.ToolCalls < 0 || request.RemainingBudget.DiagnosticCalls < 0 || request.RemainingBudget.PrivilegedCalls < 0 || request.RemainingBudget.FanOut < 0 || request.RemainingBudget.ModelTokens < 0 || request.RemainingBudget.CostMicros < 0 {
@@ -226,7 +226,7 @@ func (request PlanningRequest) Validate() error {
 		}
 	}
 	for _, action := range request.PriorActions {
-		if !validDigest(action.ActionDigest) || !validToken(action.ToolID) || !validToken(action.Outcome) || len(action.Targets) == 0 || action.Start.IsZero() || action.End.Before(action.Start) {
+		if action.EvidenceOmitted < 0 || !validDigest(action.ActionDigest) || !validToken(action.ToolID) || !validToken(action.Outcome) || len(action.Targets) == 0 || action.Start.IsZero() || action.End.Before(action.Start) {
 			return fmt.Errorf("prior action is invalid")
 		}
 		if err := validateScopeEntities(action.Targets, request.Scope.EntityIDs); err != nil || action.Start.Before(request.Scope.Start) || action.End.After(request.Scope.End) {
@@ -557,8 +557,13 @@ func (evidence EvidenceContext) validate(scope Scope) error {
 }
 
 func (hypothesis HypothesisContext) validate(evidenceIDs map[string]struct{}) error {
-	if !validToken(hypothesis.HypothesisID) || !validText(hypothesis.Statement, 2048) || !validHypothesisStatus(hypothesis.Status) || hypothesis.Confidence < 0 || hypothesis.Confidence > 1 || len(hypothesis.UnresolvedTests) > 32 {
+	if !validToken(hypothesis.HypothesisID) || !validText(hypothesis.Statement, 2048) || !validHypothesisStatus(hypothesis.Status) || hypothesis.Confidence < 0 || hypothesis.Confidence > 1 || len(hypothesis.UnresolvedTests) > 32 || hypothesis.UnresolvedTestsOmitted < 0 || hypothesis.UnresolvedTestsOmitted > 32-len(hypothesis.UnresolvedTests) {
 		return fmt.Errorf("hypothesis context is invalid")
+	}
+	for _, test := range hypothesis.UnresolvedTests {
+		if !validText(test, 512) {
+			return fmt.Errorf("hypothesis unresolved test is invalid")
+		}
 	}
 	if err := validateCitations(hypothesis.SupportingEvidence, evidenceIDs, false); err != nil {
 		return err
@@ -579,7 +584,7 @@ func (hypothesis HypothesisContext) validate(evidenceIDs map[string]struct{}) er
 }
 
 func (coverage Coverage) validate(scope Scope) error {
-	if len(coverage.TargetsChecked)+len(coverage.TargetsMissed) > 256 || len(coverage.Sources) > 64 || len(coverage.ToolFailures) > 128 || !uniqueValidTokens(coverage.TargetsChecked) || !uniqueValidTokens(coverage.TargetsMissed) || overlaps(coverage.TargetsChecked, coverage.TargetsMissed) || !uniqueValidTokens(coverage.Sources) || coverage.EvidenceSelected < 0 || coverage.EvidenceReduced < 0 || coverage.EvidenceOmitted < 0 || coverage.EvidenceSelected+coverage.EvidenceReduced+coverage.EvidenceOmitted > 256 {
+	if coverage.HypothesesOmitted < 0 || len(coverage.TargetsChecked)+len(coverage.TargetsMissed) > 256 || len(coverage.Sources) > 64 || len(coverage.ToolFailures) > 128 || !uniqueValidTokens(coverage.TargetsChecked) || !uniqueValidTokens(coverage.TargetsMissed) || overlaps(coverage.TargetsChecked, coverage.TargetsMissed) || !uniqueValidTokens(coverage.Sources) || coverage.EvidenceSelected < 0 || coverage.EvidenceReduced < 0 || coverage.EvidenceOmitted < 0 || coverage.EvidenceSelected+coverage.EvidenceReduced+coverage.EvidenceOmitted > 256 {
 		return fmt.Errorf("coverage is invalid")
 	}
 	for _, id := range append(slices.Clone(coverage.TargetsChecked), coverage.TargetsMissed...) {

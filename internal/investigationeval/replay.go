@@ -427,7 +427,7 @@ func (source *replayContextSource) InvestigationContext(_ context.Context, snaps
 		input.Evidence = append(input.Evidence, investigationcontext.EvidenceInput{EvidenceID: entry.EvidenceID, Status: entry.Status, EntityIDs: slices.Clone(entry.EntityIDs), ObservedFrom: entry.ObservedStart, ObservedTo: entry.ObservedEnd, CollectedAt: entry.RecordedAt, Source: value.Source, Summary: value.Summary, Excerpt: value.Excerpt, Priority: 1, Coverage: domain.EvidenceCoverage{Expected: expected, Covered: observed}, ExpectedFrom: request.Scope.Start, ExpectedTo: request.Scope.End})
 	}
 	for _, hypothesis := range snapshot.Hypotheses.Entries() {
-		input.Hypotheses = append(input.Hypotheses, investigationcontext.HypothesisInput{ID: hypothesis.ID, Status: hypothesis.Status, Statement: hypothesis.Statement, SupportingEvidence: slices.Clone(hypothesis.SupportingEvidence), ContradictingEvidence: slices.Clone(hypothesis.ContradictingEvidence)})
+		input.Hypotheses = append(input.Hypotheses, investigationcontext.HypothesisInput{ID: hypothesis.ID, Status: hypothesis.Status, Statement: hypothesis.Statement, Confidence: hypothesis.Confidence, UnresolvedTests: slices.Clone(hypothesis.UnresolvedTests), SupportingEvidence: slices.Clone(hypothesis.SupportingEvidence), ContradictingEvidence: slices.Clone(hypothesis.ContradictingEvidence)})
 	}
 	return input, nil
 }

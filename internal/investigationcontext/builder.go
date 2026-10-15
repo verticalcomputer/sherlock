@@ -93,10 +93,17 @@ type EvidenceInput struct {
 	KeepDistinct bool
 }
 
+const (
+	maxHypothesisTests     = 8
+	maxHypothesisTestBytes = 256
+)
+
 type HypothesisInput struct {
 	ID                    domain.HypothesisID
 	Status                domain.HypothesisStatus
 	Statement             string
+	Confidence            float64
+	UnresolvedTests       []string
 	SupportingEvidence    []domain.EvidenceID
 	ContradictingEvidence []domain.EvidenceID
 }
@@ -178,12 +185,16 @@ type CoverageTarget struct {
 }
 
 type HypothesisBlock struct {
-	ID                    domain.HypothesisID     `json:"id"`
-	Status                domain.HypothesisStatus `json:"status"`
-	Statement             string                  `json:"statement"`
-	SupportingEvidence    []domain.EvidenceID     `json:"supporting_evidence"`
-	ContradictingEvidence []domain.EvidenceID     `json:"contradicting_evidence"`
-	StatementTruncated    bool                    `json:"statement_truncated"`
+	ID                       domain.HypothesisID     `json:"id"`
+	Status                   domain.HypothesisStatus `json:"status"`
+	Statement                string                  `json:"statement"`
+	SupportingEvidence       []domain.EvidenceID     `json:"supporting_evidence"`
+	ContradictingEvidence    []domain.EvidenceID     `json:"contradicting_evidence"`
+	StatementTruncated       bool                    `json:"statement_truncated"`
+	Confidence               float64                 `json:"confidence"`
+	UnresolvedTests          []string                `json:"unresolved_tests"`
+	UnresolvedTestsOmitted   int                     `json:"unresolved_tests_omitted,omitempty"`
+	UnresolvedTestsTruncated bool                    `json:"unresolved_tests_truncated,omitempty"`
 }
 
 type Omission struct {
@@ -435,8 +446,24 @@ func (builder *Builder) Build(input Input) (Context, error) {
 			context.addOmission(OmissionKindHypothesis, 1, []string{string(item.ID)}, nil, OmissionItemLimit)
 			continue
 		}
-		statement, truncated := truncateUTF8(item.Statement, builder.limits.MaxHypothesisBytes)
-		context.Hypotheses = append(context.Hypotheses, HypothesisBlock{ID: item.ID, Status: item.Status, Statement: statement, SupportingEvidence: slices.Clone(item.SupportingEvidence), ContradictingEvidence: slices.Clone(item.ContradictingEvidence), StatementTruncated: truncated})
+		statement, truncated := truncateUTF8(strings.TrimSpace(item.Statement), builder.limits.MaxHypothesisBytes)
+		statement = strings.TrimSpace(statement)
+		truncated = truncated || statement != item.Statement
+		if statement == "" {
+			context.addOmission(OmissionKindHypothesis, 1, []string{string(item.ID)}, nil, OmissionEncodedSizeLimit)
+			continue
+		}
+		block := HypothesisBlock{ID: item.ID, Status: item.Status, Statement: statement, Confidence: item.Confidence, SupportingEvidence: slices.Clone(item.SupportingEvidence), ContradictingEvidence: slices.Clone(item.ContradictingEvidence), StatementTruncated: truncated}
+		testCount := min(len(item.UnresolvedTests), maxHypothesisTests)
+		block.UnresolvedTestsOmitted = len(item.UnresolvedTests) - testCount
+		for _, test := range item.UnresolvedTests[:testCount] {
+			value, shortened := truncateUTF8(strings.TrimSpace(test), maxHypothesisTestBytes)
+			value = strings.TrimSpace(value)
+			shortened = shortened || value != test
+			block.UnresolvedTests = append(block.UnresolvedTests, value)
+			block.UnresolvedTestsTruncated = block.UnresolvedTestsTruncated || shortened
+		}
+		context.Hypotheses = append(context.Hypotheses, block)
 	}
 
 	context.compactTo(builder.limits.MaxEncodedBytes, builder.limits.MaxOmissionIDs, itemLimited, coverageDrops, anchorSet)
