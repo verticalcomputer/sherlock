@@ -1,0 +1,61 @@
+name: Prepare unsigned collector candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Proposed version tag for review
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collector-release-preparation-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      github.repository == 'verticalcomputer/sherlock' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Check out the exact workflow commit and candidate history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the pinned Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.9'
+          cache: false
+      - name: Test offline collector release policy
+        run: python3 -B -m unittest discover -s scripts -p test_collector_release.py
+      - name: Reproduce the exact reviewed collector twice
+        run: python3 -B scripts/prepare-collector-release.py build --directory "$RUNNER_TEMP/collector-review"
+      - name: Retain only the unsigned collector review files
+        id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sherlock-reviewed-collector-linux-amd64
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/collector-review/SHA256SUMS
+            ${{ runner.temp }}/collector-review/provenance.unsigned.json
+            ${{ runner.temp }}/collector-review/source-files.json
+            ${{ runner.temp }}/collector-review/source.tar.gz
+            ${{ runner.temp }}/collector-review/sbom.spdx.json
+            ${{ runner.temp }}/collector-review/sherlock-collector-linux-amd64
+      - name: Record the exact artifact and disabled approval
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+        run: python3 -B scripts/prepare-collector-release.py summary --directory "$RUNNER_TEMP/collector-review"
