@@ -12,6 +12,7 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/config"
 	"github.com/verticalcomputer/sherlock/internal/diagnosticrunner"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 )
 
 // Process-local execution ceilings. Each reviewed definition carries its own
@@ -44,19 +45,24 @@ const (
 func runDiagnostics(ctx context.Context, logger *slog.Logger) error {
 	cfg, err := config.LoadCollectorDiagnostics()
 	if err != nil {
-		return fmt.Errorf("diagnostic configuration is invalid: %w", err)
+		return configurationFailure(fmt.Errorf("diagnostic configuration is invalid: %w", err))
+	}
+	if cfg.ExecutionMode != config.DiagnosticExecutionLocal {
+		if err := gpussh.Require("diagnostics", cfg.ClusterID); err != nil {
+			return configurationFailure(err)
+		}
 	}
 	httpClient, err := controlHTTPClient(cfg.Transport)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	control, err := collectorruntime.NewHTTPClient(cfg.Transport.ControlURL, httpClient, diagnosticControlRenewAfter)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	source, err := collectorruntime.NewDiagnosticWorkClient(control, cfg.RunnerID, cfg.PollWait)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	// Verified here for every execution mode. Restricted SSH verifies the pack
 	// again independently in the sealed runner; reduced-trust agentless SSH does
@@ -64,30 +70,30 @@ func runDiagnostics(ctx context.Context, logger *slog.Logger) error {
 	// turns it into an argv.
 	catalog, err := commandpack.LoadVerifiedCatalog(cfg.CommandPackFile, cfg.TrustRootsFile, cfg.RunnerVersion, time.Now().UTC())
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	adapter, err := newExecutionAdapter(cfg)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	roles, targets, err := clusterTargetRoles(cfg)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	journal, err := diagnosticrunner.OpenDiagnosticJournal(cfg.JournalPath, func() time.Time { return time.Now().UTC() })
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	head, err := diagnosticrunner.NewHeadNode(source, adapter.invoker, adapter.runner, catalog, roles, func() time.Time { return time.Now().UTC() },
 		journal, diagnosticrunner.HeadNodeConfig{ClusterID: domain.ClusterID(cfg.ClusterID), RunnerID: cfg.RunnerID, PollWait: cfg.PollWait})
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	loop, err := diagnosticrunner.NewClaimLoop(head, diagnosticrunner.ClaimLoopConfig{
 		IdleBackoff: cfg.IdleBackoff, FailureBackoffMinimum: cfg.FailureBackoffMinimum, FailureBackoffMaximum: cfg.FailureBackoffMaximum,
 	}, logger)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	packID, packVersion := catalog.PackIdentity()
 	logger.Info("collector.diagnostics_started", diagnosticStartupAttributes(cfg, packID, packVersion, len(targets))...)
@@ -156,6 +162,7 @@ func newExecutionAdapter(cfg config.CollectorDiagnostics) (executionAdapter, err
 		// every dispatch, so a file swapped underneath a running head node stops
 		// execution instead of silently trusting a new host key.
 		sshConfig := diagnosticrunner.SSHConfig{
+			ClusterID:      cfg.ClusterID,
 			Executable:     diagnosticrunner.ExecutableIdentity{Path: cfg.SSHExecutable, SHA256: cfg.SSHExecutableSHA256},
 			Authentication: authentication,
 			KnownHostsFile: cfg.SSHKnownHostsFile,

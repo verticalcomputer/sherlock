@@ -14,8 +14,10 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/application"
 	"github.com/verticalcomputer/sherlock/internal/collectorruntime"
 	"github.com/verticalcomputer/sherlock/internal/config"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 	"github.com/verticalcomputer/sherlock/internal/networkmonitor"
 	"github.com/verticalcomputer/sherlock/internal/networkprobe"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 // Independent of the collection journal and its work-claim loop. A complete
@@ -48,32 +50,47 @@ func collectNetworkCycle(ctx context.Context, runner networkprobe.Runner, revisi
 	return networkmonitor.Cycle{Revision: revision, Polls: polls, DurationMS: time.Since(started).Milliseconds()}
 }
 func runNetworkMonitor(ctx context.Context, logger *slog.Logger) error {
-	if os.Getenv("SHERLOCK_NETWORK_MONITOR_ENABLED") != "true" || os.Getenv("SHERLOCK_NETWORK_MONITOR_REVISION") == "" {
-		return errors.New("network monitoring is not explicitly enabled")
-	}
 	host, err := os.Hostname()
-	if err != nil || host != "fixture2-zone1-headnode" {
-		return errors.New("network monitoring requires the approved FixtureNetwork 2 head")
+	if err != nil {
+		return configurationFailure(errors.New("network head identity unavailable"))
+	}
+	return runNetworkMonitorOnHost(ctx, logger, host, networkprobe.SSHRunner{ClusterID: "fixture2-zone2", Role: "network-monitor"})
+}
+
+// The runner/hostname parameters are local fixture seams, never control input.
+func runNetworkMonitorOnHost(ctx context.Context, logger *slog.Logger, host string, runner networkprobe.Runner) error {
+	if os.Getenv("SHERLOCK_NETWORK_MONITOR_ENABLED") != "true" || os.Getenv("SHERLOCK_NETWORK_MONITOR_REVISION") == "" {
+		return configurationFailure(errors.New("network monitoring is not explicitly enabled"))
+	}
+	if host != "fixture2-zone1-headnode" {
+		return configurationFailure(errors.New("network monitoring requires the approved FixtureNetwork 2 head"))
 	}
 	revision := os.Getenv("SHERLOCK_NETWORK_MONITOR_REVISION")
 	ticker := time.NewTicker(networkmonitor.Interval)
 	defer ticker.Stop()
 	for {
 		bounded, cancel := context.WithTimeout(ctx, 65*time.Second)
-		cycle := collectNetworkCycle(bounded, networkprobe.SSHRunner{}, revision)
-		// Reload current identity on each cycle. The existing renewal service may
-		// rotate it without restarting this independent read-only monitor.
-		cfg, err := config.LoadCollector()
-		if err == nil && cfg.ClusterID != "fixture2-zone2" {
-			err = fmt.Errorf("wrong network cluster")
+		// Validate current identity and independent operator authority before
+		// any node probe, including the first cycle after boot or renewal.
+		cfg, err := config.LoadCollectorRenewal()
+		if err != nil {
+			err = configurationFailure(err)
+		}
+		if err == nil && os.Getenv("SHERLOCK_CLUSTER_ID") != "fixture2-zone2" {
+			err = configurationFailure(fmt.Errorf("wrong network cluster"))
+		}
+		var cycle networkmonitor.Cycle
+		if err == nil {
+			err = gpussh.Require("network-monitor", "fixture2-zone2")
 		}
 		if err == nil {
-			client, clientErr := controlHTTPClient(cfg.Transport())
-			err = clientErr
+			client, clientErr := controlHTTPClient(cfg)
+			err = configurationFailure(clientErr)
 			if err == nil {
 				control, clientErr := collectorruntime.NewHTTPClient(cfg.ControlURL, client, time.Minute)
 				err = clientErr
 				if err == nil {
+					cycle = collectNetworkCycle(bounded, runner, revision)
 					err = control.SubmitNetworkCycle(bounded, cycle)
 				}
 				client.CloseIdleConnections()
@@ -82,6 +99,9 @@ func runNetworkMonitor(ctx context.Context, logger *slog.Logger) error {
 		cancel()
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if servicefailure.Permanent(err) || errors.Is(err, gpussh.ErrBlocked) {
+			return err
 		}
 		if err != nil {
 			logger.Warn("collector.network_cycle_failed", "reason", "poll delivery unavailable")
@@ -99,13 +119,25 @@ func runNetworkMonitor(ctx context.Context, logger *slog.Logger) error {
 // qualifyNetworkMonitor is a one-shot source-only check in the final service
 // sandbox. It publishes no data and opens no collection journal.
 func qualifyNetworkMonitor(ctx context.Context, out io.Writer) error {
+	if err := gpussh.Require("network-readiness", "fixture2-zone2"); err != nil {
+		return err
+	}
+	cfg, err := config.LoadCollectorRenewal()
+	if err != nil {
+		return err
+	}
+	client, err := controlHTTPClient(cfg)
+	if err != nil {
+		return err
+	}
+	client.CloseIdleConnections()
 	host, err := os.Hostname()
 	if err != nil || host != "fixture2-zone1-headnode" {
 		return errors.New("unapproved network head")
 	}
 	bounded, cancel := context.WithTimeout(ctx, 65*time.Second)
 	defer cancel()
-	cycle := collectNetworkCycle(bounded, networkprobe.SSHRunner{}, "qualification-only")
+	cycle := collectNetworkCycle(bounded, networkprobe.SSHRunner{ClusterID: "fixture2-zone2", Role: "network-readiness"}, "qualification-only")
 	if err := json.NewEncoder(out).Encode(cycle); err != nil {
 		return err
 	}

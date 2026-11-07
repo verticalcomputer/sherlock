@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/verticalcomputer/sherlock/internal/application"
+	"github.com/verticalcomputer/sherlock/internal/buildinfo"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 	"github.com/verticalcomputer/sherlock/internal/networkprobe"
 )
 
@@ -23,11 +25,18 @@ type result struct {
 }
 
 func main() {
+	if buildinfo.PrintVersion(os.Args[1:], os.Stdout) {
+		return
+	}
+	if err := gpussh.Require("network-probe", "fixture1-zone1"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(78)
+	}
 	// The outer bound includes all ten sequential node deadlines plus startup.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	encoder := json.NewEncoder(os.Stdout)
-	runner := networkprobe.SSHRunner{}
+	runner := networkprobe.SSHRunner{ClusterID: "fixture1-zone1", Role: "network-probe"}
 	failed := false
 	for _, node := range networkprobe.PilotNodes {
 		poll, err := networkprobe.Probe(ctx, runner, node, time.Now)

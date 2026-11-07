@@ -255,8 +255,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-collector/collection.go",
-      "sha256": "c9c13a48bda51b3b2d58cefe614634a39140977ade94af0798f2f375305e9df5",
-      "size": 7711
+      "sha256": "c363c78ae75c42873f4d2eb974f33127018e7a7b3116c5c04dd2e1bdf9300ade",
+      "size": 7866
     },
     {
       "executable": false,
@@ -273,8 +273,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-collector/diagnostics.go",
-      "sha256": "3cc45d104f14dd78207fd638a7e6fdb4cd1911a7e3a41c3148671b8c7fe1e38b",
-      "size": 11170
+      "sha256": "7ea4ad47802cc2bedadd9295243d8749987da92f402e495928677b42cbfde95c",
+      "size": 11653
     },
     {
       "executable": false,
@@ -297,20 +297,32 @@
     {
       "executable": false,
       "path": "cmd/sherlock-collector/main.go",
-      "sha256": "759629cd57b528a067fa8aa6237ba710893cb5a563e2d5acad4bd424db2def3e",
-      "size": 17749
+      "sha256": "26358e7e4ae399dbba7f2a98b7e931264717d7c9ba5af6a0fc4bf27e013556ba",
+      "size": 19640
     },
     {
       "executable": false,
       "path": "cmd/sherlock-collector/network_monitor.go",
-      "sha256": "ce8bd36f3d888265746ea9b6f896931a7250e6675170cd97e798fb306c3ed2b7",
-      "size": 3905
+      "sha256": "7f4f0f51559e1bca1bdad2fd197abac094a3b6511450a09b52efbb0eb8a48f1d",
+      "size": 5117
     },
     {
       "executable": false,
       "path": "cmd/sherlock-collector/network_monitor_test.go",
-      "sha256": "2e4bb27ccaf8997a0fbdfb9ce8448d4f98057a17a4b019b934fd2c708850f414",
-      "size": 1525
+      "sha256": "9bb031e76d3875686ba3ed87ebc3abef94fd00d07f020de455403a2a502058de",
+      "size": 3794
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-collector/prometheus_only_test.go",
+      "sha256": "1e8a56a2c4c5c2f148b9091fdfad2f424dcc003308c3b0756d404d39df1d88da",
+      "size": 3444
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-collector/service_failure_test.go",
+      "sha256": "d13856b66cbf5ba2672c1396ab3dffd70a939848f6040f495acd680fefb4975e",
+      "size": 598
     },
     {
       "executable": false,
@@ -423,8 +435,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-network-probe/main.go",
-      "sha256": "ff85a03b714fb0ff2342d22c7c77d999ade663b29d841afc59a5a88531053965",
-      "size": 1637
+      "sha256": "5f0ad5fd002dda70773da65b3ef9335aee4dec4396029838600c910d989dd392",
+      "size": 1990
     },
     {
       "executable": false,
@@ -2360,6 +2372,18 @@
     },
     {
       "executable": false,
+      "path": "internal/buildinfo/info.go",
+      "sha256": "da7cb132c7d6f9dbe549a7325dfb2e52d71ac4976dcc21bbd687ae42081abaa3",
+      "size": 698
+    },
+    {
+      "executable": false,
+      "path": "internal/buildinfo/info_test.go",
+      "sha256": "3997d623f27758fd2441e147b9be911ba88c05ccff779c1907520eb42d4d6523",
+      "size": 690
+    },
+    {
+      "executable": false,
       "path": "internal/clustermemory/memory.go",
       "sha256": "d38edfda91eaef1aa4e8541001b5522f56d37227a35d2348bf75270d013b88f7",
       "size": 4407
@@ -2541,8 +2565,8 @@
     {
       "executable": false,
       "path": "internal/collectorexecution/gpuprocess/agentless_source.go",
-      "sha256": "b36a503dc7db1a789cf2e6e9c2c88d63fc441df22548cd2ffc9e025c3cbea9c8",
-      "size": 9968
+      "sha256": "92fd6f5bbfe8bc74f8c0c461f9d3909a7102397f8e4df0f4b440bd97387aeee6",
+      "size": 9992
     },
     {
       "executable": false,
@@ -2637,8 +2661,8 @@
     {
       "executable": false,
       "path": "internal/collectorruntime/credential_test_worker.go",
-      "sha256": "e200fbc5778d529ce42b538557d76b663af2667179964eb84ea51f9c290bccb4",
-      "size": 8498
+      "sha256": "12b30f35c9bfa3c56e912bd5f6e4ed04d1e80d0d6dcb242bbb1ce33031f4aaa3",
+      "size": 8678
     },
     {
       "executable": false,
@@ -2661,14 +2685,14 @@
     {
       "executable": false,
       "path": "internal/collectorruntime/httpclient.go",
-      "sha256": "01bec3051ce400427c1fd249723c24a661ead078914da14fe24e63e4e7c39a92",
-      "size": 9947
+      "sha256": "e6e42a971448414dfe527b4c8fd90056b3a615160e36db22f976134cf2947466",
+      "size": 10455
     },
     {
       "executable": false,
       "path": "internal/collectorruntime/httpclient_test.go",
-      "sha256": "c1e00169200f3e7151a206dcda394af729b13596f226d3b56280f8fed01c310a",
-      "size": 4138
+      "sha256": "da08c1d2edf55a5c6fcc216fc574e577c7124b25591475773d544b5925d7b724",
+      "size": 9024
     },
     {
       "executable": false,
@@ -2733,14 +2757,14 @@
     {
       "executable": false,
       "path": "internal/collectorruntime/runtime.go",
-      "sha256": "c88bd05b8e546bbf2fdc620074730344fd22075720a7219bb1f3eacfc880960d",
-      "size": 16883
+      "sha256": "1f93639235e3b3939634cf5dbd14e30950d90305dc2023355ab2c177951e034d",
+      "size": 17435
     },
     {
       "executable": false,
       "path": "internal/collectorruntime/runtime_test.go",
-      "sha256": "427dcc4e640e51fba2533c9763a35133ab115aa75c30835834267c4a2ae21f91",
-      "size": 16355
+      "sha256": "2a5c2e22530eb72c48c7b8884074c7ea49e32a10ecb716d68c931d3491c1103c",
+      "size": 17348
     },
     {
       "executable": false,
@@ -2847,8 +2871,8 @@
     {
       "executable": false,
       "path": "internal/commandpack/signing.go",
-      "sha256": "65ca5498c208d3ad7a0c59cf812617ad6325e689305052d62bdb30dfcefd6b70",
-      "size": 4887
+      "sha256": "81982d1c3c49a35a48b45bdae17c08d4bf4b5b41a1a67d2aa287225051aad993",
+      "size": 5033
     },
     {
       "executable": false,
@@ -2921,6 +2945,18 @@
       "path": "internal/config/collector.go",
       "sha256": "b269f4acbf241aa5be2b602e48c003eb35d89474c5e2b2a0514d0af3115c2e43",
       "size": 17651
+    },
+    {
+      "executable": false,
+      "path": "internal/config/collector_renewal.go",
+      "sha256": "ed83d8a607f00912f6e052d8f2efe7d281f5de7f85157cf8d84406b3d6ca2e0d",
+      "size": 2545
+    },
+    {
+      "executable": false,
+      "path": "internal/config/collector_renewal_test.go",
+      "sha256": "27572f506535822daad1d4345bcc04ddfad18331339af50ad2fede47b5e80994",
+      "size": 1106
     },
     {
       "executable": false,
@@ -3105,14 +3141,14 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/agentless_ssh.go",
-      "sha256": "dffe14feb96cf263ccfa5752a39dcf525c05b0178234ca5a94d333d9e618ddf0",
-      "size": 14858
+      "sha256": "437dd90a351158dc5daf45a2d9d776e99d148af7fb657ef8dd47dc76edc9c2ca",
+      "size": 15256
     },
     {
       "executable": false,
       "path": "internal/diagnosticrunner/agentless_ssh_test.go",
-      "sha256": "bc959319ce5c6da422154d4ca9286c6de70ba0c90447edba74be7ae202ecf86b",
-      "size": 21523
+      "sha256": "2c1d1dc7a809cafa18b1e8beb0918c5ff7760e523c022921c710cf5397611c97",
+      "size": 21602
     },
     {
       "executable": false,
@@ -3129,14 +3165,14 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/claimloop.go",
-      "sha256": "6e419163ef78e5544b97897d51428124cf9deac052a98e47971e7a75d80024da",
-      "size": 4329
+      "sha256": "f00aaf1b5f069961f32e6a586d615ba8c4dc9658869eb378bcfb691934bdaf9a",
+      "size": 4451
     },
     {
       "executable": false,
       "path": "internal/diagnosticrunner/claimloop_test.go",
-      "sha256": "d37e2026a3e79d62cf4e92a28616c8820d82e75e61b860ec817d1b43d6e419bc",
-      "size": 8180
+      "sha256": "d4346cd008ce8f4a7dcb3f56109de588c44ddff4e92b7a4c6d9e522c8943e675",
+      "size": 8793
     },
     {
       "executable": false,
@@ -3159,8 +3195,8 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/hostinvoker_test.go",
-      "sha256": "e09816e91b86506b6bcb916f79058180378f69bc60353f1460912416a5a4879b",
-      "size": 6510
+      "sha256": "b01c3276acab7c76ae6313f4b2edd23dce53a485a1678c4aa1d869b2e1473149",
+      "size": 6736
     },
     {
       "executable": false,
@@ -3189,8 +3225,14 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/ssh.go",
-      "sha256": "9812dea33e5c342a3181fa3140007f8e0e7f4d87ff728611f3861ee6b85ad972",
-      "size": 26804
+      "sha256": "cc963f1a8cabd73b12da6f0d1f8522e77c23adce2ba7abbc5578e4003cb7163a",
+      "size": 27072
+    },
+    {
+      "executable": false,
+      "path": "internal/diagnosticrunner/ssh_authorization_test.go",
+      "sha256": "f90309165b3b05810ff60d2ac5dff6b5f1853c72d130e5a4e9632e7439d581b6",
+      "size": 2308
     },
     {
       "executable": false,
@@ -3219,14 +3261,14 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/ssh_native_test.go",
-      "sha256": "0ebb9aa6208728d394a1ac922789b2dace85339fe0f447d159f052db9d55bae3",
-      "size": 14029
+      "sha256": "9f69b2e9c63fa4717c91257603e33a35611621dda7732de943b9bfc967a2c85e",
+      "size": 14112
     },
     {
       "executable": false,
       "path": "internal/diagnosticrunner/ssh_test.go",
-      "sha256": "92159ba791c7148c675fefc20c7911d55000ac8e8051010fb13d538190906744",
-      "size": 18414
+      "sha256": "24e923cc2ba60ec8e16b7054dd351988c9935e7e69e719f82671a60aba07564b",
+      "size": 18493
     },
     {
       "executable": false,
@@ -3632,6 +3674,24 @@
     },
     {
       "executable": false,
+      "path": "internal/gpussh/authorization.go",
+      "sha256": "453f6e0f25d85ae2cc5e137a5bbbb6bac8f0ae289b06e664b8ed326dbaa14422",
+      "size": 4642
+    },
+    {
+      "executable": false,
+      "path": "internal/gpussh/authorization_test.go",
+      "sha256": "2d50e1d35c43e2548b9f2ff995b395fcb132fd691d5623e44771d2c7c5a88605",
+      "size": 3206
+    },
+    {
+      "executable": false,
+      "path": "internal/gpussh/explicit_deny_profile_test.go",
+      "sha256": "082d6874710b167d7a27e001ed0d813b978da9aeee8064a6a9a71077d5d308e3",
+      "size": 1776
+    },
+    {
+      "executable": false,
       "path": "internal/hostroles/roles.go",
       "sha256": "3b60c5211898baa604deba0758f2c98cd630c8c69a13296b45d45638431eea11",
       "size": 8996
@@ -3987,14 +4047,14 @@
     {
       "executable": false,
       "path": "internal/networkprobe/probe.go",
-      "sha256": "031be91c6b7666a28f88b82374682cbf8b91b8cd89405d35e39218d9d53b16fd",
-      "size": 11040
+      "sha256": "72d17e45800bcf55689e40f43f2b16997edefb40649d7e9e2549d5992d8749e7",
+      "size": 11394
     },
     {
       "executable": false,
       "path": "internal/networkprobe/probe_test.go",
-      "sha256": "379b644e0d9e1146755107c1e57f5b9af991081b6e6bddc5b8b89b9caca0b912",
-      "size": 7527
+      "sha256": "64536dcfd60317ca293b1cf82c2d3aa24e0d356d03d343627a35132625c5e1e8",
+      "size": 8310
     },
     {
       "executable": false,
@@ -4373,6 +4433,18 @@
       "path": "internal/scheduleinvestigation/schedule_investigation_test.go",
       "sha256": "a57dca5c54f957b5f7d5ccfc714b1ac7136f3c94ff6f74999e02a7eb0f6f4296",
       "size": 4057
+    },
+    {
+      "executable": false,
+      "path": "internal/servicefailure/failure.go",
+      "sha256": "77004c0e7b06aed6e554f5500765f210e039f92b337d2e44708ee2954b28c724",
+      "size": 1991
+    },
+    {
+      "executable": false,
+      "path": "internal/servicefailure/failure_test.go",
+      "sha256": "18210e2b20afe7e07ac6b8bc7dd6699c5c0cdeb9c61653af391769a3e2e7165b",
+      "size": 1446
     },
     {
       "executable": false,

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 const (
@@ -214,7 +215,11 @@ func (c *HTTPClient) doWithHeaders(ctx context.Context, method, path string, bod
 	}
 	response, err := c.client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("send collector control request: %w", err)
+		failure := fmt.Errorf("send collector control request: %w", err)
+		if servicefailure.IsAuthentication(err) {
+			return 0, errors.Join(servicefailure.ErrAuthentication, failure)
+		}
+		return 0, failure
 	}
 	defer response.Body.Close()
 	for _, status := range expected {
@@ -231,6 +236,9 @@ func (c *HTTPClient) doWithHeaders(ctx context.Context, method, path string, bod
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumBodyBytes))
 	failure := fmt.Errorf("collector control returned HTTP %d", response.StatusCode)
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		return response.StatusCode, errors.Join(servicefailure.ErrAuthentication, failure)
+	}
 	if response.StatusCode == http.StatusConflict || response.StatusCode == http.StatusGone {
 		return response.StatusCode, errors.Join(ErrLeaseLost, failure)
 	}
@@ -244,3 +252,6 @@ func correlationID() string {
 	}
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
+
+// ErrAuthentication is retained here for runtime consumers.
+var ErrAuthentication = servicefailure.ErrAuthentication

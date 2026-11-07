@@ -78,7 +78,7 @@ func TestSSHRunnerFixedCommandAndOutputLimit(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TEST_ARGS", argsPath)
 	t.Setenv("TEST_STDIN", stdinPath)
-	stdout, _, err := (SSHRunner{}).Read(context.Background(), PilotNodes[0])
+	stdout, _, err := (SSHRunner{authorize: func() error { return nil }}).Read(context.Background(), PilotNodes[0])
 	if err != nil || string(stdout) != goodSnapshot {
 		t.Fatalf("runner output err=%v", err)
 	}
@@ -169,5 +169,23 @@ func TestFixedReaderManagementPathsAndIndependentReadFailure(t *testing.T) {
 	p = read()
 	if p.Bonds[0].Present || p.Bonds[0].ReadError != "" {
 		t.Fatalf("missing bond not distinguished: %+v", p)
+	}
+}
+
+func TestSSHRunnerWithoutApprovalMakesZeroAttempts(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "attempt")
+	if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SHERLOCK_GPU_SSH_AUTHORIZATION_FILE", "")
+	for _, role := range []string{"network-monitor", "network-readiness", "network-probe"} {
+		if _, _, err := (SSHRunner{ClusterID: "cluster", Role: role}).Read(context.Background(), PilotNodes[0]); err == nil {
+			t.Fatalf("%s attempted SSH", role)
+		}
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("blocked network path attempted SSH")
 	}
 }

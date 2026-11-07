@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/verticalcomputer/sherlock/internal/commandpack"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 )
 
 const (
@@ -50,6 +51,8 @@ type AgentlessSSHPolicy struct {
 }
 
 type AgentlessSSHConfig struct {
+	// SSHRole is diagnostics by default; GPU observations use gpu-process.
+	SSHRole        string
 	ClusterID      string
 	Executable     ExecutableIdentity
 	Authentication SSHTargetAuthentication
@@ -61,6 +64,7 @@ type AgentlessSSHConfig struct {
 // shell. Unlike RestrictedSSH it neither sends nor accepts a runner envelope,
 // and the remote host does not independently verify the command pack.
 type AgentlessSSH struct {
+	authorize        func() error
 	clusterID        string
 	executable       ExecutableIdentity
 	targets          map[string]SSHTarget
@@ -129,13 +133,21 @@ func NewAgentlessSSH(config AgentlessSSHConfig) (*AgentlessSSH, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agentless ssh: %w", err)
 	}
+	role := config.SSHRole
+	if role == "" {
+		role = "diagnostics"
+	}
 	return &AgentlessSSH{
+		authorize: func() error { return gpussh.Require(role, config.ClusterID) },
 		clusterID: config.ClusterID, executable: config.Executable, targets: targets, profiles: profiles,
 		permissions: permissions, knownHostsFile: config.KnownHostsFile, knownHostsSHA256: knownHostsDigest,
 	}, nil
 }
 
 func (adapter *AgentlessSSH) ExecuteInvocation(ctx context.Context, runner *Runner, catalog *commandpack.Catalog, attemptID string, invocation commandpack.Invocation, suppliedSecrets [][]byte) (Result, error) {
+	if err := adapter.authorize(); err != nil {
+		return Result{}, err
+	}
 	if runner == nil {
 		return Result{}, errors.New("agentless ssh: runner is required")
 	}

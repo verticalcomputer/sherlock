@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,9 +24,14 @@ const echoExecutable = "/bin/echo"
 // is not active when it runs.
 func localEchoCatalog(t *testing.T) *commandpack.Catalog {
 	t.Helper()
-	binary, err := os.ReadFile(echoExecutable)
+	// Pin the installed executable itself when /bin/echo is a symlink.
+	executable, err := filepath.EvalSymlinks(echoExecutable)
 	if err != nil {
-		t.Skipf("this machine has no readable %s to execute", echoExecutable)
+		t.Skipf("this machine has no resolvable %s to execute", echoExecutable)
+	}
+	binary, err := os.ReadFile(executable)
+	if err != nil {
+		t.Skipf("this machine has no readable %s to execute", executable)
 	}
 	digest := sha256.Sum256(binary)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -39,7 +45,7 @@ func localEchoCatalog(t *testing.T) *commandpack.Catalog {
 		Definitions: []commandpack.Definition{{
 			ID: "local.echo", Version: "1.0.0", Owner: "cluster-operations", Purpose: "Emit a fixed token for local execution tests",
 			SupportedCapabilities: []string{"local.read"}, Risk: commandpack.RiskLow,
-			ExecutablePath: echoExecutable, ExecutableSHA256: hex.EncodeToString(digest[:]),
+			ExecutablePath: executable, ExecutableSHA256: hex.EncodeToString(digest[:]),
 			Arguments:    []commandpack.ArgumentToken{{Literal: "remapped_rows.pending: 0"}},
 			Targets:      commandpack.TargetConstraints{Roles: []commandpack.TargetRole{commandpack.TargetCompute}, NamePattern: `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`, MaximumCount: 4},
 			Limits:       commandpack.Limits{TimeoutSeconds: 30, MaximumOutputBytes: 1 << 20, MaximumConcurrency: 1},

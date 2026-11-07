@@ -3,6 +3,7 @@ package diagnosticrunner
 import (
 	"context"
 	"errors"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -73,6 +74,9 @@ func (loop *ClaimLoop) Run(ctx context.Context) error {
 		claimed, err := loop.head.RunOnce(ctx)
 		switch {
 		case err != nil:
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return ctxErr
 			}

@@ -368,6 +368,7 @@ func testSSHAdapter(t *testing.T) *RestrictedSSH {
 	if err != nil {
 		t.Fatal(err)
 	}
+	adapter.authorize = func() error { return nil } // isolated transport fixture
 	return adapter
 }
 

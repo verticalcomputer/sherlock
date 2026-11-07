@@ -10,6 +10,7 @@ import (
 
 	"github.com/verticalcomputer/sherlock/internal/commandpack"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 // scriptedSource answers a fixed sequence of claim outcomes, so a test states
@@ -192,5 +193,16 @@ func TestNewClaimLoopValidatesItsDependenciesAndBounds(t *testing.T) {
 		if _, err := NewClaimLoop(loop.head, config); err == nil {
 			t.Fatalf("%s was accepted", name)
 		}
+	}
+}
+
+func TestClaimLoopStopsOnAuthenticationWithoutBackoffRetry(t *testing.T) {
+	source := &scriptedSource{lease: headLease(t), outcomes: []claimOutcome{{err: servicefailure.ErrAuthentication}}}
+	loop, _, _ := pacedLoop(t, source, ClaimLoopConfig{IdleBackoff: time.Second, FailureBackoffMinimum: time.Second, FailureBackoffMaximum: time.Minute}, 1)
+	if err := loop.Run(context.Background()); !errors.Is(err, servicefailure.ErrAuthentication) {
+		t.Fatal(err)
+	}
+	if source.claims != 1 {
+		t.Fatalf("authentication retried %d times", source.claims)
 	}
 }

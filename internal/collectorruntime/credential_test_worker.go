@@ -9,6 +9,7 @@ import (
 
 	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 // CredentialTestExecutor runs the fixed head check. The fetch function
@@ -60,6 +61,9 @@ func (w *CredentialTestWorker) Run(ctx context.Context) error {
 		}
 		lease, err := w.client.ClaimCredentialTest(ctx, w.cfg.ClaimWait)
 		if err != nil {
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -75,6 +79,9 @@ func (w *CredentialTestWorker) Run(ctx context.Context) error {
 			continue
 		}
 		if err := w.process(ctx, *lease); err != nil {
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
