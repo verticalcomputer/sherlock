@@ -370,6 +370,7 @@ func testAgentlessSSH(t *testing.T, executable ExecutableIdentity) *AgentlessSSH
 	if err != nil {
 		t.Fatal(err)
 	}
+	adapter.authorize = func() error { return nil } // isolated transport fixture
 	return adapter
 }
 

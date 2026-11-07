@@ -424,3 +424,18 @@ func testLease(now time.Time, attempt int) domain.WorkLease {
 func noDataResult(task domain.CollectionTask, now time.Time) domain.CollectionResult {
 	return domain.CollectionResult{Task: task, Status: domain.ResultNoData, StartedAt: now, CompletedAt: now, Coverage: domain.Coverage{Complete: true}}
 }
+
+func TestRuntimeAuthenticationFailureStopsBeforeAnyClaim(t *testing.T) {
+	client := &fakeControl{heartbeat: func(context.Context, Heartbeat, int) error { return ErrAuthentication }}
+	journal := openTestJournal(t, filepath.Join(t.TempDir(), "attempts.json"), liveClock{})
+	runtime, err := NewRuntime(RuntimeConfig{CollectorID: "collector", SourceID: "source", Version: "test", Capabilities: []string{string(domain.QuerySourceHealth)}, HeartbeatInterval: time.Second, ClaimWait: time.Second, RenewInterval: time.Second, BackoffMinimum: time.Second, BackoffMaximum: time.Minute}, client, executorFunc(func(context.Context, domain.CollectionTask) domain.CollectionResult { return domain.CollectionResult{} }), journal, liveClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Run(context.Background()); !errors.Is(err, ErrAuthentication) {
+		t.Fatal(err)
+	}
+	if client.heartbeats != 1 || client.claims != 0 {
+		t.Fatalf("heartbeats=%d claims=%d", client.heartbeats, client.claims)
+	}
+}

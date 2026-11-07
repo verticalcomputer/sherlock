@@ -20,13 +20,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/verticalcomputer/sherlock/internal/bcmaccess"
+	"github.com/verticalcomputer/sherlock/internal/buildinfo"
 	"github.com/verticalcomputer/sherlock/internal/collectorruntime"
 	"github.com/verticalcomputer/sherlock/internal/config"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 	"github.com/verticalcomputer/sherlock/internal/platform"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 func main() {
+	if buildinfo.PrintVersion(os.Args[1:], os.Stdout) {
+		return
+	}
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	if len(os.Args) > 2 {
 		logger.Error("collector.mode_invalid")
@@ -47,23 +53,23 @@ func main() {
 		case "enroll":
 			if err := enroll(context.Background()); err != nil {
 				logger.Error("collector.enrollment_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			logger.Info("collector.enrolled")
 			return
 		case "diagnostics":
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			if err := runDiagnostics(ctx, logger); !errors.Is(err, context.Canceled) {
+			if err := runDiagnostics(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
 				logger.Error("collector.diagnostics_stopped", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			logger.Info("collector.diagnostics_stopped")
 			return
 		case "network-readiness":
 			if err := qualifyNetworkMonitor(context.Background(), os.Stdout); err != nil {
 				logger.Error("collector.network_readiness_failed")
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		case "network-monitor":
@@ -71,7 +77,7 @@ func main() {
 			defer stop()
 			if err := runNetworkMonitor(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
 				logger.Error("collector.network_monitor_stopped", "reason", "configuration or transport unavailable")
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		case "bcm-access-test":
@@ -79,27 +85,27 @@ func main() {
 			defer stop()
 			if err := runBCMAccessTest(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
 				logger.Error("collector.bcm_access_test_stopped", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			logger.Info("collector.bcm_access_test_stopped")
 			return
 		case "renew":
 			if err := renew(context.Background()); err != nil {
 				logger.Error("collector.renewal_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			logger.Info("collector.identity_renewed")
 			return
 		case "journal-check-legacy":
 			if err := runJournalCheckLegacy(logger); err != nil {
 				logger.Error("collector.journal_check_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		case "journal-migrate":
 			if err := runJournalMigrate(logger); err != nil {
 				logger.Error("collector.journal_migration_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		case "journal-status":
@@ -109,13 +115,13 @@ func main() {
 			}
 			if err != nil {
 				logger.Error("collector.journal_status_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		case "journal-export-rollback":
 			if err := runJournalExportRollback(logger); err != nil {
 				logger.Error("collector.journal_export_failed", "error", err.Error())
-				os.Exit(1)
+				os.Exit(serviceExitCode(err))
 			}
 			return
 		default:
@@ -126,14 +132,14 @@ func main() {
 	cfg, err := config.LoadCollector()
 	if err != nil {
 		logger.Error("collector.configuration_invalid", "error", err.Error())
-		os.Exit(2)
+		os.Exit(78)
 	}
 	registry := prometheus.NewRegistry()
 	metrics := newJournalMetrics(registry, func() time.Time { return time.Now().UTC() })
 	runtime, journal, credentialWorker, err := buildRuntime(cfg, metrics, logger)
 	if err != nil {
 		logger.Error("collector.start_failed", "error", err.Error())
-		os.Exit(1)
+		os.Exit(serviceExitCode(configurationFailure(err)))
 	}
 	logJournalPreparation(logger, journal.MigrationReport())
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -195,7 +201,7 @@ func serve(ctx context.Context, logger *slog.Logger, cfg config.Collector, runti
 	logger.Info("collector.started", "collector_id", cfg.CollectorID)
 	if err := runtime.Run(serviceContext); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("collector.stopped", "error", err.Error())
-		return 1
+		return serviceExitCode(err)
 	}
 	return 0
 }
@@ -236,9 +242,12 @@ func enroll(ctx context.Context) error {
 }
 
 func renew(ctx context.Context) error {
-	cfg, err := config.LoadCollector()
-	if err != nil {
+	if err := gpussh.CheckHolds(); err != nil {
 		return err
+	}
+	cfg, err := config.LoadCollectorRenewal()
+	if err != nil {
+		return configurationFailure(err)
 	}
 	if cfg.IdentityDir == "" {
 		return fmt.Errorf("SHERLOCK_COLLECTOR_IDENTITY_DIR is required for atomic identity renewal")
@@ -248,9 +257,9 @@ func renew(ctx context.Context) error {
 		return err
 	}
 	defer clear(privateKey)
-	httpClient, err := controlHTTPClient(cfg.Transport())
+	httpClient, err := controlHTTPClient(cfg)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	client, err := collectorruntime.NewHTTPClient(cfg.ControlURL, httpClient, time.Minute)
 	if err != nil {
@@ -334,28 +343,28 @@ func buildBCMCredentialWorker(cfg config.Collector, control collectorruntime.Cre
 func runBCMAccessTest(ctx context.Context, logger *slog.Logger) error {
 	cfg, err := config.LoadCollector()
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	if !cfg.BCMAccessTest.Enabled || cfg.BCMAccessTest.ExternalWorker {
-		return fmt.Errorf("BCM access test role requires SHERLOCK_BCM_ACCESS_TEST_ENABLED=true and SHERLOCK_BCM_ACCESS_TEST_EXTERNAL_WORKER=false")
+		return configurationFailure(fmt.Errorf("BCM access test role requires SHERLOCK_BCM_ACCESS_TEST_ENABLED=true and SHERLOCK_BCM_ACCESS_TEST_EXTERNAL_WORKER=false"))
 	}
 	if err := requireNoNewPrivilegesDisabled(runtime.GOOS, os.ReadFile); err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	httpClient, err := controlHTTPClient(cfg.Transport())
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	control, err := collectorruntime.NewHTTPClient(cfg.ControlURL, httpClient, 2*time.Minute)
 	if err != nil {
-		return err
+		return configurationFailure(err)
 	}
 	worker, err := buildBCMCredentialWorker(cfg, control, platform.SystemClock{}, logger)
 	if err != nil || worker == nil {
 		if err == nil {
 			err = fmt.Errorf("BCM access test role did not create a credential worker")
 		}
-		return err
+		return configurationFailure(err)
 	}
 	logger.Info("collector.bcm_access_test_started", "collector_id", cfg.CollectorID, "expected_host", cfg.BCMAccessTest.ExpectedHost)
 	return worker.Run(ctx)
@@ -391,11 +400,12 @@ func requireNoNewPrivilegesDisabled(goos string, readFile func(string) ([]byte, 
 
 func controlHTTPClient(cfg config.CollectorTransport) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	keyInfo, err := os.Stat(cfg.PrivateKeyFile)
+	keyInfo, err := os.Lstat(cfg.PrivateKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("inspect collector private key: %w", err)
 	}
-	if keyInfo.Mode().Perm()&0o077 != 0 {
+	keyOwner, owned := keyInfo.Sys().(*syscall.Stat_t)
+	if !keyInfo.Mode().IsRegular() || !owned || keyOwner.Uid != uint32(os.Geteuid()) || keyInfo.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("collector private key must not be accessible by group or other users")
 	}
 	certificatePEM, err := os.ReadFile(cfg.CertificateFile)
@@ -410,6 +420,10 @@ func controlHTTPClient(cfg config.CollectorTransport) (*http.Client, error) {
 	certificate, err := tls.X509KeyPair(certificatePEM, privateKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load collector identity: %w", err)
+	}
+	leaf, err := x509.ParseCertificate(certificate.Certificate[0])
+	if err != nil || time.Now().Before(leaf.NotBefore) || !time.Now().Before(leaf.NotAfter) {
+		return nil, errors.Join(collectorruntime.ErrAuthentication, fmt.Errorf("collector identity is not currently valid; operator recovery may be required"))
 	}
 	caPEM, err := os.ReadFile(cfg.CAFile)
 	if err != nil {
@@ -474,4 +488,28 @@ func bootstrapHTTPClient(cfg config.CollectorIdentity, timeout time.Duration) (*
 		}
 	}
 	return &http.Client{Transport: roundTripper, Timeout: timeout}, nil
+}
+
+// Exit statuses are systemd RestartPreventExitStatus values, not success.
+// Transient transport outages retain status 1 and bounded systemd retries.
+func serviceExitCode(err error) int {
+	if errors.Is(err, servicefailure.ErrAuthentication) {
+		return 77
+	}
+	if errors.Is(err, servicefailure.ErrPackExpired) {
+		return 79
+	}
+	if errors.Is(err, servicefailure.ErrConfiguration) || errors.Is(err, gpussh.ErrBlocked) {
+		return 78
+	}
+	if servicefailure.Permanent(err) {
+		return 77
+	}
+	return 1
+}
+func configurationFailure(err error) error {
+	if err == nil || servicefailure.Permanent(err) || errors.Is(err, gpussh.ErrBlocked) {
+		return err
+	}
+	return errors.Join(servicefailure.ErrConfiguration, err)
 }

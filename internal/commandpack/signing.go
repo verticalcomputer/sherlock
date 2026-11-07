@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 	"io"
 	"time"
 )
@@ -109,7 +110,10 @@ func (store *TrustStore) Verify(release SignedRelease, runnerVersion string, now
 	if release.Pack.Issuer != root.Issuer {
 		return nil, fmt.Errorf("%w: issuer does not match trust root", ErrInvalidRelease)
 	}
-	if now.Before(release.Pack.IssuedAt) || !now.Before(release.Pack.ExpiresAt) {
+	if !now.Before(release.Pack.ExpiresAt) {
+		return nil, errors.Join(ErrInvalidRelease, servicefailure.ErrPackExpired)
+	}
+	if now.Before(release.Pack.IssuedAt) {
 		return nil, fmt.Errorf("%w: release is not currently valid", ErrInvalidRelease)
 	}
 	payload, err := CanonicalBytes(release.Pack)

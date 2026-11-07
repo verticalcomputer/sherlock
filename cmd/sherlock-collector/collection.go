@@ -17,6 +17,7 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/config"
 	"github.com/verticalcomputer/sherlock/internal/diagnosticrunner"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 	"github.com/verticalcomputer/sherlock/internal/platform"
 )
 
@@ -95,6 +96,9 @@ func buildCollectionExecutors(cfg config.Collector, runner slurmadapter.Runner) 
 		typedSources = append(typedSources, application.TypedCollectionSource{ClusterID: domain.ClusterID(cfg.SlurmClusterID), SourceID: domain.SourceID(cfg.SlurmSourceID), Kind: domain.CollectionSourceSlurm, Operations: slurmIDs, Executor: executor})
 	}
 	if len(gpuProcessIDs) > 0 {
+		if err := gpussh.Require("gpu-process", cfg.ClusterID); err != nil {
+			return nil, nil, err
+		}
 		gpuCfg := cfg.GPUProcessObservation
 		nodes := make(map[domain.StableNodeID]gpuprocessexecution.NodeConfig, len(gpuCfg.Nodes))
 		for stable := range gpuCfg.Nodes {

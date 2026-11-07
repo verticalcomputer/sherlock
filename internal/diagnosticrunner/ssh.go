@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/verticalcomputer/sherlock/internal/commandpack"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -89,12 +90,14 @@ type SSHTargetAuthentication struct {
 // SSHConfig names a fixed SSH executable and a protected, versioned target and
 // authentication-profile contract.
 type SSHConfig struct {
+	ClusterID      string
 	Executable     ExecutableIdentity
 	Authentication SSHTargetAuthentication
 	KnownHostsFile string
 }
 
 type RestrictedSSH struct {
+	authorize        func() error
 	executable       ExecutableIdentity
 	targets          map[string]SSHTarget
 	profiles         map[string]SSHAuthenticationProfile
@@ -181,6 +184,7 @@ func newRestrictedSSH(config SSHConfig, credentials SSHCredentialProvider) (*Res
 		return nil, err
 	}
 	adapter := &RestrictedSSH{
+		authorize:  func() error { return gpussh.Require("diagnostics", config.ClusterID) },
 		executable: config.Executable, targets: targets,
 		profiles: profiles, credentials: credentials,
 		knownHostsFile: config.KnownHostsFile, knownHostsSHA256: knownHostsDigest,
@@ -198,6 +202,9 @@ func newRestrictedSSH(config SSHConfig, credentials SSHCredentialProvider) (*Res
 // ExecuteInvocation verifies the typed invocation locally, then transports the
 // invocation to a fixed remote runner which independently verifies it again.
 func (adapter *RestrictedSSH) ExecuteInvocation(ctx context.Context, runner *Runner, catalog *commandpack.Catalog, attemptID string, invocation commandpack.Invocation, suppliedSecrets [][]byte) (Result, error) {
+	if err := adapter.authorize(); err != nil {
+		return Result{}, err
+	}
 	if runner == nil {
 		return Result{}, errors.New("restricted ssh: runner is required")
 	}

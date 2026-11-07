@@ -10,6 +10,7 @@ import (
 
 	"github.com/verticalcomputer/sherlock/internal/application"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/servicefailure"
 )
 
 const (
@@ -179,6 +180,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 			}
 			err := r.client.Heartbeat(ctx, heartbeat)
 			if err != nil {
+				if servicefailure.Permanent(err) {
+					return err
+				}
 				if err := wait(ctx, backoff); err != nil {
 					return err
 				}
@@ -190,6 +194,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		}
 		pending, ok, err := r.journal.pending()
 		if err != nil {
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			// Claiming new work while pending state is unreadable could strand an
 			// unacknowledged result, so treat it like any other operation failure.
 			if err := wait(ctx, backoff); err != nil {
@@ -202,10 +209,16 @@ func (r *Runtime) Run(ctx context.Context) error {
 			if pending.TypedPlan != nil {
 				err = r.processTyped(ctx, pendingTypedLease(r.cfg.CollectorID, pending))
 				if err != nil {
+					if servicefailure.Permanent(err) {
+						return err
+					}
 					if errors.Is(err, ErrLeaseLost) {
 						err = r.journal.discardLease(pending.RunID)
 					}
 					if err != nil {
+						if servicefailure.Permanent(err) {
+							return err
+						}
 						if err := wait(ctx, backoff); err != nil {
 							return err
 						}
@@ -216,6 +229,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 			}
 			lease := pendingLease(r.cfg.CollectorID, pending)
 			if err := r.process(ctx, lease); err != nil {
+				if servicefailure.Permanent(err) {
+					return err
+				}
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
@@ -250,6 +266,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 				}
 			}
 			if err != nil {
+				if servicefailure.Permanent(err) {
+					return err
+				}
 				if err := wait(ctx, backoff); err != nil {
 					return err
 				}
@@ -262,6 +281,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		claimTyped = r.typedExecutor != nil
 		lease, err := r.client.Claim(ctx, ClaimRequest{CollectorID: r.cfg.CollectorID, Wait: r.cfg.ClaimWait})
 		if err != nil {
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			if err := wait(ctx, backoff); err != nil {
 				return err
 			}
@@ -276,6 +298,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 			continue
 		}
 		if err := r.process(ctx, *lease); err != nil {
+			if servicefailure.Permanent(err) {
+				return err
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

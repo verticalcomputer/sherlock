@@ -80,7 +80,7 @@ func NewAgentlessSource(cfg AgentlessSourceConfig) (*AgentlessSource, error) {
 		}
 	}
 	sshAdapter, err := diagnosticrunner.NewAgentlessSSH(diagnosticrunner.AgentlessSSHConfig{
-		ClusterID: string(cfg.ClusterID), Executable: cfg.SSHExecutable, Authentication: authentication,
+		SSHRole: "gpu-process", ClusterID: string(cfg.ClusterID), Executable: cfg.SSHExecutable, Authentication: authentication,
 		KnownHostsFile: cfg.KnownHostsFile, Policy: policy,
 	})
 	if err != nil {

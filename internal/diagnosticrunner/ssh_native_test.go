@@ -207,6 +207,7 @@ func (server *nativeSSHTestServer) adapter(t *testing.T, provider SSHCredentialP
 	if err != nil {
 		t.Fatal(err)
 	}
+	adapter.authorize = func() error { return nil } // isolated native server fixture
 	return adapter
 }
 

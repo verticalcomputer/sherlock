@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/verticalcomputer/sherlock/internal/application"
+	"github.com/verticalcomputer/sherlock/internal/gpussh"
 )
 
 const (
@@ -43,14 +44,25 @@ type Runner interface {
 	Read(context.Context, string) ([]byte, []byte, error)
 }
 
-type SSHRunner struct{}
+type SSHRunner struct {
+	ClusterID string
+	Role      string
+	authorize func() error // package-local fixture seam, never configurable externally
+}
 
 // Read invokes only a fixed Python reader over a host-key-checked,
 // noninteractive SSH connection. No sudo, traffic test or mutation is part of
 // the command. stdout and stderr are capped before parsing/logging.
-func (SSHRunner) Read(ctx context.Context, node string) ([]byte, []byte, error) {
+func (r SSHRunner) Read(ctx context.Context, node string) ([]byte, []byte, error) {
 	if !approvedNode(node) {
 		return nil, nil, errors.New("unapproved network target")
+	}
+	check := r.authorize
+	if check == nil {
+		check = func() error { return gpussh.Require(r.Role, r.ClusterID) }
+	}
+	if err := check(); err != nil {
+		return nil, nil, err
 	}
 	cmd := exec.CommandContext(ctx, "ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
 		"-o", "ConnectTimeout=3", "-o", "ServerAliveInterval=2", "-o", "ServerAliveCountMax=2",
