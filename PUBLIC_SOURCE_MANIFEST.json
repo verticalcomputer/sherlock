@@ -3195,8 +3195,8 @@
     {
       "executable": false,
       "path": "internal/diagnosticrunner/hostinvoker_test.go",
-      "sha256": "e09816e91b86506b6bcb916f79058180378f69bc60353f1460912416a5a4879b",
-      "size": 6510
+      "sha256": "b01c3276acab7c76ae6313f4b2edd23dce53a485a1678c4aa1d869b2e1473149",
+      "size": 6736
     },
     {
       "executable": false,
