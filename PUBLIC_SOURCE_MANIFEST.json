@@ -3,8 +3,14 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "dce65944add2be8683ae142bbb6b925d9cd1679181ea83bdbcf3addecd1db2f3",
-      "size": 2932
+      "sha256": "6712e4ca5c7a502dabdf6da6ed15e1bbd5cd17a2ba18de4d9e52aa776941a411",
+      "size": 3082
+    },
+    {
+      "executable": false,
+      "path": ".github/workflows/prepare-collector-release.yml",
+      "sha256": "80d2c3e82723316f275720aa1845d96b3e4a51f352d362f0f6e23c56878cf869",
+      "size": 2348
     },
     {
       "executable": false,
@@ -17,6 +23,12 @@
       "path": ".github/workflows/release.yml",
       "sha256": "629df2f5f36fa14b7b9663a35063b7f96fd35ce25a3c2aacb11cbc06a1b144b9",
       "size": 2983
+    },
+    {
+      "executable": false,
+      "path": ".github/workflows/sign-collector-release.yml",
+      "sha256": "2b9d79f7cf646eb4d8a910af30d4759219d167a8b4c546d08590ad0ac60f2228",
+      "size": 3485
     },
     {
       "executable": false,
@@ -39,8 +51,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "eaeba112309de6dec3890266481e6049b643839b655cf8e182d4efb413e614bc",
-      "size": 1988
+      "sha256": "aebca96c91a4403ac85892bb9c7902ce51e5fc052301ea8034a79f8bedda65fd",
+      "size": 2061
     },
     {
       "executable": false,
@@ -885,8 +897,8 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "672eb8bdb465adb416eebe9120eda80ffa2b8bcf8d4834b4460ef129494f9dfb",
-      "size": 13841
+      "sha256": "93a06ff4543be8a5dffd1f5c2b6bcb7dcc9c1f21b51f61102cc47252bf3b64f2",
+      "size": 16413
     },
     {
       "executable": false,
@@ -6698,6 +6710,12 @@
     },
     {
       "executable": false,
+      "path": "scripts/prepare-collector-release.py",
+      "sha256": "06c547010c29cd8d3069e7a5d347fce183a5b5eb5b26f411e5bb7398a07fb245",
+      "size": 17317
+    },
+    {
+      "executable": false,
       "path": "scripts/prepare-hosted-release.py",
       "sha256": "dee8ef5edf5ecb7a4bd99d437bd13a92009b97a87e8cc3fc604663dc625d34a1",
       "size": 5383
@@ -6752,6 +6770,12 @@
     },
     {
       "executable": false,
+      "path": "scripts/test_collector_release.py",
+      "sha256": "dab7f3ff1fd3ccdc65df758c0a0c63d75311416fbbdcd96bdb753941e336d15b",
+      "size": 14710
+    },
+    {
+      "executable": false,
       "path": "scripts/test_export_public_candidate.py",
       "sha256": "3084e23e38a5479eec7ce179569197fb86a05ea900bf6e3844d4bf99e1c5640c",
       "size": 7160
@@ -6785,6 +6809,12 @@
       "path": "scripts/test_release_signing.py",
       "sha256": "f7523b5cc3ead611917bd8930e90b4e97c1344f200b2c39545ef7a4d1c3ca3cc",
       "size": 16645
+    },
+    {
+      "executable": false,
+      "path": "scripts/verify-collector-release.py",
+      "sha256": "6c101a132599214f2dfa36c378a1740b26f9505e82c454d48ccf8d483c262816",
+      "size": 12553
     },
     {
       "executable": false,

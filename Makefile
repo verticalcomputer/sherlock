@@ -3,6 +3,7 @@
 check: check-docs
 	test -z "$$(gofmt -l .)"
 	python3 -m unittest discover -s scripts -p test_release_signing.py
+	python3 -B -m unittest discover -s scripts -p test_collector_release.py
 	python3 -m unittest discover -s scripts -p test_export_public_candidate.py
 	python3 -m unittest discover -s scripts -p test_prepare_release_review.py
 	python3 -m unittest discover -s scripts -p test_prepare_hosted_release.py
