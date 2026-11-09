@@ -46,6 +46,22 @@
       "summary": "Contributor context, factual review and optional checkpoint-record policy."
     },
     {
+      "path": "AGENTS.md",
+      "kind": "reference",
+      "topics": [
+        "development"
+      ],
+      "summary": "Repository-wide rules for Codex pull request reviews."
+    },
+    {
+      "path": ".agents/skills/sherlock-pr-review/SKILL.md",
+      "kind": "reference",
+      "topics": [
+        "development"
+      ],
+      "summary": "Local Codex review workflow and checks selected by changed behavior."
+    },
+    {
       "path": "docs/architecture.md",
       "kind": "current",
       "topics": [
