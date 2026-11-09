@@ -73,6 +73,38 @@ func NewAccessServiceTokenPoPRoundTripper(next http.RoundTripper, token AccessSe
 	return newAccessServiceTokenRoundTripper(next, token, certificate, time.Now, rand.Reader)
 }
 
+// NewRotatingAccessServiceTokenPoP reloads a complete, validated identity
+// snapshot per request. The underlying TLS connection can remain pooled because
+// the collector proof is in the HTTP request, not the TLS client handshake.
+func NewRotatingAccessServiceTokenPoP(next http.RoundTripper, load func() (tls.Certificate, error), token func() (AccessServiceToken, error)) http.RoundTripper {
+	return rotatingAccessPoP{next, token, load}
+}
+
+type rotatingAccessPoP struct {
+	next  http.RoundTripper
+	token func() (AccessServiceToken, error)
+	load  func() (tls.Certificate, error)
+}
+
+func (t rotatingAccessPoP) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Body != nil {
+		defer r.Body.Close()
+	}
+	cert, err := t.load()
+	if err != nil {
+		return nil, err
+	}
+	token, err := t.token()
+	if err != nil {
+		return nil, err
+	}
+	signer, err := NewAccessServiceTokenPoPRoundTripper(t.next, token, cert)
+	if err != nil {
+		return nil, err
+	}
+	return signer.RoundTrip(r)
+}
+
 func newAccessServiceTokenRoundTripper(next http.RoundTripper, token AccessServiceToken, certificate tls.Certificate, now func() time.Time, random io.Reader) (http.RoundTripper, error) {
 	if next == nil || !boundedCredential(token.ClientID, 512) || !boundedCredential(token.ClientSecret, 512) {
 		return nil, fmt.Errorf("cloudflare Access Service Token transport configuration is invalid")

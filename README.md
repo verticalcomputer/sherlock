@@ -17,6 +17,30 @@ See [current status](next.md) for implementation and release gaps.
 Start with the [documentation index](docs/README.md) for architecture, task guides,
 interface references and contributor context.
 
+## Scheduled Prometheus upload
+
+Run `sherlock-collector prometheus-upload` to query a loopback Prometheus
+once per minute and send results to `sherlock-control prometheus-upload`.
+The fixed profile covers GPU identity, utilization, XID, GPU and memory
+temperature, power draw, framebuffer memory used, free and reserved, and
+correctable and uncorrectable remapped rows. The collector retries through
+a private spool and does not request work from the intake.
+
+Both ends use `SHERLOCK_COLLECTOR_ID`, `SHERLOCK_CLUSTER_ID`, and
+`SHERLOCK_SOURCE_ID` to identify the collector and its Prometheus source.
+Set `SHERLOCK_PROMETHEUS_URL` to a loopback IP origin and
+`SHERLOCK_PROMETHEUS_UPLOAD_SPOOL` to an existing absolute directory
+with mode `0700`. Configure the collector's control URL and credentials
+for direct mTLS or Cloudflare Access service token with proof of possession.
+`sherlock-collector prometheus-upload-readiness` checks authentication and
+routing without submitting telemetry.
+
+The intake serves only `POST /collector/v1/prometheus/reports`. It uses the
+existing collector CA certificate to verify identities and checks coverage
+against the expected GPU inventory in PostgreSQL. The intake accepts a
+server certificate and key, and rejects collector CA signing keys and
+diagnostic credentials. Use a database login dedicated to this intake.
+
 ## Build and check
 
 Use the exact Go version in [go.mod](go.mod), Python 3, Node.js 22 and the pinned

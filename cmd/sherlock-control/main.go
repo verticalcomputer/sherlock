@@ -27,6 +27,19 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if len(os.Args) > 1 {
+		if len(os.Args) != 2 || os.Args[1] != "prometheus-upload" {
+			logger.Error("control.mode_invalid")
+			os.Exit(2)
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runPrometheusUpload(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("control.prometheus_upload_stopped", "reason", "startup or runtime failure")
+			os.Exit(1)
+		}
+		return
+	}
 	cfg, err := config.LoadControl()
 	if err != nil {
 		logger.Error("control.configuration_invalid", "error", err.Error())

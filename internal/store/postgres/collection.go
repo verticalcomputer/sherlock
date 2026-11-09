@@ -64,6 +64,10 @@ func (s *CollectionStore) RecordResult(ctx context.Context, result domain.Collec
 }
 
 func recordResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult) (bool, error) {
+	return persistCollectionResultTx(ctx, tx, result, true)
+}
+
+func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, legacyCoverage bool) (bool, error) {
 	var jobID *string
 	var bindingValid bool
 	err := tx.QueryRow(ctx, `SELECT job_id,
@@ -76,13 +80,15 @@ func recordResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResu
 	if err == nil && !bindingValid {
 		return false, fmt.Errorf("collection result conflicts with bound job provenance")
 	}
-	result, err = normalizeDCGMResult(ctx, tx, result)
-	if err != nil {
-		return false, err
-	}
-	result, err = applyAuthoritativeCoverage(ctx, tx, result)
-	if err != nil {
-		return false, err
+	if legacyCoverage {
+		result, err = normalizeDCGMResult(ctx, tx, result)
+		if err != nil {
+			return false, err
+		}
+		result, err = applyAuthoritativeCoverage(ctx, tx, result)
+		if err != nil {
+			return false, err
+		}
 	}
 	metricFields := result.Coverage.MetricFields
 	if metricFields == nil {
@@ -158,8 +164,10 @@ func recordResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResu
 			}
 		}
 	}
-	if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
-		return false, err
+	if legacyCoverage {
+		if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
+			return false, err
+		}
 	}
 
 	if envelope, present, evidenceErr := domain.CollectionEvidenceForCollection(result); evidenceErr != nil {
@@ -175,7 +183,11 @@ func recordResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResu
 	}
 
 	available := sourceResponded(result)
-	if available && result.Status != domain.ResultFailed {
+	if !legacyCoverage {
+		if err := advancePrometheusSourceStatus(ctx, tx, result, available); err != nil {
+			return false, err
+		}
+	} else if available && result.Status != domain.ResultFailed {
 		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='AVAILABLE', last_attempt_at=$2, last_success_at=$2, last_failure_code=NULL WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC()); err != nil {
 			return false, fmt.Errorf("update available source %s: %w", result.Task.SourceID, err)
 		}

@@ -40,6 +40,14 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "prometheus-upload", "prometheus-upload-readiness":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			if err := runPrometheusUpload(ctx, logger, os.Args[1] == "prometheus-upload-readiness"); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("collector.prometheus_upload_stopped", "reason", err.Error())
+				os.Exit(1)
+			}
+			return
 		case "readiness":
 			cfg, err := config.LoadCollector()
 			if err == nil {

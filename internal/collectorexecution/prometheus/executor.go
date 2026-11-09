@@ -22,6 +22,7 @@ type Executor struct {
 	clock        Clock
 	ids          IDGenerator
 	taskDeadline bool
+	upload       bool
 }
 
 // NewScheduled selects durable task deadlines for the in-process worker.
@@ -32,6 +33,15 @@ func NewScheduled(client *adapter.Client, clock Clock, ids IDGenerator) (*Execut
 		return nil, err
 	}
 	executor.taskDeadline = true
+	return executor, nil
+}
+
+func NewUpload(client *adapter.Client, clock Clock, ids IDGenerator) (*Executor, error) {
+	executor, err := New(client, clock, ids)
+	if err != nil {
+		return nil, err
+	}
+	executor.upload = true
 	return executor, nil
 }
 
@@ -54,7 +64,11 @@ func (e *Executor) Execute(ctx context.Context, task domain.CollectionTask) doma
 	}
 	client, err := e.client.WithTaskBounds(task.MaxSeries, task.MaxBytes, deadline)
 	if err == nil {
-		if task.Range == nil {
+		if e.upload && task.Range == nil && task.Node == "" {
+			queryResult, err = client.UploadInstant(queryContext, task.Query, task.ScheduledFor)
+		} else if e.upload {
+			err = fmt.Errorf("invalid upload task scope")
+		} else if task.Range == nil {
 			queryResult, err = client.Instant(queryContext, task.Query, task.Node, task.ScheduledFor)
 		} else {
 			queryResult, err = client.Range(queryContext, task.Query, task.Node, *task.Range)
@@ -89,7 +103,11 @@ func (e *Executor) Execute(ctx context.Context, task domain.CollectionTask) doma
 	}
 	result.Observations = make([]domain.Observation, 0, len(queryResult.Samples))
 	for _, sample := range queryResult.Samples {
-		if fields := domain.DCGMFields(task.Query); len(fields) > 0 && task.Range == nil {
+		fields := domain.DCGMFields(task.Query)
+		if e.upload {
+			fields = domain.PrometheusUploadFields(task.Query)
+		}
+		if len(fields) > 0 && task.Range == nil {
 			node, gpu, valid := domain.DCGMIdentity(domain.SortedLabels(sample.Metric), task)
 			known := false
 			for _, field := range fields {
@@ -105,7 +123,12 @@ func (e *Executor) Execute(ctx context.Context, task domain.CollectionTask) doma
 			}
 			// Strip every free-form/exporter label before transport or journal
 			// persistence; only the exact node/UUID mapping inputs survive.
+			index := sample.Metric["gpu"]
 			sample.Metric = map[string]string{"__name__": sample.Metric["__name__"], "Hostname": node, "UUID": gpu}
+			if e.upload && index != "" {
+				// The upload spool validates the numeric index before persistence.
+				sample.Metric["gpu"] = index
+			}
 		}
 		entity, entityErr := entityKey(task, sample.Metric)
 		if entityErr != nil {
