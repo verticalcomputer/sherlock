@@ -5265,8 +5265,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_authority_integration_test.go",
-      "sha256": "02a0bd37e2a3d8d6537d7fc3f1272e29150333e50442c88e7fcad94292ce33bd",
-      "size": 3275
+      "sha256": "639196e00d4408e15482b43792c821140a0b7601b8213ea44ae3590729fe374d",
+      "size": 4405
     },
     {
       "executable": false,
