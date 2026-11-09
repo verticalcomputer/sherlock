@@ -41,6 +41,18 @@ against the expected GPU inventory in PostgreSQL. The intake accepts a
 server certificate and key, and rejects collector CA signing keys and
 diagnostic credentials. Use a database login dedicated to this intake.
 
+Before upgrading an existing restricted intake, grant its dedicated login the
+column privileges required to upsert observed GPU identity. Substitute the name
+of the dedicated intake login below. The intake updates this cache only for
+successful identity reports with complete validated coverage.
+
+```sql
+GRANT SELECT (cluster_id, source_id, target_kind, target_id, node_id, last_observed_at),
+      INSERT (cluster_id, source_id, target_kind, target_id, node_id, last_observed_at),
+      UPDATE (node_id, last_observed_at)
+ON public.collection_target_inventory TO sherlock_prometheus_upload;
+```
+
 ## Build and check
 
 Use the exact Go version in [go.mod](go.mod), Python 3, Node.js 22 and the pinned

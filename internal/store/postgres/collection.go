@@ -164,10 +164,8 @@ func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.Col
 			}
 		}
 	}
-	if legacyCoverage {
-		if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
-			return false, err
-		}
+	if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
+		return false, err
 	}
 
 	if envelope, present, evidenceErr := domain.CollectionEvidenceForCollection(result); evidenceErr != nil {

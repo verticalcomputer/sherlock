@@ -75,8 +75,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "4259a93a1285f3eaef5adfa4242f3db2274277d57a04711a49826b57e52eea00",
-      "size": 4817
+      "sha256": "88a6086fd0c532f1aa2f924feac4280bc298c42712d8903dcf42b49a586fbe2c",
+      "size": 5414
     },
     {
       "executable": false,
@@ -4599,8 +4599,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/collection.go",
-      "sha256": "de3020f5d39bdf99622feee755debc9b54fe8c9a671fa94cdf2ef87524b12ec4",
-      "size": 19957
+      "sha256": "fa5ca0b0249ad3ba3be8404fce3fb7acf659c99908cac9765da43ab36aaad6ee",
+      "size": 19930
     },
     {
       "executable": false,
@@ -5091,8 +5091,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload_access_integration_test.go",
-      "sha256": "14e8efd7af8532098a6f9e4c8f8c114cb2082d738355ecd6670eb49412f31853",
-      "size": 24932
+      "sha256": "c53305d891ebef9e425064c98396090b6306f85c9244f383a0c20658b2b9f60a",
+      "size": 27012
     },
     {
       "executable": false,

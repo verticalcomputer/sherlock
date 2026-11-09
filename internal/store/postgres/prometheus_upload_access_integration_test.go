@@ -67,7 +67,8 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 		defer uploadPool.Close()
 		var denied bool
 		err = uploadPool.QueryRow(ctx, `SELECT NOT has_table_privilege(current_user,'collector_work_items','SELECT')
- AND NOT has_table_privilege(current_user,'collection_target_inventory','SELECT')`).Scan(&denied)
+ AND NOT has_table_privilege(current_user,'collection_target_inventory','SELECT,DELETE')
+ AND NOT has_column_privilege(current_user,'collection_target_inventory','cluster_id','UPDATE')`).Scan(&denied)
 		if err != nil || !denied {
 			t.Fatalf("upload role has legacy table access, err=%v", err)
 		}
@@ -338,7 +339,7 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payload []byte
-	var temperature domain.CollectionResult
+	var identityResult, temperature domain.CollectionResult
 	for _, q := range domain.PrometheusUploadQueries() {
 		task := domain.PrometheusUploadTask(cluster, source, q, slot)
 		runnable := task
@@ -356,7 +357,10 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 			t.Fatal(err)
 		}
 		send(client, domain.PrometheusUploadPath, "", raw, http.StatusNoContent)
-		if q == domain.QueryGPUTemperature {
+		switch q {
+		case domain.QueryGPUIdentity:
+			identityResult = result
+		case domain.QueryGPUTemperature:
 			temperature = result
 		}
 		if payload == nil {
@@ -413,6 +417,18 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	metricsService, err := adminview.NewService(healthStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := metricsService.GPUMetrics(ctx, adminview.GPUMetricsQuery{ClusterID: string(cluster), Now: now.Add(time.Second)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory := snapshot.Inventory
+	if !inventory.CoverageComplete || inventory.CoveredNodes != 10 || inventory.CoveredGPUs != 80 {
+		t.Fatalf("scheduled GPU Metrics coverage: complete=%v nodes=%d GPUs=%d", inventory.CoverageComplete, inventory.CoveredNodes, inventory.CoveredGPUs)
+	}
 	summaries, err := healthStore.LoadGPUHealthSummaries(ctx, string(cluster), now.Add(time.Second), 5*time.Minute)
 	if err != nil || len(summaries) != 80 {
 		t.Fatalf("GPU health summaries=%d err=%v", len(summaries), err)
@@ -455,6 +471,31 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
  FROM collection_runs r WHERE r.run_id=$1`, temperature.Task.RunID).Scan(&status, &kept, &supported, &unknown)
 	if err != nil || status != "PARTIAL" || kept != 158 || supported != 158 || unknown != 2 {
 		t.Fatalf("duplicate temperature field: status=%s observations=%d supported=%d unknown=%d err=%v", status, kept, supported, unknown, err)
+	}
+	// Older complete uploads can fill history, while a newer partial upload
+	// cannot advance observed presence for any GPU or node.
+	sendIdentity := func(at time.Time) {
+		t.Helper()
+		identityResult.Task = domain.PrometheusUploadTask(cluster, source, domain.QueryGPUIdentity, at)
+		identityResult.StartedAt, identityResult.CompletedAt = at, at
+		for i := range identityResult.Observations {
+			identityResult.Observations[i].ObservedAt, identityResult.Observations[i].CollectedAt = at, at
+		}
+		raw, err := json.Marshal(domain.PrometheusReport{Version: domain.PrometheusUploadVersion, Result: identityResult})
+		if err != nil {
+			t.Fatal(err)
+		}
+		send(client, domain.PrometheusUploadPath, "", raw, http.StatusNoContent)
+	}
+	sendIdentity(slot.Add(-time.Minute))
+	identityResult.Observations = identityResult.Observations[1:]
+	sendIdentity(slot.Add(time.Minute))
+	var targets int
+	var earliest, latest time.Time
+	err = pool.QueryRow(ctx, `SELECT count(*),min(last_observed_at),max(last_observed_at)
+ FROM collection_target_inventory WHERE cluster_id=$1 AND source_id=$2`, cluster, source).Scan(&targets, &earliest, &latest)
+	if err != nil || targets != 90 || !earliest.Equal(slot) || !latest.Equal(slot) {
+		t.Fatalf("older or partial identity changed observed inventory: targets=%d earliest=%v latest=%v err=%v", targets, earliest, latest, err)
 	}
 	if tool := os.Getenv("SHERLOCK_TEST_UPLOAD_IDENTITY_TOOL"); tool != "" {
 		exerciseOfflineUploadRotation(t, ctx, tool, dsn, pool, baseTransport, host, cluster, collector, clientCert, caPEM, caKey, id, secret)
