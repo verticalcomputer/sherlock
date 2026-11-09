@@ -2,6 +2,12 @@
   "files": [
     {
       "executable": false,
+      "path": ".agents/skills/sherlock-pr-review/SKILL.md",
+      "sha256": "9c62b44282ee16e95b153994283d22ceb4f1b8c69960dd1d91848f0a5ea64d8b",
+      "size": 3854
+    },
+    {
+      "executable": false,
       "path": ".github/workflows/ci.yml",
       "sha256": "6712e4ca5c7a502dabdf6da6ed15e1bbd5cd17a2ba18de4d9e52aa776941a411",
       "size": 3082
@@ -38,9 +44,15 @@
     },
     {
       "executable": false,
+      "path": "AGENTS.md",
+      "sha256": "e163137d3cde93f9f5b5af63e82f1e139b55460fa9b819543ce86c82381ac932",
+      "size": 902
+    },
+    {
+      "executable": false,
       "path": "CONTRIBUTING.md",
-      "sha256": "0be009d9b44c8b1c1386b614a2bcf579fda533aee8922df8a5175bedece55864",
-      "size": 2008
+      "sha256": "3cc4ddfb02134b3e7325cc608eb1234bf76c74df603523368a3c92fb0406001c",
+      "size": 2669
     },
     {
       "executable": false,
@@ -939,8 +951,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "e1e7081ebc8dddf0c95fe48d01a350f5b5870b97834ef26aeb811b3971c22345",
-      "size": 6824
+      "sha256": "071aa345f38f699470a0aeac6d4ecd700ce5781717c4c27f0cf989d607f96ccc",
+      "size": 7250
     },
     {
       "executable": false,
