@@ -42,7 +42,24 @@ failure sequence and its impact. Check callers, wrappers, callees, and relevant
 tests before claiming a guard is missing. Treat unresolved hypotheses as
 verification gaps and group symptoms of one defect under one finding.
 
-Return findings in priority order, or say “No findings” when none meet that
-bar. State which checks were run and identify material verification gaps.
+Return findings in priority order with stable IDs such as F1 and F2, or say
+“No findings” when none meet that bar. For a committed review, record the
+reviewed head SHA and merge base. State which checks were run and identify
+material verification gaps.
 Keep findings in the review response unless asked to publish them. Follow
 [the security disclosure policy](../../../SECURITY.md) for vulnerabilities.
+
+## Follow-up review
+
+Use the previous review's head SHA, merge base, and findings when available.
+If the previous head is an ancestor of the current head and the merge base
+is unchanged, review the diff between those heads. Recheck open findings
+against the current code even if their files were untouched. Revisit a closed
+finding if the new diff changes the evidence that closed it. If the prior
+review is missing or the revisions cannot be compared this way, review the
+full current PR diff.
+
+Keep each finding's ID. Record whether it is fixed, still open, or dismissed
+and cite the current code, test result, or contract that supports the outcome.
+Keep a finding open if you cannot verify its resolution. Give new findings
+fresh IDs and report the current head SHA with the outcomes.
