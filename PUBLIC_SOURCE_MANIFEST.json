@@ -5073,14 +5073,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload.go",
-      "sha256": "10415f3263ce16cb96e7031a7bfad679cf7c1d00a3f1236113d9619963910d03",
-      "size": 8633
+      "sha256": "57afe8fa22a22a32b98b4fcf946baf1f3c87e7e14c74e062f82d33d63fdf95a0",
+      "size": 9385
     },
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload_access_integration_test.go",
-      "sha256": "db50a44a58bceb09361611ea89454e5d957835c68a22e0052eb9cddf444dfeae",
-      "size": 23796
+      "sha256": "14e8efd7af8532098a6f9e4c8f8c114cb2082d738355ecd6670eb49412f31853",
+      "size": 24932
     },
     {
       "executable": false,

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -116,6 +118,7 @@ func applyPrometheusReportCoverage(ctx context.Context, tx pgx.Tx, r *domain.Col
 		return fmt.Errorf("scheduled Prometheus profile exceeds the bounded series limit")
 	}
 	r.Coverage.SeriesExpected = &expected
+	r.Coverage.MetricFields = nil
 	if r.Status == domain.ResultFailed {
 		return nil
 	}
@@ -163,6 +166,21 @@ func applyPrometheusReportCoverage(ctx context.Context, tx pgx.Tx, r *domain.Col
 	for _, o := range accepted {
 		if indexUse[o.EntityKey+"\x00"+o.Metric] == 1 {
 			r.Observations = append(r.Observations, o)
+		}
+	}
+	// Derive support from the same observations that can be persisted. Missing
+	// or ambiguous pairs remain unknown, even if other pairs in the run succeed.
+	for _, gpu := range slices.Sorted(maps.Keys(gpus)) {
+		for _, field := range fields {
+			assessment := domain.DCGMFieldEvidence{
+				NodeID: domain.StableNodeID(gpus[gpu]), GPU: domain.PhysicalGPUUUID(gpu),
+				Metric: field.Name, State: "UNKNOWN", Reason: "missing_or_unavailable",
+			}
+			if o, ok := accepted[gpu+"\x00"+field.Name]; ok && indexUse[o.EntityKey+"\x00"+o.Metric] == 1 {
+				assessment.State = "SUPPORTED"
+				assessment.Reason = "fresh_sample"
+			}
+			r.Coverage.MetricFields = append(r.Coverage.MetricFields, assessment)
 		}
 	}
 	if r.Status != domain.ResultSucceeded || !r.Coverage.Complete || len(r.Observations) != expected || r.Coverage.SeriesReturned != expected {

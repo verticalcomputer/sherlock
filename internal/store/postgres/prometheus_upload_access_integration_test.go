@@ -36,6 +36,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	prom "github.com/verticalcomputer/sherlock/internal/adapters/prometheus"
+	"github.com/verticalcomputer/sherlock/internal/adminview"
 	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
 	execution "github.com/verticalcomputer/sherlock/internal/collectorexecution/prometheus"
 	"github.com/verticalcomputer/sherlock/internal/collectorpop"
@@ -408,6 +409,27 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 	if err != nil || complete != 7 || work != 0 || attempts != 0 || nonces != 9 || fullMetrics != 11 {
 		t.Fatalf("complete=%d work=%d attempts=%d nonces=%d full metrics=%d err=%v", complete, work, attempts, nonces, fullMetrics, err)
 	}
+	healthStore, err := adminview.NewPostgresStore(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summaries, err := healthStore.LoadGPUHealthSummaries(ctx, string(cluster), now.Add(time.Second), 5*time.Minute)
+	if err != nil || len(summaries) != 80 {
+		t.Fatalf("GPU health summaries=%d err=%v", len(summaries), err)
+	}
+	for _, summary := range summaries {
+		metrics := make(map[string]int)
+		for _, observation := range summary.Observations {
+			metrics[observation.Metric]++
+		}
+		for _, query := range domain.ExpandedDCGMQueries() {
+			for _, field := range domain.PrometheusUploadFields(query) {
+				if metrics[field.Name] != 1 {
+					t.Fatalf("GPU %s has %d readings for %s in its health summary", summary.EntityKey, metrics[field.Name], field.Name)
+				}
+			}
+		}
+	}
 	// Substitute a duplicate reading for the other temperature field on one
 	// GPU. The transport count remains 160, and all GPUs still appear, but
 	// that field/GPU pair must not qualify as complete.
@@ -425,11 +447,14 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 	}
 	send(client, domain.PrometheusUploadPath, "", raw, http.StatusNoContent)
 	var status string
-	var kept int
-	err = pool.QueryRow(ctx, `SELECT r.status,(SELECT count(*) FROM observations o WHERE o.run_id=r.run_id)
- FROM collection_runs r WHERE r.run_id=$1`, temperature.Task.RunID).Scan(&status, &kept)
-	if err != nil || status != "PARTIAL" || kept != 158 {
-		t.Fatalf("duplicate temperature field: status=%s observations=%d err=%v", status, kept, err)
+	var kept, supported, unknown int
+	err = pool.QueryRow(ctx, `SELECT r.status,
+ (SELECT count(*) FROM observations o WHERE o.run_id=r.run_id),
+ (SELECT count(*) FROM jsonb_array_elements(r.metric_fields) f WHERE f->>'state'='SUPPORTED'),
+ (SELECT count(*) FROM jsonb_array_elements(r.metric_fields) f WHERE f->>'state'='UNKNOWN')
+ FROM collection_runs r WHERE r.run_id=$1`, temperature.Task.RunID).Scan(&status, &kept, &supported, &unknown)
+	if err != nil || status != "PARTIAL" || kept != 158 || supported != 158 || unknown != 2 {
+		t.Fatalf("duplicate temperature field: status=%s observations=%d supported=%d unknown=%d err=%v", status, kept, supported, unknown, err)
 	}
 	if tool := os.Getenv("SHERLOCK_TEST_UPLOAD_IDENTITY_TOOL"); tool != "" {
 		exerciseOfflineUploadRotation(t, ctx, tool, dsn, pool, baseTransport, host, cluster, collector, clientCert, caPEM, caKey, id, secret)
