@@ -3,8 +3,8 @@
     {
       "executable": false,
       "path": ".agents/skills/sherlock-pr-review/SKILL.md",
-      "sha256": "2856a3cc7edeaa0bf47cc6d7891a1de6456fa9b2b3bdb6fadba01019f0e12eae",
-      "size": 2464
+      "sha256": "f3b25100f4fe24f6c988b308d4f26a19f03cb4696307d8292b2111e3029755a2",
+      "size": 2962
     },
     {
       "executable": false,
@@ -45,8 +45,8 @@
     {
       "executable": false,
       "path": "AGENTS.md",
-      "sha256": "ba8059f97f613a7581f7a9ed734ebf883dfb82e3cf7298a0fd25283bbadf12c1",
-      "size": 654
+      "sha256": "e163137d3cde93f9f5b5af63e82f1e139b55460fa9b819543ce86c82381ac932",
+      "size": 902
     },
     {
       "executable": false,

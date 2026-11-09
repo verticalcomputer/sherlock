@@ -1,5 +1,10 @@
 ## Code Review Rules
 
+Report concrete defects introduced by the change. Cite the changed line and
+explain what input, failure, or sequence of events triggers the defect. Before
+flagging a missing guard, check whether the caller, wrapper, or callee already
+enforces it.
+
 - Flag changes that allow node, gateway, or collector identities to operate
   outside their authorized cluster, node, or source. Monitoring enrollment
   alone does not authorize diagnostic commands or repair.

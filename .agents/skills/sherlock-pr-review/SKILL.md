@@ -24,7 +24,9 @@ caller, persistence or transport boundary, and existing tests.
   authorization, target and cluster scope, and durable evidence admission.
   Check that ambiguous execution cannot trigger an unsafe retry. Verify that
   model-visible context and operator responses exclude credentials and raw
-  sensitive command material.
+  sensitive command material. If the diff removes or relaxes a security guard,
+  use Git history when available to establish why it exists and which callers
+  rely on it.
 - **Go runtime, SQL, and API.** Check cancellation and concurrent claims at
   ownership boundaries, rollback or retry after partial failure, and the
   behavior of already-persisted records. For API changes, compare the wire
@@ -34,7 +36,13 @@ caller, persistence or transport boundary, and existing tests.
   Check that manifests bind the shipped bytes, signing requires the matching
   approval, and claims identify which behavior was verified.
 
-Return actionable findings in priority order. Give the changed file and line,
-the triggering case, and its impact. State which checks were run when reporting
-verification. Keep findings in the review response unless asked to publish them.
-Follow [the security disclosure policy](../../../SECURITY.md) for vulnerabilities.
+Before reporting a finding, verify that the diff introduced it. Anchor it to
+the smallest relevant changed line range and show the triggering input or
+failure sequence and its impact. Check callers, wrappers, callees, and relevant
+tests before claiming a guard is missing. Treat unresolved hypotheses as
+verification gaps and group symptoms of one defect under one finding.
+
+Return findings in priority order, or say “No findings” when none meet that
+bar. State which checks were run and identify material verification gaps.
+Keep findings in the review response unless asked to publish them. Follow
+[the security disclosure policy](../../../SECURITY.md) for vulnerabilities.
