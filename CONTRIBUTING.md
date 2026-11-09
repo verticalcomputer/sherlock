@@ -26,6 +26,21 @@ to the fixed experimental network fixture must retain its 14-node, eight-port
 per node topology and distinct management-network coverage until a separately
 reviewed generalized admission contract exists.
 
+## Codex pull request review
+
+GitHub Codex Code Review uses the repository rules in [AGENTS.md](AGENTS.md).
+After the repository is connected in [Code Review settings](https://chatgpt.com/settings/code-review),
+request a review with `@codex review` or enable automatic review for the repository.
+
+For a deeper local pass, sign in to the Codex CLI with ChatGPT. Run from a clean,
+up-to-date checkout of the PR's trusted base branch so Codex loads review rules
+and skills from that branch. Replace `123` with the PR number.
+
+```sh
+git fetch origin refs/pull/123/head &&
+  codex exec --sandbox read-only 'Use $sherlock-pr-review to review HEAD...FETCH_HEAD.'
+```
+
 Report security issues privately to the destination in SECURITY.md. Do not put
 vulnerabilities or secrets in public issues. Contributors must have authority to
 submit their changes under Apache-2.0 and identify any third-party material and
