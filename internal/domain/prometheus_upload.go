@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -23,6 +24,11 @@ func PrometheusUploadQueries() []QueryKind {
 	// Keep the original spool positions stable across upgrades.
 	return []QueryKind{QueryGPUIdentity, QueryGPUUtilization, QueryGPUXID,
 		QueryGPUTemperature, QueryGPUPower, QueryGPUMemory, QueryGPUECC}
+}
+
+// IsPrometheusUploadQuery reports whether query belongs to the scheduled upload profile.
+func IsPrometheusUploadQuery(query QueryKind) bool {
+	return slices.Contains(PrometheusUploadQueries(), query)
 }
 
 // PrometheusUploadFields limits the added scheduled queries to fields exposed
@@ -56,9 +62,7 @@ func PrometheusUploadTask(cluster ClusterID, source SourceID, query QueryKind, s
 
 func (r PrometheusReport) Validate(cluster ClusterID, source SourceID, now time.Time) error {
 	task := r.Result.Task
-	switch task.Query {
-	case QueryGPUIdentity, QueryGPUUtilization, QueryGPUXID, QueryGPUTemperature, QueryGPUPower, QueryGPUMemory, QueryGPUECC:
-	default:
+	if !IsPrometheusUploadQuery(task.Query) {
 		return fmt.Errorf("query is not part of the scheduled Prometheus profile")
 	}
 	slot := task.ScheduledFor

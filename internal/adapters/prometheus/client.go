@@ -229,13 +229,10 @@ func (c *Client) Instant(ctx context.Context, kind domain.QueryKind, node string
 }
 
 func (c *Client) UploadInstant(ctx context.Context, kind domain.QueryKind, at time.Time) (QueryResult, error) {
-	switch kind {
-	case domain.QueryGPUIdentity, domain.QueryGPUUtilization, domain.QueryGPUXID,
-		domain.QueryGPUTemperature, domain.QueryGPUPower, domain.QueryGPUMemory, domain.QueryGPUECC:
-		return c.instant(ctx, kind, "", at, true)
-	default:
+	if !domain.IsPrometheusUploadQuery(kind) {
 		return QueryResult{}, &Error{Code: domain.FailureInvalidArgument, Message: "query is not part of the scheduled Prometheus profile"}
 	}
+	return c.instant(ctx, kind, "", at, true)
 }
 
 func (c *Client) instant(ctx context.Context, kind domain.QueryKind, node string, at time.Time, upload bool) (QueryResult, error) {
