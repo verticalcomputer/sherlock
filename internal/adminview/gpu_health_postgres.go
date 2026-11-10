@@ -42,31 +42,35 @@ type gpuHealthDevice struct {
 // original observations, latest operation assessments and expected placeholders.
 // All identities, expected revisions and run selection remain source scoped.
 func (store *PostgresStore) LoadGPUHealthSummaries(ctx context.Context, clusterID string, at time.Time, freshFor time.Duration) ([]application.GPUSummaryProjection, error) {
-	return store.loadGPUHealthSummaries(ctx, clusterID, at, freshFor, nil)
-}
-
-func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterID string, at time.Time, freshFor time.Duration, support map[string][]domain.DCGMFieldEvidence) ([]application.GPUSummaryProjection, error) {
 	if clusterID == "" || at.IsZero() || freshFor <= 0 {
 		return nil, fmt.Errorf("GPU health requires exact cluster, evaluation time and positive freshness")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-
-	var tx pgx.Tx
-	var err error
-	ownsSnapshot := store.gpuSnapshot == nil
-	if ownsSnapshot {
-		tx, err = store.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-		if err != nil {
-			return nil, fmt.Errorf("begin GPU health snapshot: %w", err)
-		}
-		defer rollbackGPUHealthSnapshot(tx)
-		if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout='2s'; SET LOCAL lock_timeout='250ms'`); err != nil {
-			return nil, err
-		}
-	} else {
-		tx = store.gpuSnapshot
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, fmt.Errorf("begin GPU health snapshot: %w", err)
 	}
+	defer rollbackGPUHealthSnapshot(tx)
+	if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout='2s'; SET LOCAL lock_timeout='250ms'`); err != nil {
+		return nil, err
+	}
+	facts, err := loadGPUHealthFacts(ctx, tx, clusterID, at)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return projectGPUHealthSummaries(domain.ClusterID(clusterID), facts, at, freshFor, nil)
+}
+
+type gpuHealthFacts struct {
+	devices map[string]*gpuHealthDevice
+	runs    []gpuHealthRun
+}
+
+func loadGPUHealthFacts(ctx context.Context, queryer gpuReadQueryer, clusterID string, at time.Time) (gpuHealthFacts, error) {
 	devices := map[string]*gpuHealthDevice{}
 	device := func(source domain.SourceID, identity domain.GPUObservationIdentity) *gpuHealthDevice {
 		key := string(source) + "\x00" + identity.EntityKey
@@ -76,7 +80,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		return devices[key]
 	}
 	// Choose governing expected inventory independently for every enrolled source.
-	rows, err := tx.Query(ctx, `WITH revisions AS (
+	rows, err := queryer.Query(ctx, `WITH revisions AS (
  SELECT DISTINCT ON (r.source_id) r.source_id,r.revision_id FROM goodput_inventory_revisions r
  JOIN sources s ON s.source_id=r.source_id AND s.cluster_id=r.cluster_id
  WHERE r.cluster_id=$1 AND s.kind='prometheus' AND r.inventory_class='EXPECTED'
@@ -86,7 +90,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
  JOIN goodput_inventory_revision_entities e ON e.revision_id=r.revision_id AND e.cluster_id=$1
  WHERE e.entity_kind='GPU' ORDER BY r.source_id,e.stable_node_id,e.physical_gpu_uuid LIMIT 4097`, clusterID, at)
 	if err != nil {
-		return nil, fmt.Errorf("read expected GPU health inventory: %w", err)
+		return gpuHealthFacts{}, fmt.Errorf("read expected GPU health inventory: %w", err)
 	}
 	count := 0
 	for rows.Next() {
@@ -95,34 +99,34 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		var gpu domain.PhysicalGPUUUID
 		if err = rows.Scan(&source, &node, &gpu); err != nil {
 			rows.Close()
-			return nil, err
+			return gpuHealthFacts{}, err
 		}
 		count++
 		entity, e := domain.CreateEntityIdentity(domain.EntityIdentity{ClusterID: domain.ClusterID(clusterID), Kind: domain.EntityGPU, NodeID: node, PhysicalGPUUUID: gpu})
 		if e != nil {
 			rows.Close()
-			return nil, e
+			return gpuHealthFacts{}, e
 		}
 		identity, ok := domain.ResolveGPUObservationIdentity(domain.ClusterID(clusterID), source, domain.Observation{ClusterID: domain.ClusterID(clusterID), SourceID: source, EntityKey: entity.Key()})
 		if !ok {
 			rows.Close()
-			return nil, fmt.Errorf("expected GPU has unsupported identity")
+			return gpuHealthFacts{}, fmt.Errorf("expected GPU has unsupported identity")
 		}
 		device(source, identity).expected = true
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return gpuHealthFacts{}, err
 	}
 	if count > 4096 {
-		return nil, fmt.Errorf("GPU health expected inventory exceeds snapshot bound")
+		return gpuHealthFacts{}, fmt.Errorf("GPU health expected inventory exceeds snapshot bound")
 	}
 	// Partition latest runs by exact durable scope. A node-only attempt must not
 	// supersede another node's collection. Typed finite scopes remain finite.
 	// Future-dated attempts are retained as UNKNOWN; they cannot uncover an
 	// older apparent success while the private field page reports clock skew.
-	rows, err = tx.Query(ctx, `WITH scoped AS (
+	rows, err = queryer.Query(ctx, `WITH scoped AS (
  SELECT r.run_id,r.source_id,r.query_kind,r.completed_at,r.status,r.coverage_complete,r.metric_fields,w.typed_plan IS NOT NULL AS finite,
  CASE WHEN w.typed_plan IS NOT NULL AND w.typed_plan->'scope'->'nodes' IS NOT NULL
  THEN w.typed_plan->'scope'->'nodes'
@@ -136,7 +140,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
  SELECT run_id,source_id,query_kind,completed_at,status,coverage_complete,metric_fields,nodes,finite
  FROM ranked WHERE rank=1 ORDER BY source_id,query_kind,nodes LIMIT 4097`, clusterID)
 	if err != nil {
-		return nil, fmt.Errorf("read scoped GPU health attempts: %w", err)
+		return gpuHealthFacts{}, fmt.Errorf("read scoped GPU health attempts: %w", err)
 	}
 	runs := []gpuHealthRun{}
 	count = 0
@@ -146,7 +150,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		var fields, nodes []byte
 		if err = rows.Scan(&run.id, &run.source, &query, &run.completed, &run.status, &run.complete, &fields, &nodes, &run.finite); err != nil {
 			rows.Close()
-			return nil, err
+			return gpuHealthFacts{}, err
 		}
 		count++
 		run.query = gpuHealthQuery(query)
@@ -155,12 +159,12 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		}
 		if err = json.Unmarshal(nodes, &run.nodes); err != nil {
 			rows.Close()
-			return nil, err
+			return gpuHealthFacts{}, err
 		}
 		if len(fields) > 0 {
 			if err = json.Unmarshal(fields, &run.fields); err != nil {
 				rows.Close()
-				return nil, err
+				return gpuHealthFacts{}, err
 			}
 		}
 		runs = append(runs, run)
@@ -168,12 +172,12 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return gpuHealthFacts{}, err
 	}
 	if count > 4096 {
-		return nil, fmt.Errorf("GPU health operation scopes exceed snapshot bound")
+		return gpuHealthFacts{}, fmt.Errorf("GPU health operation scopes exceed snapshot bound")
 	}
-	rows, err = tx.Query(ctx, `SELECT o.observation_id,o.run_id,o.cluster_id,o.source_id,o.schema_version,
+	rows, err = queryer.Query(ctx, `SELECT o.observation_id,o.run_id,o.cluster_id,o.source_id,o.schema_version,
  o.kind,o.entity_key,o.metric,o.labels,o.value,o.unit,o.observed_at,o.collected_at,o.source_reference,o.metric_semantics,p.last_success_at,r.query_kind
  FROM current_projections p JOIN observations o ON o.observation_id=p.observation_id
  AND o.cluster_id=p.cluster_id AND o.source_id=p.source_id AND o.entity_key=p.entity_key AND o.metric=p.metric
@@ -182,7 +186,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
  WHERE p.cluster_id=$1 AND s.kind='prometheus' AND o.observed_at<=$2 AND o.collected_at<=$2 AND r.completed_at<=$2 AND r.range_start IS NULL
  ORDER BY p.source_id,p.entity_key,p.metric LIMIT 20001`, clusterID, at)
 	if err != nil {
-		return nil, fmt.Errorf("read GPU health observations: %w", err)
+		return gpuHealthFacts{}, fmt.Errorf("read GPU health observations: %w", err)
 	}
 	count = 0
 	for rows.Next() {
@@ -192,7 +196,7 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		o := &sample.observation
 		if err = rows.Scan(&o.ID, &sample.runID, &o.ClusterID, &o.SourceID, &o.SchemaVersion, &o.Kind, &o.EntityKey, &o.Metric, &labels, &o.Value, &o.Unit, &o.ObservedAt, &o.CollectedAt, &o.SourceReference, &semantics, &sample.lastSuccess, &query); err != nil {
 			rows.Close()
-			return nil, err
+			return gpuHealthFacts{}, err
 		}
 		count++
 		sample.query = gpuHealthQuery(query)
@@ -204,12 +208,12 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 		}
 		if err = json.Unmarshal(labels, &o.Labels); err != nil {
 			rows.Close()
-			return nil, err
+			return gpuHealthFacts{}, err
 		}
 		if len(semantics) > 0 && string(semantics) != "null" {
 			if err = json.Unmarshal(semantics, &o.Semantics); err != nil {
 				rows.Close()
-				return nil, err
+				return gpuHealthFacts{}, err
 			}
 		}
 		identity, ok := domain.ResolveGPUObservationIdentity(domain.ClusterID(clusterID), o.SourceID, *o)
@@ -221,20 +225,20 @@ func (store *PostgresStore) loadGPUHealthSummaries(ctx context.Context, clusterI
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return gpuHealthFacts{}, err
 	}
 	if count > 20000 {
-		return nil, fmt.Errorf("GPU health observations exceed snapshot bound")
+		return gpuHealthFacts{}, fmt.Errorf("GPU health observations exceed snapshot bound")
 	}
-	if ownsSnapshot {
-		if err = tx.Commit(ctx); err != nil {
-			return nil, err
-		}
-	}
-	summaries := make([]application.GPUSummaryProjection, 0, len(devices))
-	for _, d := range devices {
+	return gpuHealthFacts{devices: devices, runs: runs}, nil
+}
+
+func projectGPUHealthSummaries(clusterID domain.ClusterID, facts gpuHealthFacts, at time.Time, freshFor time.Duration,
+	support map[string][]domain.DCGMFieldEvidence) ([]application.GPUSummaryProjection, error) {
+	summaries := make([]application.GPUSummaryProjection, 0, len(facts.devices))
+	for _, d := range facts.devices {
 		var fields []domain.DCGMFieldEvidence
-		summary, e := projectGPUHealthDeviceWithSupport(domain.ClusterID(clusterID), d, runs, at, freshFor, &fields)
+		summary, e := projectGPUHealthDeviceWithSupport(clusterID, d, facts.runs, at, freshFor, &fields)
 		if support != nil {
 			support[string(d.source)+"\x00"+d.identity.EntityKey] = fields
 		}
@@ -468,14 +472,16 @@ func (store *PostgresStore) LoadGPUMetricsWithHealth(ctx context.Context, cluste
 	if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout='2s'; SET LOCAL lock_timeout='250ms'`); err != nil {
 		return GPUMetricsSnapshot{}, err
 	}
-	reader := *store
-	reader.gpuSnapshot = tx
-	snapshot, err := reader.LoadGPUMetrics(ctx, clusterID)
+	snapshot, err := (gpuMetricsReader{queryer: tx}).load(ctx, clusterID)
+	if err != nil {
+		return GPUMetricsSnapshot{}, err
+	}
+	facts, err := loadGPUHealthFacts(ctx, tx, clusterID, at)
 	if err != nil {
 		return GPUMetricsSnapshot{}, err
 	}
 	support := map[string][]domain.DCGMFieldEvidence{}
-	summaries, err := reader.loadGPUHealthSummaries(ctx, clusterID, at, freshFor, support)
+	summaries, err := projectGPUHealthSummaries(domain.ClusterID(clusterID), facts, at, freshFor, support)
 	if err != nil {
 		return GPUMetricsSnapshot{}, err
 	}

@@ -64,32 +64,41 @@ func (s *CollectionStore) RecordResult(ctx context.Context, result domain.Collec
 }
 
 func recordResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult) (bool, error) {
-	return persistCollectionResultTx(ctx, tx, result, true)
+	jobID, err := collectionResultJobID(ctx, tx, result.Task)
+	if err != nil {
+		return false, err
+	}
+	result, err = normalizeDCGMResult(ctx, tx, result)
+	if err != nil {
+		return false, err
+	}
+	result, err = applyAuthoritativeCoverage(ctx, tx, result)
+	if err != nil {
+		return false, err
+	}
+	return persistCollectionResultTx(ctx, tx, result, jobID, updateLegacyCollectionSourceStatus)
 }
 
-func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, legacyCoverage bool) (bool, error) {
+func collectionResultJobID(ctx context.Context, tx pgx.Tx, task domain.CollectionTask) (*string, error) {
 	var jobID *string
 	var bindingValid bool
 	err := tx.QueryRow(ctx, `SELECT job_id,
 		cluster_id=$2 AND source_id=$3 AND query_kind=$4 AND node_filter=$5 AND scheduled_for=$6
-		FROM collection_run_jobs WHERE run_id=$1`, result.Task.RunID, result.Task.ClusterID,
-		result.Task.SourceID, result.Task.Query, result.Task.Node, result.Task.ScheduledFor.UTC()).Scan(&jobID, &bindingValid)
+		FROM collection_run_jobs WHERE run_id=$1`, task.RunID, task.ClusterID,
+		task.SourceID, task.Query, task.Node, task.ScheduledFor.UTC()).Scan(&jobID, &bindingValid)
 	if err != nil && err != pgx.ErrNoRows {
-		return false, fmt.Errorf("read collection job provenance: %w", err)
+		return nil, fmt.Errorf("read collection job provenance: %w", err)
 	}
 	if err == nil && !bindingValid {
-		return false, fmt.Errorf("collection result conflicts with bound job provenance")
+		return nil, fmt.Errorf("collection result conflicts with bound job provenance")
 	}
-	if legacyCoverage {
-		result, err = normalizeDCGMResult(ctx, tx, result)
-		if err != nil {
-			return false, err
-		}
-		result, err = applyAuthoritativeCoverage(ctx, tx, result)
-		if err != nil {
-			return false, err
-		}
-	}
+	return jobID, nil
+}
+
+// persistCollectionResultTx writes the prepared result and its events in the
+// caller's transaction. The source event reflects the chosen source update.
+func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, jobID *string,
+	updateSource func(context.Context, pgx.Tx, domain.CollectionResult, bool) error) (bool, error) {
 	metricFields := result.Coverage.MetricFields
 	if metricFields == nil {
 		metricFields = []domain.DCGMFieldEvidence{}
@@ -180,31 +189,8 @@ func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.Col
 		}
 	}
 
-	available := sourceResponded(result)
-	if !legacyCoverage {
-		if err := advancePrometheusSourceStatus(ctx, tx, result, available); err != nil {
-			return false, err
-		}
-	} else if available && result.Status != domain.ResultFailed {
-		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='AVAILABLE', last_attempt_at=$2, last_success_at=$2, last_failure_code=NULL WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC()); err != nil {
-			return false, fmt.Errorf("update available source %s: %w", result.Task.SourceID, err)
-		}
-	} else if available {
-		var code domain.FailureCode = domain.FailureInternal
-		if len(result.Failures) > 0 {
-			code = result.Failures[0].Code
-		}
-		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='AVAILABLE', last_attempt_at=$2, last_failure_code=$3 WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC(), code); err != nil {
-			return false, fmt.Errorf("update responding source %s: %w", result.Task.SourceID, err)
-		}
-	} else {
-		var code domain.FailureCode = domain.FailureInternal
-		if len(result.Failures) > 0 {
-			code = result.Failures[0].Code
-		}
-		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='UNAVAILABLE', last_attempt_at=$2, last_failure_code=$3 WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC(), code); err != nil {
-			return false, fmt.Errorf("update unavailable source %s: %w", result.Task.SourceID, err)
-		}
+	if err := updateSource(ctx, tx, result, sourceResponded(result)); err != nil {
+		return false, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO collection_events (run_id, event_type) VALUES ($1, 'collection.completed')`, result.Task.RunID); err != nil {
 		return false, fmt.Errorf("insert collection event for run %s: %w", result.Task.RunID, err)
@@ -232,6 +218,31 @@ func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.Col
 		return false, fmt.Errorf("append durable source event for source %s: %w", result.Task.SourceID, err)
 	}
 	return true, nil
+}
+
+func updateLegacyCollectionSourceStatus(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, available bool) error {
+	if available && result.Status != domain.ResultFailed {
+		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='AVAILABLE', last_attempt_at=$2, last_success_at=$2, last_failure_code=NULL WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC()); err != nil {
+			return fmt.Errorf("update available source %s: %w", result.Task.SourceID, err)
+		}
+	} else if available {
+		var code domain.FailureCode = domain.FailureInternal
+		if len(result.Failures) > 0 {
+			code = result.Failures[0].Code
+		}
+		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='AVAILABLE', last_attempt_at=$2, last_failure_code=$3 WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC(), code); err != nil {
+			return fmt.Errorf("update responding source %s: %w", result.Task.SourceID, err)
+		}
+	} else {
+		var code domain.FailureCode = domain.FailureInternal
+		if len(result.Failures) > 0 {
+			code = result.Failures[0].Code
+		}
+		if _, err := tx.Exec(ctx, `UPDATE sources SET availability='UNAVAILABLE', last_attempt_at=$2, last_failure_code=$3 WHERE source_id=$1`, result.Task.SourceID, result.CompletedAt.UTC(), code); err != nil {
+			return fmt.Errorf("update unavailable source %s: %w", result.Task.SourceID, err)
+		}
+	}
+	return nil
 }
 
 func applyAuthoritativeCoverage(ctx context.Context, tx pgx.Tx, result domain.CollectionResult) (domain.CollectionResult, error) {
