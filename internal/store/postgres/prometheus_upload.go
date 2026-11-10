@@ -52,7 +52,11 @@ func (s *CollectionStore) RecordPrometheusReport(ctx context.Context, report dom
 	if err := applyPrometheusReportCoverage(ctx, tx, &r); err != nil {
 		return false, err
 	}
-	inserted, err := persistCollectionResultTx(ctx, tx, r, false)
+	jobID, err := collectionResultJobID(ctx, tx, r.Task)
+	if err != nil {
+		return false, err
+	}
+	inserted, err := persistCollectionResultTx(ctx, tx, r, jobID, advancePrometheusSourceStatus)
 	if err != nil || !inserted {
 		return false, err
 	}
