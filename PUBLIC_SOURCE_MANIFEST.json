@@ -1251,20 +1251,26 @@
     {
       "executable": false,
       "path": "internal/adapters/prometheus/client.go",
-      "sha256": "ded7bd768b4ae660be18de5f3c80f3453e22083f795867dc67c85e96228dc7af",
-      "size": 18130
+      "sha256": "c51ea022d1dbdb5678f9dce89f215e5956fbba02d23984fd485defa7f074b8e3",
+      "size": 18170
     },
     {
       "executable": false,
       "path": "internal/adapters/prometheus/client_test.go",
-      "sha256": "dc157b6b511307ed59a81b3d024f002295d68a6bd9e340c91d6955be1c32ae8c",
-      "size": 13025
+      "sha256": "85dd37804d2771124304fc21ebe07279fcb2bdda81011e3ac926dbac8210bbe1",
+      "size": 13783
     },
     {
       "executable": false,
       "path": "internal/adapters/prometheus/testdata/dcgm_freshness.yml",
       "sha256": "262d4492e80aeadb56ca2a787cead3b3a6448283427bd604e6d174335a94d929",
       "size": 49914
+    },
+    {
+      "executable": false,
+      "path": "internal/adapters/prometheus/testdata/scheduled_upload_freshness.yml",
+      "sha256": "32ea6b151d9a45e01883aaefd0486c6b64006854196529946b70257bd4f4c706",
+      "size": 7606
     },
     {
       "executable": false,

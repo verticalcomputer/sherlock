@@ -18,21 +18,7 @@ import (
 // This fixture is independently executed by promtool (see GP06A docs). Keep
 // its exact expressions connected to production rather than a copied query.
 func TestDCGMRealPromQLFixtureMatchesRenderedQueries(t *testing.T) {
-	encoded, err := os.ReadFile("testdata/dcgm_freshness.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fixture struct {
-		Tests []struct {
-			Name        string `json:"name"`
-			Expressions []struct {
-				Expr string `json:"expr"`
-			} `json:"promql_expr_test"`
-		} `json:"tests"`
-	}
-	if err = json.Unmarshal(encoded, &fixture); err != nil {
-		t.Fatal(err)
-	}
+	fixture := readPromQLFixture(t, "testdata/dcgm_freshness.yml")
 	if len(fixture.Tests) != 8 {
 		t.Fatal("missing operation/node fixture coverage")
 	}
@@ -51,6 +37,45 @@ func TestDCGMRealPromQLFixtureMatchesRenderedQueries(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestScheduledUploadPromQLFixtureMatchesRenderedQueries(t *testing.T) {
+	fixture := readPromQLFixture(t, "testdata/scheduled_upload_freshness.yml")
+	queries := domain.PrometheusUploadQueries()
+	if len(fixture.Tests) != 1 || len(fixture.Tests[0].Expressions) != len(queries) {
+		t.Fatal("missing scheduled upload query coverage")
+	}
+	for i, kind := range queries {
+		got, err := renderQueryProfile(kind, "", true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != fixture.Tests[0].Expressions[i].Expr {
+			t.Fatalf("%s: production query differs from promtool fixture", kind)
+		}
+	}
+}
+
+type promQLFixture struct {
+	Tests []struct {
+		Name        string `json:"name"`
+		Expressions []struct {
+			Expr string `json:"expr"`
+		} `json:"promql_expr_test"`
+	} `json:"tests"`
+}
+
+func readPromQLFixture(t *testing.T, path string) promQLFixture {
+	t.Helper()
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture promQLFixture
+	if err := json.Unmarshal(encoded, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	return fixture
 }
 
 func TestTaskBoundsPreserveLocalCeilingsAndClientImmutability(t *testing.T) {

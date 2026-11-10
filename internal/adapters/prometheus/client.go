@@ -191,13 +191,15 @@ func renderQueryProfile(kind domain.QueryKind, node string, instantSupport, uplo
 		}
 	}
 	selectors := make([]string, 0, len(template.metrics))
+	filterFreshness := instantSupport && (upload || len(domain.DCGMFields(kind)) > 0)
 	leaf := func(selector string) string {
-		if !instantSupport || len(domain.DCGMFields(kind)) == 0 {
+		if !filterFreshness {
 			return selector
 		}
 		// timestamp() must see a leaf vector selector, never an evaluated
 		// expression/union whose timestamps have become evaluation time.
-		return "(" + selector + " and (timestamp(" + selector + ") >= time() - 120) and (timestamp(" + selector + ") <= time()))"
+		return fmt.Sprintf("(%[1]s and (timestamp(%[1]s) >= time() - %[2]d) and (timestamp(%[1]s) <= time()))",
+			selector, domain.DCGMFreshFor/time.Second)
 	}
 	for _, metric := range template.metrics {
 		if node == "" {
@@ -209,7 +211,7 @@ func renderQueryProfile(kind domain.QueryKind, node string, instantSupport, uplo
 		}
 	}
 	join := " or "
-	if instantSupport && len(domain.DCGMFields(kind)) > 0 {
+	if filterFreshness {
 		join = " or on(__name__) "
 	}
 	expression := strings.Join(selectors, join)
