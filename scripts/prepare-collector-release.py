@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the pinned unsigned collector package for exact GitHub review."""
+"""Prepare the pinned unsigned collector and intake package for exact GitHub review."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -24,7 +24,8 @@ collector = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(collector)
 release = collector.release
 require = release.require
-REVISION, TREE, NAME = collector.SOURCE, collector.TREE, collector.BINARY
+REVISION, TREE = collector.SOURCE, collector.TREE
+COMMANDS = {collector.BINARY: "./cmd/sherlock-collector", collector.INTAKE: "./cmd/sherlock-control"}
 GO_VERSION = "go1.26.9"
 REPOSITORY = release.REPOSITORY
 MODULE = "github.com/" + REPOSITORY
@@ -106,16 +107,23 @@ def build(repo, output, proxy, workflow_commit, tag):
         seed = work / "seed-modules"
         discover = dict(env, GOMODCACHE=str(seed), GOCACHE=str(work / "discovery-cache"))
         run([str(go), "mod", "download"], source, discover)
-        packages = helper.objects(run([str(go), "list", "-mod=readonly", "-deps", "-json", "./cmd/sherlock-collector"], source, discover))
-        local_files, _, _ = helper.closure(packages, source, goroot)
-        require(local_files and not any(name.startswith(("deploy/", ".github/")) for name in local_files), "collector_unsafe_compilation_closure")
-        sums = {tuple(row.split()[:2]): row.split()[2] for row in (source / "go.sum").read_text().splitlines()}
+        local_files = set()
         modules = {}
-        for package in packages:
-            mod = package.get("Module")
-            if mod and not mod.get("Main"):
-                require(not mod.get("Replace"), "collector_module_replacement")
-                modules[mod["Path"]] = mod["Version"]
+        command_modules = {}
+        for name, command in COMMANDS.items():
+            packages = helper.objects(run([str(go), "list", "-mod=readonly", "-deps", "-json", command], source, discover))
+            files, _, _ = helper.closure(packages, source, goroot)
+            require(files and not any(path.startswith(("deploy/", ".github/")) for path in files),
+                    "collector_unsafe_compilation_closure")
+            local_files.update(files)
+            command_modules[name] = set()
+            for package in packages:
+                mod = package.get("Module")
+                if mod and not mod.get("Main"):
+                    require(not mod.get("Replace"), "collector_module_replacement")
+                    modules[mod["Path"]] = mod["Version"]
+                    command_modules[name].add((mod["Path"], mod["Version"]))
+        sums = {tuple(row.split()[:2]): row.split()[2] for row in (source / "go.sum").read_text().splitlines()}
 
         dependencies = []
         licenses = {"licenses/go/LICENSE": ((goroot / "LICENSE").read_bytes(), 0o644)}
@@ -158,44 +166,55 @@ def build(repo, output, proxy, workflow_commit, tag):
             shutil.copytree(seed / "cache", fresh_modules / "cache")
             offline = dict(env, GOPROXY="off", GOMODCACHE=str(fresh_modules), GOCACHE=str(fresh / "cache"))
             require(run([str(go), "mod", "verify"], fresh_source, offline).strip() == b"all modules verified", "collector_offline_modules_unverified")
-            binary = fresh / NAME
-            run([str(go), "build", *flags, "-o", str(binary), "./cmd/sherlock-collector"], fresh_source, offline)
-            info = json.loads(run([str(go), "version", "-m", "-json", str(binary)], fresh_source, offline))
-            settings = {item["Key"]: item["Value"] for item in info["Settings"]}
-            require(info["Path"] == MODULE + "/cmd/sherlock-collector" and info["GoVersion"] == GO_VERSION, "collector_build_identity_mismatch")
-            require(all(settings.get(k) == v for k, v in (("GOOS", "linux"), ("GOARCH", "amd64"), ("GOAMD64", "v1"), ("CGO_ENABLED", "0"))), "collector_build_target_mismatch")
-            require({(m["Path"], m["Version"], m["Sum"]) for m in info["Deps"]} == {(m["path"], m["version"], m["h1"]) for m in dependencies}, "collector_linked_modules_mismatch")
-            data = binary.read_bytes()
-            require(data[:6] == b"\x7fELF\x02\x01" and int.from_bytes(data[18:20], "little") == 62, "collector_invalid_elf")
-            return data
+            binaries = {}
+            for name, command in COMMANDS.items():
+                binary = fresh / name
+                run([str(go), "build", *flags, "-o", str(binary), command], fresh_source, offline)
+                info = json.loads(run([str(go), "version", "-m", "-json", str(binary)], fresh_source, offline))
+                settings = {item["Key"]: item["Value"] for item in info["Settings"]}
+                require(info["Path"] == MODULE + command[1:] and info["GoVersion"] == GO_VERSION,
+                        "collector_build_identity_mismatch")
+                require(all(settings.get(k) == v for k, v in (("GOOS", "linux"), ("GOARCH", "amd64"), ("GOAMD64", "v1"), ("CGO_ENABLED", "0"))),
+                        "collector_build_target_mismatch")
+                require({(m["Path"], m["Version"], m["Sum"]) for m in info["Deps"]}
+                        == {(path, version, sums[path, version]) for path, version in command_modules[name]},
+                        "collector_linked_modules_mismatch")
+                data = binary.read_bytes()
+                require(data[:6] == b"\x7fELF\x02\x01" and int.from_bytes(data[18:20], "little") == 62,
+                        "collector_invalid_elf")
+                binaries[name] = data
+            return binaries
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             builds = list(executor.map(build, (1, 2)))
-        binary = builds[0]
-        require(binary == builds[1], "collector_nonreproducible")
-        require(digest(binary) == collector.BINARY_SHA, "collector_binary_differs_from_reviewed_candidate")
+        require(builds[0] == builds[1], "collector_nonreproducible")
+        require({name: digest(data) for name, data in builds[0].items()}
+                == {collector.BINARY: collector.BINARY_SHA, collector.INTAKE: collector.INTAKE_SHA},
+                "collector_binary_differs_from_reviewed_candidate")
         require(all(digest(path.read_bytes()) == tool_hashes[name] for name, path in tool_paths.items()), "collector_toolchain_drift")
         output = helper.new_private_directory(output)
         write_json(output / "source-files.json", {"source_commit": REVISION, "source_tree": TREE, "files": source_manifest})
-        binary_path = output / NAME
-        binary_path.write_bytes(binary)
+        for name, data in builds[0].items():
+            (output / name).write_bytes(data)
         if (toolenv["GOHOSTOS"], toolenv["GOHOSTARCH"]) == ("linux", "amd64"):
+            binary_path = output / collector.BINARY
             binary_path.chmod(0o700)
             version = json.loads(run([str(binary_path), "--version"], output, env))
             require(version == {"source_revision": REVISION, "source_tree": TREE, "go_version": GO_VERSION},
                     "collector_native_version_mismatch")
         archive(output / "source.tar.gz", source_members)
-        write_sbom(output, dependencies, digest(binary))
+        write_sbom(output, dependencies, builds[0], command_modules)
         write_json(output / "provenance.unsigned.json", {
             "schema_version": 1, "repository": REPOSITORY, "source_commit": REVISION, "source_tree": TREE,
-            "source_ref_verified": "refs/heads/main", "github_ci_run": "42393815612",
+            "source_ref_verified": "refs/heads/main", "github_ci_run": "42766032870",
             "package_state": "UNSIGNED_COLLECTOR_REVIEW_ONLY", "signed": False, "release_approved": False,
             "release_tag": tag, "workflow_commit": workflow_commit, "target": "linux/amd64",
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "build_flags": flags, "go_version": GO_VERSION,
             "build_environment": {k: env[k] for k in ("GOENV", "GOTOOLCHAIN", "GOWORK", "GOOS", "GOARCH", "GOAMD64", "CGO_ENABLED")},
             "module_verification": "Pinned go.sum hashes, Go module zip/go.mod h1 checks, and go mod verify in both caches; GOPROXY=off for both builds.",
-            "two_independent_clean_builds": [digest(row) for row in builds],
+            "two_independent_clean_builds": [digest(row[collector.BINARY]) for row in builds],
+            "intake_independent_clean_builds": [digest(row[collector.INTAKE]) for row in builds],
             "build_tool_sha256": tool_hashes,
             "byte_identical": True, "public_source_manifest_sha256": digest(public_manifest_data),
             "source_files_sha256": digest((output / "source-files.json").read_bytes()),
@@ -203,11 +222,11 @@ def build(repo, output, proxy, workflow_commit, tag):
 
         (output / "SHA256SUMS").write_text("".join(
             f"{collector.digest(output, name)}  {name}\n" for name in sorted(collector.FILES)))
-        print(f"Prepared unsigned collector candidate {digest(binary)}.")
+        print("Prepared unsigned collector and intake candidates.")
 
 
-def write_sbom(output, modules, binary_sha):
-    binary_id = "SPDXRef-Collector"
+def write_sbom(output, modules, binaries, command_modules):
+    binary_ids = {collector.BINARY: "SPDXRef-Collector", collector.INTAKE: "SPDXRef-Intake"}
     def package(identifier, name, version, sha=None):
         item = {"SPDXID": identifier, "name": name, "versionInfo": version,
                 "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
@@ -217,10 +236,13 @@ def write_sbom(output, modules, binary_sha):
             item["checksums"] = [{"algorithm": "SHA256", "checksumValue": sha}]
         return item
 
-    packages = [package(binary_id, NAME, REVISION, binary_sha),
-                package("SPDXRef-GoStdlib", "Go standard library", GO_VERSION)]
+    packages = [package(binary_ids[name], name, REVISION, digest(data)) for name, data in binaries.items()]
+    packages.append(package("SPDXRef-GoStdlib", "Go standard library", GO_VERSION))
+    module_ids = {}
     for index, module in enumerate(modules):
-        item = package(f"SPDXRef-GoModule-{index}", module["path"], module["version"], module["archive_sha256"])
+        module_id = f"SPDXRef-GoModule-{index}"
+        module_ids[module["path"], module["version"]] = module_id
+        item = package(module_id, module["path"], module["version"], module["archive_sha256"])
         item["comment"] = "SHA-256 covers the module ZIP. Go module hash " + module["h1"] + "."
         purl = "pkg:golang/" + quote(module["path"], safe="/") + "@" + quote(module["version"], safe="")
         item["externalRefs"] = [{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl",
@@ -228,14 +250,18 @@ def write_sbom(output, modules, binary_sha):
         packages.append(item)
     write_json(output / "sbom.spdx.json", {
         "spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT",
-        "name": "Sherlock Linux AMD64 collector candidate",
+        "name": "Sherlock Linux AMD64 collector and intake candidates",
         "documentNamespace": "urn:uuid:" + str(uuid.uuid4()),
         "creationInfo": {"created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                          "creators": ["Tool: Sherlock collector release preparation"]},
         "packages": packages, "relationships": [
-            {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": binary_id},
-            *({"spdxElementId": binary_id, "relationshipType": "DEPENDS_ON", "relatedSpdxElement": item["SPDXID"]}
-              for item in packages[1:])],
+            {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": binary_id}
+            for binary_id in binary_ids.values()
+        ] + [
+            {"spdxElementId": binary_id, "relationshipType": "DEPENDS_ON", "relatedSpdxElement": dependency}
+            for name, binary_id in binary_ids.items()
+            for dependency in ["SPDXRef-GoStdlib", *(module_ids[key] for key in sorted(command_modules[name]))]
+        ],
     })
 
 

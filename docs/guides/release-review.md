@@ -196,28 +196,29 @@ remain separate from reproducibility. Use [current status](../../next.md) for th
 remaining implementation and release gaps. Never upload the whole private builder
 directory or relabel its receipt as release approval.
 
-## Collector-only Linux AMD64 candidate
+## Collector and intake Linux AMD64 candidate
 
-The [collector preparation workflow](../../.github/workflows/prepare-collector-release.yml)
-builds the reviewed public source commit `318bfd95f113e254dae3772f3be590171056635f`
-twice with Go 1.26.9 and separate offline build caches. It rejects either build
-unless both match the reviewed collector SHA-256
-`9cf925a5613bb44460624bf3d07dcf53be44c3ce9fed7cf2ed46d23a39363f7f`.
-It retains the binary, source closure and notices, source manifest, SPDX
-inventory, unsigned provenance and checksums as
-`sherlock-reviewed-collector-linux-amd64`. The run summary emits an exact
-approval record with `approved: false`.
+The [preparation workflow](../../.github/workflows/prepare-collector-release.yml)
+builds the collector and its matching control binary from public source commit
+`d7d684ec2e5395ffa1adda8526af4edf31850ffb`. It uses Go 1.26.9 and two
+independent offline build caches. Both builds must match the pins in the
+[package verifier](../../scripts/verify-collector-release.py).
+
+The unsigned artifact, `sherlock-reviewed-collector-intake-linux-amd64`,
+contains both Linux AMD64 binaries, the shared source closure and notices,
+source manifest, SPDX inventory, unsigned provenance, and checksums.
+The workflow summary records the exact artifact with `approved: false`.
 
 The [collector signer](../../.github/workflows/sign-collector-release.yml)
 runs by manual dispatch from public `main`. This lets the release tag point
-to the source commit, which predates the collector signing workflow. The
-review record separately binds that source commit and the commit that runs both
+to the source commit before the workflow update. The review record separately binds that source commit and the commit that runs both
 collector workflows. Prepare the artifact again if the workflow commit advances
 before signing. The proposed version tag in preparation does not create a tag.
 
 Before authorizing a signing run, review the exact preparation artifact and its
-four digests. Establish the `collector-release-signing` environment with
-required reviewers, disabled administrator bypass and a single custom
+five digests, including both binary hashes. Establish the
+`collector-release-signing` environment with required reviewers, disabled
+administrator bypass and a single custom
 deployment branch rule for `main`. The signer checks these controls before
 entering the environment and again before signing. After separate tag
 authorization, the tag must resolve to the pinned source commit. Use
@@ -225,9 +226,9 @@ authorization, the tag must resolve to the pinned source commit. Use
 record. Keep the disabled copy and obtain the required GitHub environment review.
 
 The signer verifies the preparation workflow, artifact ID and run, source tag,
-and every file before signing the checksums and provenance. It retains the two
-verified signature bundles with the package as an Actions artifact. GitHub
-Release publication is separate.
+and every file, including both pinned binaries, before signing the checksums
+and provenance. It retains the two verified signature bundles with the package
+as an Actions artifact. GitHub Release publication is separate.
 
 For later client verification, obtain the disabled review record from the
 trusted release reviewer. Verify the downloaded package with:
@@ -240,5 +241,6 @@ python3 scripts/verify-collector-release.py verify \
 
 The verifier pins the collector signing workflow on `main`, GitHub's OIDC
 issuer, and the exact approved workflow commit. The signed provenance then
-binds the separate source commit, release tag and collector bytes. The
-agent/gateway signing and verification contract remains independent.
+binds the separate source commit, release tag and both binaries. For the
+original collector-only prerelease, use the verifier from its reviewed workflow
+commit. The agent/gateway signing and verification contract remains independent.

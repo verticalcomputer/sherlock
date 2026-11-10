@@ -48,12 +48,15 @@ class CollectorReleaseTests(unittest.TestCase):
         for name in collector.FILES:
             (self.directory / name).write_bytes(f"synthetic {name}".encode())
         self.binary_sha = collector.digest(self.directory, collector.BINARY)
+        self.intake_sha = collector.digest(self.directory, collector.INTAKE)
+        self.provenance["intake_independent_clean_builds"] = [self.intake_sha, self.intake_sha]
         self.provenance["two_independent_clean_builds"] = [self.binary_sha, self.binary_sha]
         self.provenance["source_files_sha256"] = collector.digest(self.directory, "source-files.json")
         for module in (collector, prepare.collector):
-            pin = patch.object(module, "BINARY_SHA", self.binary_sha)
-            pin.start()
-            self.addCleanup(pin.stop)
+            for name, sha in (("BINARY_SHA", self.binary_sha), ("INTAKE_SHA", self.intake_sha)):
+                pin = patch.object(module, name, sha)
+                pin.start()
+                self.addCleanup(pin.stop)
         self.refresh()
 
     def refresh(self, provenance=None):
@@ -142,6 +145,40 @@ class CollectorReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "collector_payload_unapproved"):
             collector.payload(self.directory, self.policy)
 
+    def test_sbom_describes_both_binaries_with_their_own_dependencies(self):
+        binaries = {collector.BINARY: b"collector", collector.INTAKE: b"intake"}
+        module = {"path": "example.test/intake", "version": "v1.0.0", "archive_sha256": "0" * 64, "h1": "h1:fixture"}
+        prepare.write_sbom(self.root, [module], binaries, {
+            collector.BINARY: set(), collector.INTAKE: {(module["path"], module["version"])},
+        })
+        sbom = json.loads((self.root / "sbom.spdx.json").read_text())
+        relations = {(r["spdxElementId"], r["relationshipType"], r["relatedSpdxElement"])
+                     for r in sbom["relationships"]}
+        self.assertEqual(relations, {
+            ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Collector"),
+            ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Intake"),
+            ("SPDXRef-Collector", "DEPENDS_ON", "SPDXRef-GoStdlib"),
+            ("SPDXRef-Intake", "DEPENDS_ON", "SPDXRef-GoStdlib"),
+            ("SPDXRef-Intake", "DEPENDS_ON", "SPDXRef-GoModule-0"),
+        })
+        by_name = {entry["name"]: entry for entry in sbom["packages"]}
+        for name, data in binaries.items():
+            self.assertEqual(by_name[name]["checksums"][0]["checksumValue"], hashlib.sha256(data).hexdigest())
+
+    def test_intake_must_match_pinned_binary_and_approval(self):
+        with self.assertRaisesRegex(release.ReleaseError, "collector_approval_digest_mismatch"):
+            collector.validate_policy(dict(self.policy, intake_sha256="0" * 64), self.workflow, approved=True)
+        intake = self.directory / collector.INTAKE
+        intake.unlink()
+        with self.assertRaisesRegex(release.ReleaseError, "collector_unexpected_files"):
+            collector.payload(self.directory, self.policy)
+        intake.write_bytes(b"substituted intake")
+        with self.assertRaisesRegex(release.ReleaseError, "collector_payload_tampered"):
+            collector.payload(self.directory, self.policy)
+        self.refresh()
+        with self.assertRaisesRegex(release.ReleaseError, "collector_payload_unapproved"):
+            collector.payload(self.directory, self.policy)
+
     def test_extra_payloads_and_symlinks_rejected(self):
         extra = self.directory / "sherlock-gateway-linux-amd64"
         extra.touch()
@@ -157,7 +194,8 @@ class CollectorReleaseTests(unittest.TestCase):
     def test_provenance_rejects_rebound_source_tag_and_builds(self):
         for field, wrong in (("source_tree", "b" * 40), ("source_commit", self.workflow), ("release_tag", "v9.0.0"),
                              ("workflow_commit", collector.SOURCE), ("signed", True), ("release_approved", True),
-                             ("two_independent_clean_builds", [self.binary_sha]), ("target", "linux/arm64")):
+                             ("two_independent_clean_builds", [self.binary_sha]),
+                             ("intake_independent_clean_builds", [self.intake_sha]), ("target", "linux/arm64")):
             self.refresh(dict(self.provenance, **{field: wrong}))
             with self.subTest(field=field), self.assertRaisesRegex(release.ReleaseError, "collector_wrong_provenance"):
                 collector.payload(self.directory, self.policy)
@@ -222,6 +260,8 @@ class CollectorReleaseTests(unittest.TestCase):
             self.assertNotIn("contents: write", workflow)
             self.assertNotIn("gh release", workflow)
             self.assertNotIn("sherlock-gateway-linux-amd64", workflow)
+            self.assertIn(f"/{collector.BINARY}", workflow)
+            self.assertIn(f"/{collector.INTAKE}", workflow)
         self.assertNotIn("id-token: write", preparation)
         preflight, protected = signing.split("\n  sign:", 1)
         self.assertNotIn("id-token: write", preflight)
