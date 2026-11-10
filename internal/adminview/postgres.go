@@ -18,9 +18,6 @@ import (
 // It performs a fixed number of queries regardless of the requested page size.
 type PostgresStore struct {
 	pool *pgxpool.Pool
-	// gpuSnapshot is set only on a private copy for an atomic, bounded GPU
-	// field/condition read; the shared store and unrelated reads use the pool.
-	gpuSnapshot pgx.Tx
 }
 
 func NewPostgresStore(pool *pgxpool.Pool) (*PostgresStore, error) {
