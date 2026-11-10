@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/verticalcomputer/sherlock/internal/config"
 )
@@ -16,11 +18,32 @@ const maxHeaderBytes = 64 << 10
 // certificate that is supplied must chain to the collector CA; the transport
 // separately rejects certificate-less requests on all non-enrollment routes.
 func LoadTLSConfig(cfg config.Control) (*tls.Config, error) {
+	return loadTLSConfig(cfg, ReadProtectedPrivateKey)
+}
+
+// LoadPrometheusUploadTLSConfig supports the server.key projected into the
+// running service's systemd credential directory. Other paths use the
+// ordinary private key checks.
+func LoadPrometheusUploadTLSConfig(cfg config.Control) (*tls.Config, error) {
+	const systemdCredentials = "/run/credentials"
+	keyPath := cfg.ServerPrivateKey
+	if strings.HasPrefix(filepath.Clean(keyPath), systemdCredentials+"/") {
+		directory := os.Getenv("CREDENTIALS_DIRECTORY")
+		if filepath.Clean(directory) != directory || filepath.Dir(directory) != systemdCredentials ||
+			!strings.HasSuffix(filepath.Base(directory), ".service") || keyPath != filepath.Join(directory, "server.key") {
+			return nil, fmt.Errorf("upload server key does not match the systemd credential directory")
+		}
+		return loadTLSConfig(cfg, readUploadServerKey)
+	}
+	return LoadTLSConfig(cfg)
+}
+
+func loadTLSConfig(cfg config.Control, readKey func(string) ([]byte, error)) (*tls.Config, error) {
 	serverCertificatePEM, err := os.ReadFile(cfg.ServerCertificate)
 	if err != nil {
 		return nil, fmt.Errorf("read control server certificate: %w", err)
 	}
-	serverPrivateKeyPEM, err := ReadProtectedPrivateKey(cfg.ServerPrivateKey)
+	serverPrivateKeyPEM, err := readKey(cfg.ServerPrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("load control server private key: %w", err)
 	}

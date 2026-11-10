@@ -75,8 +75,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "0130740027f02220eba8bd49e102bc08731639a14e95bd1202dc6781eb90f254",
-      "size": 3463
+      "sha256": "88a6086fd0c532f1aa2f924feac4280bc298c42712d8903dcf42b49a586fbe2c",
+      "size": 5414
     },
     {
       "executable": false,
@@ -321,8 +321,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-collector/main.go",
-      "sha256": "26358e7e4ae399dbba7f2a98b7e931264717d7c9ba5af6a0fc4bf27e013556ba",
-      "size": 19640
+      "sha256": "6904c82e235668898e189985de2604463b0b4007a0c7c5e7090c61d3cf75e8be",
+      "size": 20056
     },
     {
       "executable": false,
@@ -344,6 +344,18 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-collector/prometheus_upload.go",
+      "sha256": "d66ba03744b18407712907b626b45e31a3cf790afd81b907e53af0d644bb6c44",
+      "size": 2445
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-collector/prometheus_upload_identity.go",
+      "sha256": "0457a7f5b4f9021ffe5ea27bb35625a3827b669e84782c95ea64813fd00b93c1",
+      "size": 2442
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-collector/service_failure_test.go",
       "sha256": "d13856b66cbf5ba2672c1396ab3dffd70a939848f6040f495acd680fefb4975e",
       "size": 598
@@ -357,8 +369,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/main.go",
-      "sha256": "b9f5fc267fd92da2b514ae8e04e869467721b7a8ad4346d82d59908308fd96c1",
-      "size": 9360
+      "sha256": "9aada08f47547a7d081670a468454a61988d9ee710927a14ec5a1a599e2c3d3d",
+      "size": 9826
     },
     {
       "executable": false,
@@ -383,6 +395,12 @@
       "path": "cmd/sherlock-control/node_identity_test.go",
       "sha256": "948f7ff707541436300c4b78fc2cc1e53b8ded2287eed47bcd0eb5c218789f22",
       "size": 2830
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-control/prometheus_upload.go",
+      "sha256": "bbd78399c63375c13d2edcd41d17f0790409307f976858db51dc2b2ecdc3e0a0",
+      "size": 2647
     },
     {
       "executable": false,
@@ -515,6 +533,12 @@
       "path": "cmd/sherlock-pilot-acceptance/main_test.go",
       "sha256": "ebc71e795f728d46ee8d089f5854cdb371f240629a9ee0581f5ec59f01d77006",
       "size": 2016
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-prometheus-identity/main.go",
+      "sha256": "b30c50035d10ed90e6a9fdad9b9e6a6096aafc52e77337705394aaed3cd04136",
+      "size": 9040
     },
     {
       "executable": false,
@@ -1227,20 +1251,26 @@
     {
       "executable": false,
       "path": "internal/adapters/prometheus/client.go",
-      "sha256": "83c522bab76163a208f4e5ab3abeba448df1aee2f6cf28fa4631ee1b1db7b46d",
-      "size": 16838
+      "sha256": "c51ea022d1dbdb5678f9dce89f215e5956fbba02d23984fd485defa7f074b8e3",
+      "size": 18170
     },
     {
       "executable": false,
       "path": "internal/adapters/prometheus/client_test.go",
-      "sha256": "dc157b6b511307ed59a81b3d024f002295d68a6bd9e340c91d6955be1c32ae8c",
-      "size": 13025
+      "sha256": "85dd37804d2771124304fc21ebe07279fcb2bdda81011e3ac926dbac8210bbe1",
+      "size": 13783
     },
     {
       "executable": false,
       "path": "internal/adapters/prometheus/testdata/dcgm_freshness.yml",
       "sha256": "262d4492e80aeadb56ca2a787cead3b3a6448283427bd604e6d174335a94d929",
       "size": 49914
+    },
+    {
+      "executable": false,
+      "path": "internal/adapters/prometheus/testdata/scheduled_upload_freshness.yml",
+      "sha256": "32ea6b151d9a45e01883aaefd0486c6b64006854196529946b70257bd4f4c706",
+      "size": 7606
     },
     {
       "executable": false,
@@ -2534,6 +2564,12 @@
     },
     {
       "executable": false,
+      "path": "internal/collectorcontrol/prometheus_upload.go",
+      "sha256": "07a45108ecf71fa72e921a8a6fcf514b00f8e8ee4fd9051d2dd3ef2af297a5c0",
+      "size": 2458
+    },
+    {
+      "executable": false,
       "path": "internal/collectorcontrol/result.go",
       "sha256": "891f783b287770f1025bd61d12ac9c1c3614fe018c5e504f3a1856b9ad641ce5",
       "size": 2416
@@ -2619,8 +2655,8 @@
     {
       "executable": false,
       "path": "internal/collectorexecution/prometheus/executor.go",
-      "sha256": "e296c81915fb6ddce2faa9207c7a185ab371a0220b88737c61b25266a5f40c56",
-      "size": 8186
+      "sha256": "945c534ae2802dea619900c03eed9c2a95b417de01863e9ea16d7dfc063405a7",
+      "size": 8897
     },
     {
       "executable": false,
@@ -2661,8 +2697,8 @@
     {
       "executable": false,
       "path": "internal/collectorruntime/cloudflare_access.go",
-      "sha256": "7cb1f6580ac870bc9b5a669b4e18a04a3913d29e9a289b6675cef90523402f2c",
-      "size": 6237
+      "sha256": "112bfd07c60f17dcb39ad5d111150aa3eadfc8bc23bf8798abe696a9eafe0a6d",
+      "size": 7214
     },
     {
       "executable": false,
@@ -2780,6 +2816,18 @@
     },
     {
       "executable": false,
+      "path": "internal/collectorruntime/prometheus_upload.go",
+      "sha256": "16242351c881d7e89e96dc1bcef46be62712d1ba1714726769ff2139cdd83187",
+      "size": 8514
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/prometheus_upload_test.go",
+      "sha256": "6d6676fb55f2011cc59b170cf7884d6f770ef5237856ce1b24151d875d9815a6",
+      "size": 2512
+    },
+    {
+      "executable": false,
       "path": "internal/collectorruntime/runtime.go",
       "sha256": "1f93639235e3b3939634cf5dbd14e30950d90305dc2023355ab2c177951e034d",
       "size": 17435
@@ -2843,6 +2891,12 @@
       "path": "internal/collectorruntime/typed_runtime_test.go",
       "sha256": "0109baa3756c99b92a423cba683828f34a58382e5cda2ccddc76b9b50d2dc724",
       "size": 11892
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/upload_identity.go",
+      "sha256": "7efb57575a54723fa2a2c189cde8c39ef5ff14e07a1df440b1d5454a3abbeb05",
+      "size": 7503
     },
     {
       "executable": false,
@@ -3003,8 +3057,8 @@
     {
       "executable": false,
       "path": "internal/config/control.go",
-      "sha256": "631396a55474c57cd08431d68dbd431d0d144cdf7c4b08d24bbbbe3f827a991e",
-      "size": 8255
+      "sha256": "3434aca45ff9dd1b39fcf8be8cf6262b471e2c2e256cc7085487aeffdff7e3f5",
+      "size": 8896
     },
     {
       "executable": false,
@@ -3116,9 +3170,27 @@
     },
     {
       "executable": false,
+      "path": "internal/controlplane/prometheus_upload_key_linux.go",
+      "sha256": "a1006660c2e1d249d16f39dcf58752fb61881e06c645aa2e599d59a195759343",
+      "size": 2133
+    },
+    {
+      "executable": false,
+      "path": "internal/controlplane/prometheus_upload_key_linux_test.go",
+      "sha256": "7bf1c5bc90a51aa575fec225c9b7477ad1d090bb968d98c9359e293d02efe67d",
+      "size": 1137
+    },
+    {
+      "executable": false,
+      "path": "internal/controlplane/prometheus_upload_key_other.go",
+      "sha256": "0a27ecb2d017b30f411fe95c6488557ef5d1fa6da364180cba27374708031a0e",
+      "size": 137
+    },
+    {
+      "executable": false,
       "path": "internal/controlplane/server.go",
-      "sha256": "3967d43c19b3b0b84a10862085aee307548c14309ff97330d6f24af8b4c5c0c0",
-      "size": 2558
+      "sha256": "6fef6702d324da411c4324e9c32a20fdddda4ba47224a357ed4edf78bce43f0e",
+      "size": 3577
     },
     {
       "executable": false,
@@ -3357,8 +3429,8 @@
     {
       "executable": false,
       "path": "internal/domain/collector_result.go",
-      "sha256": "0651ed36995976ada9dd581607e0845d09a6c2908be267a259138ca3dad137ad",
-      "size": 9363
+      "sha256": "c09cce547857d37cf4ab06b0a60df5dbe08256e0f6f15765095294a133723709",
+      "size": 9464
     },
     {
       "executable": false,
@@ -3581,6 +3653,18 @@
       "path": "internal/domain/kernel_xid_artifact.go",
       "sha256": "7ad331a36cd6af8f496264b4b00e5dbba752075a2b528c2094a7c5e6ffe9291b",
       "size": 18804
+    },
+    {
+      "executable": false,
+      "path": "internal/domain/prometheus_upload.go",
+      "sha256": "2e313ac2413941425575538702dd8f1415ff4c4897edf8c029fd837cfa25668e",
+      "size": 3445
+    },
+    {
+      "executable": false,
+      "path": "internal/domain/prometheus_upload_test.go",
+      "sha256": "6d4f6a502d5813efb718b3552f398d95de306bbf0d4996958b886b63eaf6eaa9",
+      "size": 1369
     },
     {
       "executable": false,
@@ -4521,8 +4605,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/collection.go",
-      "sha256": "a0872ebea261fa8dae984cc332b3c1dd81e76c1b3dc47244f098eec92eebfe0b",
-      "size": 19568
+      "sha256": "fa5ca0b0249ad3ba3be8404fce3fb7acf659c99908cac9765da43ab36aaad6ee",
+      "size": 19930
     },
     {
       "executable": false,
@@ -5000,6 +5084,24 @@
     },
     {
       "executable": false,
+      "path": "internal/store/postgres/prometheus_identity.go",
+      "sha256": "b8bd7fa2f46c26695cabb42e2e310669fa371e9a2bff06a9e1ca1c062d173b35",
+      "size": 2334
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/prometheus_upload.go",
+      "sha256": "57afe8fa22a22a32b98b4fcf946baf1f3c87e7e14c74e062f82d33d63fdf95a0",
+      "size": 9385
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/prometheus_upload_access_integration_test.go",
+      "sha256": "c53305d891ebef9e425064c98396090b6306f85c9244f383a0c20658b2b9f60a",
+      "size": 27012
+    },
+    {
+      "executable": false,
       "path": "internal/store/postgres/public_gpu_health_integration_test.go",
       "sha256": "1c4ab9847498419872e6708b7856c7f596219359a62ec51de4e8f0268a60c475",
       "size": 20651
@@ -5181,8 +5283,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/telemetry_authority_integration_test.go",
-      "sha256": "02a0bd37e2a3d8d6537d7fc3f1272e29150333e50442c88e7fcad94292ce33bd",
-      "size": 3275
+      "sha256": "639196e00d4408e15482b43792c821140a0b7601b8213ea44ae3590729fe374d",
+      "size": 4405
     },
     {
       "executable": false,

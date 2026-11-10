@@ -1,0 +1,195 @@
+{
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "scheduled uploads exclude stale source samples and keep the 120-second boundary",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "15"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 15"
+        },
+        {
+          "series": "DCGM_FI_DEV_XID_ERRORS{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "16"
+        },
+        {
+          "series": "DCGM_FI_DEV_XID_ERRORS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 16"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "17"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 17"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "18"
+        },
+        {
+          "series": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 18"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "19"
+        },
+        {
+          "series": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 19"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "20"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 20"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "21"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 21"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "22"
+        },
+        {
+          "series": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 22"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "23"
+        },
+        {
+          "series": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 23"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-stale\"}",
+          "values": "24"
+        },
+        {
+          "series": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+          "values": "_ 24"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-fresh\"}",
+          "values": "_ _ 15"
+        },
+        {
+          "series": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-boundary\",instance=\"stale-duplicate\"}",
+          "values": "15"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (Hostname, hostname, UUID, uuid, device, gpu, modelName, pci_bus_id) ((DCGM_FI_DEV_GPU_UTIL and (timestamp(DCGM_FI_DEV_GPU_UTIL) >= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_UTIL) <= time())))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 1
+            },
+            {
+              "labels": "{Hostname=\"node-a\",UUID=\"GPU-fresh\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "(DCGM_FI_DEV_GPU_UTIL and (timestamp(DCGM_FI_DEV_GPU_UTIL) >= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_UTIL) <= time()))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 15
+            },
+            {
+              "labels": "DCGM_FI_DEV_GPU_UTIL{Hostname=\"node-a\",UUID=\"GPU-fresh\"}",
+              "value": 15
+            }
+          ]
+        },
+        {
+          "expr": "(DCGM_FI_DEV_XID_ERRORS and (timestamp(DCGM_FI_DEV_XID_ERRORS) >= time() - 120) and (timestamp(DCGM_FI_DEV_XID_ERRORS) <= time()))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_XID_ERRORS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 16
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_GPU_TEMP and (timestamp(DCGM_FI_DEV_GPU_TEMP) >= time() - 120) and (timestamp(DCGM_FI_DEV_GPU_TEMP) <= time())) or on(__name__) (DCGM_FI_DEV_MEMORY_TEMP and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) >= time() - 120) and (timestamp(DCGM_FI_DEV_MEMORY_TEMP) <= time())))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_GPU_TEMP{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 17
+            },
+            {
+              "labels": "DCGM_FI_DEV_MEMORY_TEMP{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 18
+            }
+          ]
+        },
+        {
+          "expr": "(DCGM_FI_DEV_POWER_USAGE and (timestamp(DCGM_FI_DEV_POWER_USAGE) >= time() - 120) and (timestamp(DCGM_FI_DEV_POWER_USAGE) <= time()))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_POWER_USAGE{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 19
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_FB_USED and (timestamp(DCGM_FI_DEV_FB_USED) >= time() - 120) and (timestamp(DCGM_FI_DEV_FB_USED) <= time())) or on(__name__) (DCGM_FI_DEV_FB_FREE and (timestamp(DCGM_FI_DEV_FB_FREE) >= time() - 120) and (timestamp(DCGM_FI_DEV_FB_FREE) <= time())) or on(__name__) (DCGM_FI_DEV_FB_RESERVED and (timestamp(DCGM_FI_DEV_FB_RESERVED) >= time() - 120) and (timestamp(DCGM_FI_DEV_FB_RESERVED) <= time())))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_FB_USED{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 20
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_FREE{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 21
+            },
+            {
+              "labels": "DCGM_FI_DEV_FB_RESERVED{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 22
+            }
+          ]
+        },
+        {
+          "expr": "((DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) >= time() - 120) and (timestamp(DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS) <= time())) or on(__name__) (DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) >= time() - 120) and (timestamp(DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS) <= time())))",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 23
+            },
+            {
+              "labels": "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS{Hostname=\"node-a\",UUID=\"GPU-boundary\"}",
+              "value": 24
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

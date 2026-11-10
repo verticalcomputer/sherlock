@@ -56,11 +56,12 @@ type Auth struct {
 }
 
 type Config struct {
-	BaseURL   string
-	Timeout   time.Duration
-	MaxBytes  int64
-	MaxSeries int
-	Auth      Auth
+	BaseURL       string
+	Timeout       time.Duration
+	MaxBytes      int64
+	MaxSeries     int
+	Auth          Auth
+	DenyRedirects bool
 }
 
 type Client struct {
@@ -123,9 +124,13 @@ func NewClient(cfg Config) (*Client, error) {
 	if cfg.MaxSeries < 1 || cfg.MaxSeries > defaultMaxSeries {
 		return nil, fmt.Errorf("prometheus maximum series must be between 1 and %d", defaultMaxSeries)
 	}
+	client := &http.Client{Timeout: cfg.Timeout}
+	if cfg.DenyRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
 	return &Client{
 		baseURL:   parsed,
-		http:      &http.Client{Timeout: cfg.Timeout},
+		http:      client,
 		maxBytes:  cfg.MaxBytes,
 		maxSeries: cfg.MaxSeries,
 		auth:      cfg.Auth,
@@ -160,6 +165,10 @@ func RenderQuery(kind domain.QueryKind, node string) (string, error) {
 }
 
 func renderQuery(kind domain.QueryKind, node string, instantSupport bool) (string, error) {
+	return renderQueryProfile(kind, node, instantSupport, false)
+}
+
+func renderQueryProfile(kind domain.QueryKind, node string, instantSupport, upload bool) (string, error) {
 	if kind == domain.QuerySourceHealth {
 		if node != "" {
 			return "", fmt.Errorf("source health query does not accept a node")
@@ -173,14 +182,24 @@ func renderQuery(kind domain.QueryKind, node string, instantSupport bool) (strin
 	if node != "" && !nodePattern.MatchString(node) {
 		return "", fmt.Errorf("node has invalid characters or length")
 	}
+	if upload {
+		if fields := domain.PrometheusUploadFields(kind); len(fields) != 0 {
+			template.metrics = make([]string, 0, len(fields))
+			for _, f := range fields {
+				template.metrics = append(template.metrics, f.Name)
+			}
+		}
+	}
 	selectors := make([]string, 0, len(template.metrics))
+	filterFreshness := instantSupport && (upload || len(domain.DCGMFields(kind)) > 0)
 	leaf := func(selector string) string {
-		if !instantSupport || len(domain.DCGMFields(kind)) == 0 {
+		if !filterFreshness {
 			return selector
 		}
 		// timestamp() must see a leaf vector selector, never an evaluated
 		// expression/union whose timestamps have become evaluation time.
-		return "(" + selector + " and (timestamp(" + selector + ") >= time() - 120) and (timestamp(" + selector + ") <= time()))"
+		return fmt.Sprintf("(%[1]s and (timestamp(%[1]s) >= time() - %[2]d) and (timestamp(%[1]s) <= time()))",
+			selector, domain.DCGMFreshFor/time.Second)
 	}
 	for _, metric := range template.metrics {
 		if node == "" {
@@ -192,7 +211,7 @@ func renderQuery(kind domain.QueryKind, node string, instantSupport bool) (strin
 		}
 	}
 	join := " or "
-	if instantSupport && len(domain.DCGMFields(kind)) > 0 {
+	if filterFreshness {
 		join = " or on(__name__) "
 	}
 	expression := strings.Join(selectors, join)
@@ -206,7 +225,21 @@ func renderQuery(kind domain.QueryKind, node string, instantSupport bool) (strin
 }
 
 func (c *Client) Instant(ctx context.Context, kind domain.QueryKind, node string, at time.Time) (QueryResult, error) {
-	query, err := RenderQuery(kind, node)
+	return c.instant(ctx, kind, node, at, false)
+}
+
+func (c *Client) UploadInstant(ctx context.Context, kind domain.QueryKind, at time.Time) (QueryResult, error) {
+	switch kind {
+	case domain.QueryGPUIdentity, domain.QueryGPUUtilization, domain.QueryGPUXID,
+		domain.QueryGPUTemperature, domain.QueryGPUPower, domain.QueryGPUMemory, domain.QueryGPUECC:
+		return c.instant(ctx, kind, "", at, true)
+	default:
+		return QueryResult{}, &Error{Code: domain.FailureInvalidArgument, Message: "query is not part of the scheduled Prometheus profile"}
+	}
+}
+
+func (c *Client) instant(ctx context.Context, kind domain.QueryKind, node string, at time.Time, upload bool) (QueryResult, error) {
+	query, err := renderQueryProfile(kind, node, true, upload)
 	if err != nil {
 		return QueryResult{}, &Error{Code: domain.FailureInvalidArgument, Message: "invalid query parameters", Cause: err}
 	}

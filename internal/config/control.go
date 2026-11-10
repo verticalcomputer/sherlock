@@ -48,6 +48,14 @@ type Control struct {
 }
 
 func LoadControl() (Control, error) {
+	return loadControl(false)
+}
+
+func LoadPrometheusUploadControl() (Control, error) {
+	return loadControl(true)
+}
+
+func loadControl(uploadOnly bool) (Control, error) {
 	if err := loadLocalEnv(); err != nil {
 		return Control{}, err
 	}
@@ -89,8 +97,15 @@ func LoadControl() (Control, error) {
 			cfg.DiagnosticExecutionCollectors = append(cfg.DiagnosticExecutionCollectors, collectorID)
 		}
 	}
-	if cfg.ServerCertificate == "" || cfg.ServerPrivateKey == "" || cfg.CollectorCA == "" || cfg.CollectorCAPrivateKey == "" {
+	if cfg.ServerCertificate == "" || cfg.ServerPrivateKey == "" || cfg.CollectorCA == "" || (!uploadOnly && cfg.CollectorCAPrivateKey == "") {
+		if uploadOnly {
+			return Control{}, fmt.Errorf("control server certificate, key and collector CA files are required")
+		}
 		return Control{}, fmt.Errorf("control server certificate, key, collector CA, and collector CA key files are required")
+	}
+	if uploadOnly && (cfg.CollectorCAPrivateKey != "" || cfg.NodeCA != "" || cfg.NodeCAPrivateKey != "" ||
+		len(cfg.DiagnosticExecutionCollectors) != 0 || os.Getenv("SHERLOCK_CREDENTIAL_KEYRING_FILE") != "") {
+		return Control{}, fmt.Errorf("scheduled Prometheus intake forbids enrollment, diagnostic and credential configuration")
 	}
 	if (cfg.NodeCA == "") != (cfg.NodeCAPrivateKey == "") {
 		return Control{}, fmt.Errorf("node CA certificate and key must be configured together")

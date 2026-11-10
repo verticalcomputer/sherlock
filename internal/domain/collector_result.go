@@ -71,8 +71,11 @@ func ValidateCollectorResult(document CollectorResultDocument, work CollectorWor
 	if document.WorkID != work.WorkID || document.Attempt != attempt || attempt < 1 {
 		return fmt.Errorf("collector result work or attempt identity does not match its lease")
 	}
-	result := document.Result
-	if !sameCollectionTask(result.Task, work.Task) {
+	return validateCollectionResult(document.Result, work.Task)
+}
+
+func validateCollectionResult(result CollectionResult, task CollectionTask) error {
+	if !sameCollectionTask(result.Task, task) {
 		return fmt.Errorf("collector result task identity does not match assigned work")
 	}
 	if !validResultStatus(result.Status) {
@@ -81,13 +84,13 @@ func ValidateCollectorResult(document CollectorResultDocument, work CollectorWor
 	if result.StartedAt.IsZero() || result.CompletedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
 		return fmt.Errorf("collector result timestamps are invalid")
 	}
-	if result.Coverage.SeriesReturned < 0 || result.Coverage.SeriesReturned > work.Task.MaxSeries || result.Coverage.BytesRead < 0 || result.Coverage.BytesRead > work.Task.MaxBytes {
+	if result.Coverage.SeriesReturned < 0 || result.Coverage.SeriesReturned > task.MaxSeries || result.Coverage.BytesRead < 0 || result.Coverage.BytesRead > task.MaxBytes {
 		return fmt.Errorf("collector result coverage exceeds assigned limits")
 	}
 	if result.Coverage.SeriesExpected != nil && (*result.Coverage.SeriesExpected < 0 || *result.Coverage.SeriesExpected < result.Coverage.SeriesReturned) {
 		return fmt.Errorf("collector result expected-series coverage is invalid")
 	}
-	if len(result.Coverage.ExpectedTargets) > work.Task.MaxSeries*2 {
+	if len(result.Coverage.ExpectedTargets) > task.MaxSeries*2 {
 		return fmt.Errorf("collector result expected-target coverage exceeds assigned limits")
 	}
 	seenTargets := make(map[EvidenceTarget]struct{}, len(result.Coverage.ExpectedTargets))
