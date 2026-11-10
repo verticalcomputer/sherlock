@@ -15,8 +15,8 @@
     {
       "executable": false,
       "path": ".github/workflows/prepare-collector-release.yml",
-      "sha256": "80d2c3e82723316f275720aa1845d96b3e4a51f352d362f0f6e23c56878cf869",
-      "size": 2348
+      "sha256": "12f199e653ee1282db1620f695ea1cead0a80d359a6fad4b616627bf6776cf16",
+      "size": 2454
     },
     {
       "executable": false,
@@ -33,8 +33,8 @@
     {
       "executable": false,
       "path": ".github/workflows/sign-collector-release.yml",
-      "sha256": "2b9d79f7cf646eb4d8a910af30d4759219d167a8b4c546d08590ad0ac60f2228",
-      "size": 3485
+      "sha256": "939662bdfb881498d05447fbadce5fcb38a33cbe5495863253cee4994a00ca1b",
+      "size": 3573
     },
     {
       "executable": false,
@@ -933,8 +933,8 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "93a06ff4543be8a5dffd1f5c2b6bcb7dcc9c1f21b51f61102cc47252bf3b64f2",
-      "size": 16413
+      "sha256": "822c07c864411d467893019f087b3f8838bd2c14dac2546528167628bef88916",
+      "size": 16605
     },
     {
       "executable": false,
@@ -6825,8 +6825,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "06c547010c29cd8d3069e7a5d347fce183a5b5eb5b26f411e5bb7398a07fb245",
-      "size": 17317
+      "sha256": "9bb0854416dffec02607ce4d6b958f8ea886e2b8c78bfc2966d6a60b6ee1f5ed",
+      "size": 18685
     },
     {
       "executable": false,
@@ -6885,8 +6885,8 @@
     {
       "executable": false,
       "path": "scripts/test_collector_release.py",
-      "sha256": "dab7f3ff1fd3ccdc65df758c0a0c63d75311416fbbdcd96bdb753941e336d15b",
-      "size": 14710
+      "sha256": "4f603e71259bed4e265040b44fe275b6d9966a9e01a0334450a61a43b8883294",
+      "size": 17311
     },
     {
       "executable": false,
@@ -6927,8 +6927,8 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "6c101a132599214f2dfa36c378a1740b26f9505e82c454d48ccf8d483c262816",
-      "size": 12553
+      "sha256": "e4f39dc871d1c2b9da8c8131a1142cf20c40505d8bcfd3c7f498db7352653c70",
+      "size": 12908
     },
     {
       "executable": false,

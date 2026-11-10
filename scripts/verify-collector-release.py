@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the collector-only package and its separate GitHub signing identity."""
+"""Validate the collector and intake package and its separate GitHub signing identity."""
 import argparse
 import hashlib
 import importlib.util
@@ -16,20 +16,23 @@ release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 require = release.require
 
-SOURCE = "318bfd95f113e254dae3772f3be590171056635f"
-TREE = "d18c4fa1821b03276499a49eccb3df9dfc84c95f"
-BINARY_SHA = "9cf925a5613bb44460624bf3d07dcf53be44c3ce9fed7cf2ed46d23a39363f7f"
+SOURCE = "d7d684ec2e5395ffa1adda8526af4edf31850ffb"
+TREE = "ea4623e2f6ee59fb4f8f99e24a16f78e8c98e8a6"
+BINARY_SHA = "b8d898b85aa2a8559d1f0ace6bf7d7849cbdbdae334d37930fb432ebb3fd8d38"
 BINARY = "sherlock-collector-linux-amd64"
-ARTIFACT = "sherlock-reviewed-collector-linux-amd64"
+INTAKE = "sherlock-control-linux-amd64"
+INTAKE_SHA = "bc3e778ddae713ef758a9c43428f42c2926ea61b7eefb13fc952622e7dbb798b"
+ARTIFACT = "sherlock-reviewed-collector-intake-linux-amd64"
 ENVIRONMENT = "collector-release-signing"
 APPROVAL = "COLLECTOR_RELEASE_APPROVAL_JSON"
 PREPARE = ".github/workflows/prepare-collector-release.yml"
 SIGN = ".github/workflows/sign-collector-release.yml"
 MAIN = "refs/heads/main"
-FILES = {BINARY: 128 << 20, "source.tar.gz": 64 << 20, "source-files.json": 4 << 20,
+FILES = {BINARY: 128 << 20, INTAKE: 128 << 20, "source.tar.gz": 64 << 20, "source-files.json": 4 << 20,
          "sbom.spdx.json": 4 << 20, release.PROVENANCE: 1 << 20}
 DIGESTS = {"checksums_sha256": "SHA256SUMS", "provenance_sha256": release.PROVENANCE,
-           "source_manifest_sha256": "source-files.json", "binary_sha256": BINARY}
+           "source_manifest_sha256": "source-files.json", "binary_sha256": BINARY,
+           "intake_sha256": INTAKE}
 
 
 def valid(pattern, value):
@@ -61,7 +64,7 @@ def validate_policy(policy, commit, *, approved):
             and type(policy["artifact_id"]) is int and policy["artifact_id"] > 0,
             "collector_approval_identity_mismatch")
     require(all(valid(release.HEX, policy[key]) for key in DIGESTS)
-            and policy["binary_sha256"] == BINARY_SHA, "collector_approval_digest_mismatch")
+            and policy["binary_sha256"] == BINARY_SHA and policy["intake_sha256"] == INTAKE_SHA, "collector_approval_digest_mismatch")
 
 
 def api(path):
@@ -147,7 +150,7 @@ def payload(directory, policy, *, signed=False):
     require(set(sums) == set(FILES), "collector_bad_checksum_membership")
     require(all(digest(directory, name) == sha for name, sha in sums.items()), "collector_payload_tampered")
     require(all(sums[name] == policy[key] for key, name in DIGESTS.items() if name != "SHA256SUMS")
-            and sums[BINARY] == BINARY_SHA, "collector_payload_unapproved")
+            and sums[BINARY] == BINARY_SHA and sums[INTAKE] == INTAKE_SHA, "collector_payload_unapproved")
     provenance = release.object_json(release.read_regular(directory / release.PROVENANCE, FILES[release.PROVENANCE]))
     require(type(provenance.get("schema_version")) is int and provenance["schema_version"] == 1
             and provenance.get("package_state") == "UNSIGNED_COLLECTOR_REVIEW_ONLY"
@@ -156,6 +159,7 @@ def payload(directory, policy, *, signed=False):
             and provenance.get("source_commit") == SOURCE and provenance.get("source_tree") == TREE
             and provenance.get("target") == "linux/amd64" and provenance.get("byte_identical") is True
             and provenance.get("two_independent_clean_builds") == [BINARY_SHA, BINARY_SHA]
+            and provenance.get("intake_independent_clean_builds") == [INTAKE_SHA, INTAKE_SHA]
             and provenance.get("source_files_sha256") == sums["source-files.json"]
             and provenance.get("release_tag") == policy["release_tag"]
             and provenance.get("workflow_commit") == policy["workflow_commit"],
