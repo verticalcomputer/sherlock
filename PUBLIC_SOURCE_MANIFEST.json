@@ -75,8 +75,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "88a6086fd0c532f1aa2f924feac4280bc298c42712d8903dcf42b49a586fbe2c",
-      "size": 5414
+      "sha256": "bf6a76077e454270c98c88c78745f7cd13c31441c1865d10f914dfdb7029b5bd",
+      "size": 6442
     },
     {
       "executable": false,
@@ -399,8 +399,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/prometheus_upload.go",
-      "sha256": "bbd78399c63375c13d2edcd41d17f0790409307f976858db51dc2b2ecdc3e0a0",
-      "size": 2647
+      "sha256": "e7f1476a682f6ae4d5ef6acfdc61bdd5b06e398164403713e13eb6bfd37f6eb6",
+      "size": 2901
     },
     {
       "executable": false,
@@ -1251,8 +1251,8 @@
     {
       "executable": false,
       "path": "internal/adapters/prometheus/client.go",
-      "sha256": "c51ea022d1dbdb5678f9dce89f215e5956fbba02d23984fd485defa7f074b8e3",
-      "size": 18170
+      "sha256": "b1f12018e32eaa8f1d2d1f48b8e5c9dddf39391c601d2d8bad6ec69830e4c065",
+      "size": 18014
     },
     {
       "executable": false,
@@ -1905,8 +1905,8 @@
     {
       "executable": false,
       "path": "internal/adminview/gpu_health_postgres.go",
-      "sha256": "5e7500ac332b486ca7687c733a01a48f256f75381a5ca93990ee5a1017b0637e",
-      "size": 18778
+      "sha256": "5f8429766f7b6c3c6da3bab0ea6557d1e198ef6ea9e81377b03b01981613ac03",
+      "size": 19353
     },
     {
       "executable": false,
@@ -1935,8 +1935,14 @@
     {
       "executable": false,
       "path": "internal/adminview/gpu_metrics_postgres.go",
-      "sha256": "b3ec7500c88b08375441dc583dbabf76c92ca714d735a9a263c23eb75d89f95a",
-      "size": 30606
+      "sha256": "d45f3809eff1226dd81773d27bfd109c8d425c0158db13e8c02ae757e54acfd4",
+      "size": 19936
+    },
+    {
+      "executable": false,
+      "path": "internal/adminview/gpu_metrics_projection.go",
+      "sha256": "0237a35d2b672750bb941c9252fd99fa9bd592ac9a3f4f017551bea8a04c5eab",
+      "size": 10739
     },
     {
       "executable": false,
@@ -1953,8 +1959,8 @@
     {
       "executable": false,
       "path": "internal/adminview/postgres.go",
-      "sha256": "986f2086dd463e9b7b16e5d53d7d3356fc503e749d6a8d29f00da5fada77d9d3",
-      "size": 40560
+      "sha256": "cb76134bfce24d3f32407fa7887180f7d344eefb5152b5caf06296058e3a3859",
+      "size": 40390
     },
     {
       "executable": false,
@@ -2163,8 +2169,14 @@
     {
       "executable": false,
       "path": "internal/application/investigation.go",
-      "sha256": "54a7d5b67514d3a18e5481822d0beca8d19a1bbd679faea7099f0f8ff57423aa",
-      "size": 44519
+      "sha256": "c9fcb8ca9b5811b5ed8e95dd2db9e5351e5675d7ce95eab1642db850713ba04b",
+      "size": 28366
+    },
+    {
+      "executable": false,
+      "path": "internal/application/investigation_advance.go",
+      "sha256": "16cb819f7a81aaa54ea9219e3eeb3837af4ca22d9b33166e7256749c2015c650",
+      "size": 15980
     },
     {
       "executable": false,
@@ -2565,8 +2577,14 @@
     {
       "executable": false,
       "path": "internal/collectorcontrol/prometheus_upload.go",
-      "sha256": "07a45108ecf71fa72e921a8a6fcf514b00f8e8ee4fd9051d2dd3ef2af297a5c0",
-      "size": 2458
+      "sha256": "51cbd1912a9303372267ccce2335d44c3ecda2d9dc885cc43b4fa43b1a12de78",
+      "size": 5635
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorcontrol/prometheus_upload_test.go",
+      "sha256": "dee807292a4ce7f0fc41ddccd99e2529e96624cb3b636ad25f7e9ad79cff4ce6",
+      "size": 2611
     },
     {
       "executable": false,
@@ -3128,6 +3146,18 @@
     },
     {
       "executable": false,
+      "path": "internal/config/prometheus_upload.go",
+      "sha256": "f1076473744c0b7ef82b039324517b50b636ba46184f8877eec3eef17aa2a1b1",
+      "size": 2612
+    },
+    {
+      "executable": false,
+      "path": "internal/config/prometheus_upload_test.go",
+      "sha256": "cbaf5c1f65b2789799cce7c03566d6fd67b92db0b9d2a17d559ec28cb4b5be6d",
+      "size": 3197
+    },
+    {
+      "executable": false,
       "path": "internal/config/worker.go",
       "sha256": "d4b6144a00d6ec4169402d545ca3010b859dbdfe93f2812c133e0a5c205f37ca",
       "size": 17331
@@ -3657,8 +3687,8 @@
     {
       "executable": false,
       "path": "internal/domain/prometheus_upload.go",
-      "sha256": "2e313ac2413941425575538702dd8f1415ff4c4897edf8c029fd837cfa25668e",
-      "size": 3445
+      "sha256": "889a460cf0113ca7ed2a16565999fd9c0c8f985977af07d7a5542930ad930305",
+      "size": 3548
     },
     {
       "executable": false,
@@ -4605,8 +4635,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/collection.go",
-      "sha256": "fa5ca0b0249ad3ba3be8404fce3fb7acf659c99908cac9765da43ab36aaad6ee",
-      "size": 19930
+      "sha256": "7e503d2bdd00e3dab8b83d278a243d03bdaf3c326a485499926ff8c454a0bde9",
+      "size": 20396
     },
     {
       "executable": false,
@@ -5091,14 +5121,26 @@
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload.go",
-      "sha256": "57afe8fa22a22a32b98b4fcf946baf1f3c87e7e14c74e062f82d33d63fdf95a0",
-      "size": 9385
+      "sha256": "df00c6b1affd4bdd6d70aa988286ac69ef927c5894c21b101bc540741e441d49",
+      "size": 10010
     },
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload_access_integration_test.go",
-      "sha256": "c53305d891ebef9e425064c98396090b6306f85c9244f383a0c20658b2b9f60a",
-      "size": 27012
+      "sha256": "0e8075eb2c11ae8efe449fe64e53e7d5f0a539b30510b46c4ec090a77b5262d7",
+      "size": 35834
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/prometheus_upload_process_integration_test.go",
+      "sha256": "7ec7081be6da4427290e2d060a04872e7e4665b1982a0f526901561571563719",
+      "size": 5380
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/prometheus_upload_transaction_integration_test.go",
+      "sha256": "59dc571d79e82f4b2b2d23051f2852d985343536a9f809e96d552d32ee8e3097",
+      "size": 5087
     },
     {
       "executable": false,
