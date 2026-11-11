@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
@@ -25,12 +23,10 @@ func runPrometheusUpload(ctx context.Context, logger *slog.Logger) error {
 		logger.Error("control.configuration_invalid", "error", err.Error())
 		return err
 	}
-	collector := domain.CollectorID(strings.TrimSpace(os.Getenv("SHERLOCK_COLLECTOR_ID")))
-	cluster := domain.ClusterID(strings.TrimSpace(os.Getenv("SHERLOCK_CLUSTER_ID")))
-	source := domain.SourceID(strings.TrimSpace(os.Getenv("SHERLOCK_SOURCE_ID")))
-	if collector == "" || cluster == "" || source == "" {
-		logger.Error("control.prometheus_upload_scope_missing")
-		return fmt.Errorf("scheduled Prometheus intake requires an explicit scope")
+	scope, err := config.LoadPrometheusUploadScope()
+	if err != nil {
+		logger.Error("control.prometheus_upload_scope_invalid")
+		return err
 	}
 	tlsConfig, err := controlplane.LoadPrometheusUploadTLSConfig(cfg)
 	if err != nil {
@@ -64,7 +60,19 @@ func runPrometheusUpload(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	handler, err := collectorcontrol.NewPrometheusUploadHandler(identity, auth, store, clock, collector, cluster, source)
+	var handler http.Handler
+	if len(scope.Bindings) > 0 {
+		bindings := make([]collectorcontrol.PrometheusUploadBinding, 0, len(scope.Bindings))
+		for _, binding := range scope.Bindings {
+			bindings = append(bindings, collectorcontrol.PrometheusUploadBinding{
+				CollectorID: domain.CollectorID(binding.CollectorID), SourceID: domain.SourceID(binding.SourceID),
+			})
+		}
+		handler, err = collectorcontrol.NewSharedPrometheusUploadHandler(identity, auth, store, clock, bindings)
+	} else {
+		handler, err = collectorcontrol.NewPrometheusUploadHandler(identity, auth, store, clock,
+			domain.CollectorID(scope.CollectorID), domain.ClusterID(scope.ClusterID), domain.SourceID(scope.SourceID))
+	}
 	if err != nil {
 		return err
 	}

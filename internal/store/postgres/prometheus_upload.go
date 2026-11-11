@@ -13,6 +13,15 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
+// PrometheusUploadSourceAllowed checks server-selected source ownership without
+// trusting collector-reported source health or request payload scope.
+func (s *CollectionStore) PrometheusUploadSourceAllowed(ctx context.Context, cluster domain.ClusterID, source domain.SourceID) (bool, error) {
+	var allowed bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM sources WHERE cluster_id=$1 AND source_id=$2 AND kind='prometheus')`, cluster, source).Scan(&allowed)
+	return allowed, err
+}
+
 // RecordPrometheusReport commits one scheduled slot without creating work or
 // leases. The run ID identifies the slot and the existing idempotency column
 // binds the exact accepted payload. Both are committed with the evidence.
