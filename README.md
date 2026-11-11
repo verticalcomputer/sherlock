@@ -35,6 +35,24 @@ for direct mTLS or Cloudflare Access service token with proof of possession.
 `sherlock-collector prometheus-upload-readiness` checks authentication and
 routing without submitting telemetry.
 
+One intake can serve multiple collectors through the same upload URL. Set
+`SHERLOCK_PROMETHEUS_UPLOAD_BINDINGS` on the intake to a JSON array of approved
+collector-to-source bindings, and omit the three single-collector scope variables
+from that intake's environment. Each collector keeps its own scope settings.
+
+```json
+[{"collector_id":"collector-one","source_id":"prometheus-one"},{"collector_id":"collector-two","source_id":"prometheus-two"}]
+```
+
+The intake obtains the cluster from the authenticated certificate's registered
+identity, resolves the source from the operator binding, and checks that source's
+ownership and Prometheus type in PostgreSQL on every request. Report scope must
+match both values. An unbound identity receives HTTP 403, conflicting payload
+scope receives HTTP 400, and an unavailable ownership lookup receives HTTP 503.
+An explicitly empty or malformed binding list prevents startup. Binding changes
+take effect on intake restart. The shared mode uses the existing tables and
+intake privileges.
+
 The intake serves only `POST /collector/v1/prometheus/reports`. It uses the
 existing collector CA certificate to verify identities and checks coverage
 against the expected GPU inventory in PostgreSQL. The intake accepts a

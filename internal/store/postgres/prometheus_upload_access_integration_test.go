@@ -47,11 +47,23 @@ import (
 )
 
 func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
+	testPrometheusUploadThroughAccess(t, false)
+}
+
+func TestSharedPrometheusUploadThroughIsolatedAccess(t *testing.T) {
+	testPrometheusUploadThroughAccess(t, true)
+}
+
+func testPrometheusUploadThroughAccess(t *testing.T, shared bool) {
 	dsn := os.Getenv("SHERLOCK_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("requires an isolated migrated database")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	timeout := time.Minute
+	if shared {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -115,10 +127,10 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	enroll := func() tls.Certificate {
+	enroll := func(enrollCluster domain.ClusterID) (domain.CollectorID, tls.Certificate) {
 		t.Helper()
 		key, csr := m15CollectorCSR(t)
-		grant, err := identity.CreateBootstrapKey(ctx, cluster, time.Minute)
+		grant, err := identity.CreateBootstrapKey(ctx, enrollCluster, time.Minute)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,15 +142,39 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		collector = issued.CollectorID
 		block, _ := pem.Decode(issued.Identity.CertificatePEM)
 		if block == nil || block.Type != "CERTIFICATE" {
 			t.Fatal("fixture collector certificate")
 		}
-		return tls.Certificate{Certificate: [][]byte{block.Bytes}, PrivateKey: key}
+		return issued.CollectorID, tls.Certificate{Certificate: [][]byte{block.Bytes}, PrivateKey: key}
 	}
-	otherCert := enroll()
-	clientCert := enroll()
+	_, otherCert := enroll(cluster)
+	collector, clientCert := enroll(cluster)
+	secondCluster := domain.ClusterID("shared-cluster-" + suffix)
+	secondSource := domain.SourceID("shared-source-" + suffix)
+	var secondCollector domain.CollectorID
+	var secondCert tls.Certificate
+	var secondEntities []domain.EntityIdentity
+	if shared {
+		if err := admin.EnsureSource(ctx, secondCluster, "Second shared cluster", secondSource, "Second Prometheus source"); err != nil {
+			t.Fatal(err)
+		}
+		for node := 1; node <= 14; node++ {
+			name := domain.StableNodeID(fmt.Sprintf("second-comp%03d", node))
+			secondEntities = append(secondEntities, domain.EntityIdentity{ClusterID: secondCluster, Kind: domain.EntityNode, NodeID: name})
+			for gpu := 0; gpu < 8; gpu++ {
+				secondEntities = append(secondEntities, domain.EntityIdentity{ClusterID: secondCluster, Kind: domain.EntityGPU,
+					NodeID: name, PhysicalGPUUUID: domain.PhysicalGPUUUID(fmt.Sprintf("GPU-second-%03d-%d", node, gpu))})
+			}
+		}
+		if _, err := goodput.RecordExpectedInventoryRevision(ctx, domain.InventoryRevision{
+			ID: domain.InventoryRevisionID("second-revision-" + suffix), SchemaVersion: domain.InventoryContractSchemaVersion,
+			ClusterID: secondCluster, SourceID: secondSource, SourceAt: earlier, EffectiveAt: earlier, ObservedAt: earlier, Entities: secondEntities,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		secondCollector, secondCert = enroll(secondCluster)
+	}
 
 	signing, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -175,7 +211,13 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		h, err := collectorcontrol.NewPrometheusUploadHandler(databaseAuth, auth, store, clock, collector, cluster, source)
+		var h http.Handler
+		if shared {
+			h, err = collectorcontrol.NewSharedPrometheusUploadHandler(databaseAuth, auth, store, clock,
+				[]collectorcontrol.PrometheusUploadBinding{{CollectorID: collector, SourceID: source}, {CollectorID: secondCollector, SourceID: secondSource}})
+		} else {
+			h, err = collectorcontrol.NewPrometheusUploadHandler(databaseAuth, auth, store, clock, collector, cluster, source)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -284,6 +326,7 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 
 	// Use the same fixed query executor and actual mTLS-derived signing key as
 	// the collector. The fixture controls its Prometheus response only.
+	responseEntities := entities
 	prometheus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/query" {
 			t.Errorf("unexpected Prometheus endpoint %s", r.URL.Path)
@@ -304,7 +347,10 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 			}
 		}
 		vector := make([]map[string]any, 0, 240)
-		for _, e := range entities {
+		mu.Lock()
+		samples := responseEntities
+		mu.Unlock()
+		for _, e := range samples {
 			if e.Kind != domain.EntityGPU {
 				continue
 			}
@@ -338,7 +384,7 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var payload []byte
+	var payload, primaryUtilization []byte
 	var identityResult, temperature domain.CollectionResult
 	for _, q := range domain.PrometheusUploadQueries() {
 		task := domain.PrometheusUploadTask(cluster, source, q, slot)
@@ -360,6 +406,8 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
 		switch q {
 		case domain.QueryGPUIdentity:
 			identityResult = result
+		case domain.QueryGPUUtilization:
+			primaryUtilization = raw
 		case domain.QueryGPUTemperature:
 			temperature = result
 		}
@@ -496,6 +544,138 @@ func TestPrometheusUploadThroughIsolatedAccess(t *testing.T) {
  FROM collection_target_inventory WHERE cluster_id=$1 AND source_id=$2`, cluster, source).Scan(&targets, &earliest, &latest)
 	if err != nil || targets != 90 || !earliest.Equal(slot) || !latest.Equal(slot) {
 		t.Fatalf("older or partial identity changed observed inventory: targets=%d earliest=%v latest=%v err=%v", targets, earliest, latest, err)
+	}
+
+	if shared {
+		if allowed, err := store.PrometheusUploadSourceAllowed(ctx, cluster, secondSource); err != nil || allowed {
+			t.Fatalf("source from another cluster was authorized: allowed=%v err=%v", allowed, err)
+		}
+		secondClient := makeClient(secondCert, secret)
+		secondProbe, err := collectorruntime.NewHTTPClient("https://"+host, secondClient, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := secondProbe.ProbePrometheusUpload(ctx); err != nil {
+			t.Fatalf("second collector readiness: %v", err)
+		}
+		makeReport := func(scopeCluster domain.ClusterID, scopeSource domain.SourceID, samples []domain.EntityIdentity, query domain.QueryKind, at time.Time) []byte {
+			t.Helper()
+			mu.Lock()
+			responseEntities = samples
+			mu.Unlock()
+			task := domain.PrometheusUploadTask(scopeCluster, scopeSource, query, at)
+			runnable := task
+			runnable.Deadline = time.Now().Add(20 * time.Second)
+			result := executor.Execute(ctx, runnable)
+			if result.Status != domain.ResultSucceeded {
+				t.Fatalf("shared query %s failed: %v", query, result.Failures)
+			}
+			result.Task, result.StartedAt, result.CompletedAt = task, at, at.Add(time.Second)
+			for i := range result.Observations {
+				result.Observations[i].CollectedAt = result.CompletedAt
+			}
+			payload, err := json.Marshal(domain.PrometheusReport{Version: domain.PrometheusUploadVersion, Result: result})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return payload
+		}
+		var secondaryPayload []byte
+		for _, query := range domain.PrometheusUploadQueries() {
+			raw := makeReport(secondCluster, secondSource, secondEntities, query, slot)
+			send(secondClient, domain.PrometheusUploadPath, "", raw, http.StatusNoContent)
+			secondaryPayload = raw
+		}
+		// The same shared URL authenticates both identities but never accepts a
+		// body belonging to the other collector's cluster or another source.
+		primaryPayload := primaryUtilization
+		binary := os.Getenv("SHERLOCK_TEST_SHARED_INTAKE_BINARY")
+		if binary == "" {
+			binary = filepath.Join(t.TempDir(), "sherlock-control")
+			build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/sherlock-control")
+			build.Dir = filepath.Join("..", "..", "..")
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build shared intake: %v\n%s", err, output)
+			}
+		}
+		exerciseSharedUploadProcess(t, ctx, binary, uploadPool.Config().ConnString(), caPEM, caKey,
+			collector, source, clientCert, primaryPayload, secondCollector, secondSource, secondCert, secondaryPayload)
+		send(client, domain.PrometheusUploadPath, "", secondaryPayload, http.StatusBadRequest)
+		send(secondClient, domain.PrometheusUploadPath, "", primaryPayload, http.StatusBadRequest)
+		foreignSource := makeReport(cluster, source+"-unbound", entities, domain.QueryGPUUtilization, slot)
+		send(client, domain.PrometheusUploadPath, "", foreignSource, http.StatusBadRequest)
+
+		// Concurrent retries for both clusters remain idempotent in one intake.
+		var uploads sync.WaitGroup
+		outcomes := make(chan error, 2)
+		for _, upload := range []struct {
+			client  *http.Client
+			payload []byte
+		}{{client, primaryPayload}, {secondClient, secondaryPayload}} {
+			uploads.Add(1)
+			go func() {
+				defer uploads.Done()
+				request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+host+domain.PrometheusUploadPath, bytes.NewReader(upload.payload))
+				if err != nil {
+					outcomes <- err
+					return
+				}
+				request.Header.Set("X-Sherlock-Protocol-Version", "1")
+				request.Header.Set("X-Correlation-ID", fmt.Sprintf("concurrent-%d", time.Now().UnixNano()))
+				request.Header.Set("Content-Type", "application/json")
+				response, err := upload.client.Do(request)
+				if err == nil {
+					response.Body.Close()
+					if response.StatusCode != http.StatusNoContent {
+						err = fmt.Errorf("concurrent upload status %d", response.StatusCode)
+					}
+				}
+				outcomes <- err
+			}()
+		}
+		uploads.Wait()
+		close(outcomes)
+		for err := range outcomes {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		var secondaryReports, secondarySamples, secondaryTargets, duplicateSamples int
+		err = pool.QueryRow(ctx, `SELECT
+          (SELECT count(*) FROM evidence_envelopes WHERE cluster_id=$1 AND status='COMPLETE'
+            AND jsonb_array_length(coverage_expected)=126 AND coverage_expected=coverage_covered),
+          (SELECT count(*) FROM observations WHERE cluster_id=$1),
+          (SELECT count(*) FROM collection_target_inventory WHERE cluster_id=$1 AND source_id=$2),
+          (SELECT count(*) FROM (SELECT run_id,entity_key,metric,observed_at FROM observations WHERE cluster_id=$1
+              GROUP BY run_id,entity_key,metric,observed_at HAVING count(*)>1) duplicates)`,
+			secondCluster, secondSource).Scan(&secondaryReports, &secondarySamples, &secondaryTargets, &duplicateSamples)
+		if err != nil || secondaryReports != 7 || secondarySamples != 1232 || secondaryTargets != 126 || duplicateSamples != 0 {
+			t.Fatalf("secondary reports=%d samples=%d targets=%d duplicates=%d err=%v", secondaryReports, secondarySamples, secondaryTargets, duplicateSamples, err)
+		}
+		// Recheck ownership on every request rather than keeping a cached grant.
+		if _, err := pool.Exec(ctx, "UPDATE sources SET kind='slurm' WHERE source_id=$1", secondSource); err != nil {
+			t.Fatal(err)
+		}
+		send(secondClient, domain.PrometheusUploadPath, "", secondaryPayload, http.StatusForbidden)
+		if _, err := pool.Exec(ctx, "UPDATE sources SET kind='prometheus' WHERE source_id=$1", secondSource); err != nil {
+			t.Fatal(err)
+		}
+		var notBefore, notAfter time.Time
+		if err := pool.QueryRow(ctx, `SELECT not_before,not_after FROM collector_identities
+ WHERE collector_id=$1 AND revoked_at IS NULL AND superseded_at IS NULL`, secondCollector).Scan(&notBefore, &notAfter); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE collector_identities SET not_before=clock_timestamp()-INTERVAL '2 hours',
+ not_after=clock_timestamp()-INTERVAL '1 hour' WHERE collector_id=$1`, secondCollector); err != nil {
+			t.Fatal(err)
+		}
+		send(secondClient, domain.PrometheusUploadPath, "", secondaryPayload, http.StatusUnauthorized)
+		if _, err := pool.Exec(ctx, `UPDATE collector_identities SET not_before=$2,not_after=$3,
+ revoked_at=clock_timestamp() WHERE collector_id=$1`, secondCollector, notBefore, notAfter); err != nil {
+			t.Fatal(err)
+		}
+		send(secondClient, domain.PrometheusUploadPath, "", secondaryPayload, http.StatusUnauthorized)
+		t.Log("one shared endpoint accepted 10/80 and 14/112 inventories, rejected cross-cluster/source bodies and unbound identities, and persisted concurrent retries without duplicates")
 	}
 	if tool := os.Getenv("SHERLOCK_TEST_UPLOAD_IDENTITY_TOOL"); tool != "" {
 		exerciseOfflineUploadRotation(t, ctx, tool, dsn, pool, baseTransport, host, cluster, collector, clientCert, caPEM, caKey, id, secret)
