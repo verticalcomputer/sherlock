@@ -200,7 +200,13 @@ directory or relabel its receipt as release approval.
 
 The [preparation workflow](../../.github/workflows/prepare-collector-release.yml)
 builds the collector and its matching control binary from public source commit
-`d7d684ec2e5395ffa1adda8526af4edf31850ffb`. It uses Go 1.26.9 and two
+`f60f05d86fb20ac23230daebef0182d6a247d2fe`. This freezes the shared upload endpoint from
+PR #20 with a refreshed public source inventory. The only change after merged
+commit `1676fe79062b6ac9b423be3d8c0f4c3be2b5781e` in this source snapshot is
+`PUBLIC_SOURCE_MANIFEST.json`; collector and intake code is unchanged.
+The proposed package tag is `v0.1.0-rc.3`. Preparation creates no tag.
+
+It uses Go 1.26.9 and two
 independent offline build caches. Both builds must match the pins in the
 [package verifier](../../scripts/verify-collector-release.py).
 
