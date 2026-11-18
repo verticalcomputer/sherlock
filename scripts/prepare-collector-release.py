@@ -206,8 +206,8 @@ def build(repo, output, proxy, workflow_commit, tag):
         write_sbom(output, dependencies, builds[0], command_modules)
         write_json(output / "provenance.unsigned.json", {
             "schema_version": 1, "repository": REPOSITORY, "source_commit": REVISION, "source_tree": TREE,
-            "source_ref_verified": "refs/heads/main", "github_ci_run": "42978827073",
-            "github_ci_commit": "1676fe79062b6ac9b423be3d8c0f4c3be2b5781e",
+            "source_ref_verified": "refs/heads/main", "github_ci_run": "44333096423",
+            "github_ci_commit": "3279471d373ee6ddfdddab0516dfc891736d32ef",
             "package_state": "UNSIGNED_COLLECTOR_REVIEW_ONLY", "signed": False, "release_approved": False,
             "release_tag": tag, "workflow_commit": workflow_commit, "target": "linux/amd64",
             "created_at_utc": datetime.now(timezone.utc).isoformat(),

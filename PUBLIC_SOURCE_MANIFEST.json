@@ -75,8 +75,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "bf6a76077e454270c98c88c78745f7cd13c31441c1865d10f914dfdb7029b5bd",
-      "size": 6442
+      "sha256": "4010ea5bf02d121ddd15e6be6931cba1178cf10698ae3f746e577f7540b680eb",
+      "size": 6889
     },
     {
       "executable": false,
@@ -356,6 +356,12 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-collector/prometheus_cooling_test.go",
+      "sha256": "ce2397ffd33410c2be4b007bae23e6c9f20f68a9cf05aefafba66d15520d6d10",
+      "size": 2291
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-collector/prometheus_only_test.go",
       "sha256": "1e8a56a2c4c5c2f148b9091fdfad2f424dcc003308c3b0756d404d39df1d88da",
       "size": 3444
@@ -363,8 +369,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-collector/prometheus_upload.go",
-      "sha256": "d66ba03744b18407712907b626b45e31a3cf790afd81b907e53af0d644bb6c44",
-      "size": 2445
+      "sha256": "da19335022d5db39720cbd8b87bb857b416935546902390ca298e6a38d578779",
+      "size": 5260
     },
     {
       "executable": false,
@@ -389,6 +395,18 @@
       "path": "cmd/sherlock-control/assessment_test.go",
       "sha256": "96ff8e6bcbd2141775df67970686a8ed79ab26c1182f4da40d6aeb8f5901647f",
       "size": 1700
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-control/cooling_upload.go",
+      "sha256": "97232985392319ed3122004b1c8f10331622c504704674996647b2e27bfa1887",
+      "size": 2387
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-control/cooling_upload_test.go",
+      "sha256": "b168599849bc7b13d7b6768ecc5466d5fbf0a42f5aa4ff3900fab1484c1f3738",
+      "size": 3753
     },
     {
       "executable": false,
@@ -429,8 +447,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/prometheus_upload.go",
-      "sha256": "e7f1476a682f6ae4d5ef6acfdc61bdd5b06e398164403713e13eb6bfd37f6eb6",
-      "size": 2901
+      "sha256": "8c132bf4898c11bd6d8fe03a76258f58a1cf8b8161711ba10da4f8d09657bfbe",
+      "size": 3082
     },
     {
       "executable": false,
@@ -945,8 +963,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "099490d0e6f4e200786a05575a59fb54e39fb9a2b4f1d367032353660b03eaf6",
-      "size": 8733
+      "sha256": "5d9ac3610f8bcecd7575a94a30fb67a06a1ea51e00806e531b19ec4484d13a03",
+      "size": 14810
     },
     {
       "executable": false,
@@ -1295,6 +1313,12 @@
       "path": "internal/adapters/prometheus/client_test.go",
       "sha256": "85dd37804d2771124304fc21ebe07279fcb2bdda81011e3ac926dbac8210bbe1",
       "size": 13783
+    },
+    {
+      "executable": false,
+      "path": "internal/adapters/prometheus/cooling_upload.go",
+      "sha256": "a7bc894faa0ccdf5ddb067678f8ba8e18ff63fc3490e333cba44170e6c5d7c38",
+      "size": 3918
     },
     {
       "executable": false,
@@ -1941,8 +1965,8 @@
     {
       "executable": false,
       "path": "internal/adminview/gpu_health_postgres.go",
-      "sha256": "5f8429766f7b6c3c6da3bab0ea6557d1e198ef6ea9e81377b03b01981613ac03",
-      "size": 19353
+      "sha256": "aa496098630d62cdfacc56a16692a46f5f70f6e37d1c8f465cdbf2306414ccaf",
+      "size": 19417
     },
     {
       "executable": false,
@@ -1971,8 +1995,8 @@
     {
       "executable": false,
       "path": "internal/adminview/gpu_metrics_postgres.go",
-      "sha256": "d45f3809eff1226dd81773d27bfd109c8d425c0158db13e8c02ae757e54acfd4",
-      "size": 19936
+      "sha256": "da0453f5301d9a498006c81d742063762c496984aad2d6be33a97bd4afc988b0",
+      "size": 20002
     },
     {
       "executable": false,
@@ -1995,8 +2019,8 @@
     {
       "executable": false,
       "path": "internal/adminview/postgres.go",
-      "sha256": "cb76134bfce24d3f32407fa7887180f7d344eefb5152b5caf06296058e3a3859",
-      "size": 40390
+      "sha256": "fb9fb4c2fcae9056aac6d243914151a74803197f89fc3b581cd314ba4403af45",
+      "size": 40457
     },
     {
       "executable": false,
@@ -2085,8 +2109,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/host.go",
-      "sha256": "7af4ee391180783aae20d39393730ccf1a7f680b668606ae9cacaea751bd72bf",
-      "size": 49007
+      "sha256": "437d30cc1022196266f27167fe7f7c8ae9a7585619bdda67257aad6e258d26cf",
+      "size": 49652
     },
     {
       "executable": false,
@@ -2103,14 +2127,14 @@
     {
       "executable": false,
       "path": "internal/alertassessment/payload_test.go",
-      "sha256": "cd5d4eae38e2db07f86f901b87dc46c697a70b7c79a8e2c8d74a8f2cfab99f37",
-      "size": 6994
+      "sha256": "04436a765503639f3f27cb5c04f48185bd33279736022ef84ace7169b096f435",
+      "size": 7182
     },
     {
       "executable": false,
       "path": "internal/alertassessment/policy.go",
-      "sha256": "967b23b1fabfe54f0989b28e4aba68a31cac6e8b68b0d562ca5ab060ecdb43d1",
-      "size": 9144
+      "sha256": "b94e7de4a966f5344d3845b4a508d3a355b77f2eeca1a4e3b849cd437d0e428c",
+      "size": 11178
     },
     {
       "executable": false,
@@ -2127,8 +2151,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/replay.go",
-      "sha256": "88eb166b1cd68850f5f7843c3f610cffd43b9b909b88607e051b739b343692c9",
-      "size": 130921
+      "sha256": "b0abe934ed1dd8643b47131668ba1a0205731b47d16e9620fcdcecb07f054821",
+      "size": 132110
     },
     {
       "executable": false,
@@ -2157,8 +2181,14 @@
     {
       "executable": false,
       "path": "internal/alertassessment/types.go",
-      "sha256": "dc8a76769adc7cd74b8dc2e9a851edb400c970758d7c34d36aa1196e53b5fabe",
-      "size": 9489
+      "sha256": "2534b53edf3a48b2f98ff26aba1df169c70c832f9df3def259a1ad88544c1e89",
+      "size": 9625
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/upload_test.go",
+      "sha256": "2635b37cc782ca4ad20543c8129171f72d96ed466814b5df758a39e6bc2ed894",
+      "size": 10225
     },
     {
       "executable": false,
@@ -2672,6 +2702,18 @@
     },
     {
       "executable": false,
+      "path": "internal/collectorcontrol/cooling_upload.go",
+      "sha256": "72a6ce59d2b54d9cf7ae520d1635c273363d85a18319eaa6afc53d180973ee04",
+      "size": 3902
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorcontrol/cooling_upload_test.go",
+      "sha256": "794d794ff850ca51cd4a5fb13cb9a59497f2db7cf260482c0b7bbe2792fb5152",
+      "size": 4874
+    },
+    {
+      "executable": false,
       "path": "internal/collectorcontrol/credential_transport.go",
       "sha256": "4b6eda9dacd56abc08e3d833ad02b78556aab8a9cb771816ff456deff61fefd6",
       "size": 12563
@@ -2834,6 +2876,18 @@
     },
     {
       "executable": false,
+      "path": "internal/collectorexecution/prometheus/cooling_upload.go",
+      "sha256": "2385998782e544338fc7b2efd0c9e4296d64a35ff9c19e43c1a225dacd20238c",
+      "size": 3974
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorexecution/prometheus/cooling_upload_test.go",
+      "sha256": "3b21fa49d5fae42f7cd510972a88b4b3ca19f22e5e1937050180123911c0b44a",
+      "size": 4616
+    },
+    {
+      "executable": false,
       "path": "internal/collectorexecution/prometheus/dcgm_metrics_test.go",
       "sha256": "4a871119c0486241a24e2362157b719dd479a2848ea7c2d96919974bef6424dd",
       "size": 5170
@@ -2891,6 +2945,18 @@
       "path": "internal/collectorruntime/cloudflare_access_test.go",
       "sha256": "d6f54edd2990cb99eca6a22548b7ebf14e85f793ab4dd9d49d22aa88546a9fd6",
       "size": 2975
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/cooling_upload.go",
+      "sha256": "60a46a0c573c133f16baee738ee4bc6ff3765449dba5aceca097e443972e16d3",
+      "size": 10116
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/cooling_upload_test.go",
+      "sha256": "beab53bda0595ad4799232eb3128dd2b251720e6e05807e25c23506f55b9b818",
+      "size": 11919
     },
     {
       "executable": false,
@@ -3255,14 +3321,26 @@
     {
       "executable": false,
       "path": "internal/config/control.go",
-      "sha256": "e12c1e673499fd379fbb3084b31e2a61a3647a6b0c23f8faf1e0d243f30e1140",
-      "size": 8987
+      "sha256": "159d07b3aa6e59c899d8e23fdc95a57ad975ac32034f76665f7ccdc1734b22db",
+      "size": 9124
     },
     {
       "executable": false,
       "path": "internal/config/control_test.go",
-      "sha256": "4a94d2d06153f5c5c7f8db9fa01775c2c836a620111b7ff8c2d809071503455a",
-      "size": 5159
+      "sha256": "81b3f0ae97dec15b25b2fa01ae3b538db7f9e5929ed841a152972f377dad312f",
+      "size": 6026
+    },
+    {
+      "executable": false,
+      "path": "internal/config/cooling_upload.go",
+      "sha256": "e66b8a325f286d3278d0284d7ae170c2f26b28dfe6741fdafc5e2844a706c7f3",
+      "size": 1949
+    },
+    {
+      "executable": false,
+      "path": "internal/config/cooling_upload_test.go",
+      "sha256": "6678ddb0f80416d9128118e6c71d86d0f81bfb2aa40e37301649a1905334165d",
+      "size": 2564
     },
     {
       "executable": false,
@@ -3665,6 +3743,18 @@
       "path": "internal/domain/collector_v2_test.go",
       "sha256": "a0337651c905e982e7fe95ccaedf8fecbc0758c3d7e2b8f086173349212e4e17",
       "size": 14321
+    },
+    {
+      "executable": false,
+      "path": "internal/domain/cooling_upload.go",
+      "sha256": "f8ef677194cad39412aaeae9bef5cac741d090ab75ec5a956a9a706c9257c766",
+      "size": 7300
+    },
+    {
+      "executable": false,
+      "path": "internal/domain/cooling_upload_test.go",
+      "sha256": "52c116e3aad230817818ff3db39b1f56c9ebafbc333a4360eb1c4cc490f93750",
+      "size": 5718
     },
     {
       "executable": false,
@@ -4827,14 +4917,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_input.go",
-      "sha256": "050a2497d778b7569d718b6beaeb9d2daeca30027c83cf98f05799b15c8255aa",
-      "size": 19760
+      "sha256": "176243bc09006203c6716da8b9e4cd4a018735d9c23bd459078abae324a9a284",
+      "size": 27453
     },
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_integration_test.go",
-      "sha256": "4c4f344de64e728eeab5a9535f03c8b2727840584eb5bbc2f4a88d2298c315af",
-      "size": 60801
+      "sha256": "b69e571d50ddd8e807a689e945ae56163edbaf980206806079ddf291f119be44",
+      "size": 61468
     },
     {
       "executable": false,
@@ -4857,8 +4947,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_store.go",
-      "sha256": "815b46b720ae407e469cfeefbc83214c1f285f20bc22b323e8b67e62230a5273",
-      "size": 17396
+      "sha256": "e45a7e4f3dd431959cb1c7075dfc73d5a5ca5cee385592e312831c761e777ca3",
+      "size": 18278
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_upload_integration_test.go",
+      "sha256": "507b7c8731446be72eca710d461cecf3e19cd44fc84fbd15da9b6956f2d92cd9",
+      "size": 13321
     },
     {
       "executable": false,
@@ -4869,8 +4965,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/collection.go",
-      "sha256": "7e503d2bdd00e3dab8b83d278a243d03bdaf3c326a485499926ff8c454a0bde9",
-      "size": 20396
+      "sha256": "cfa68ceee8113f240a41e52d858046cbe38a88a022c22c45096293128ef10a79",
+      "size": 20905
     },
     {
       "executable": false,
@@ -4934,9 +5030,21 @@
     },
     {
       "executable": false,
+      "path": "internal/store/postgres/cooling_upload.go",
+      "sha256": "a5b8872dc0f5c42c9fe54eccec7da88a01832f7982564b30f3b1e67d3b426f3e",
+      "size": 11020
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/cooling_upload_integration_test.go",
+      "sha256": "0d8a4e94ba24f9b70e7c388b6156fbf1c48f8586fbb6c50ad5d26f7805d4b8b4",
+      "size": 24158
+    },
+    {
+      "executable": false,
       "path": "internal/store/postgres/dcgm_metrics.go",
-      "sha256": "0c72b0bfc53f0a8086b03e46eacb5768209c0427e3910658a3f139940e22a6ce",
-      "size": 7190
+      "sha256": "35ef5dac27708f8a7efb7b65bf00b9e5852ae8325d7ed3a2aaf884b612d947a5",
+      "size": 7253
     },
     {
       "executable": false,
@@ -5361,14 +5469,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload_access_integration_test.go",
-      "sha256": "0e8075eb2c11ae8efe449fe64e53e7d5f0a539b30510b46c4ec090a77b5262d7",
-      "size": 35834
+      "sha256": "6436563debd388a8c1ce90643f47bf114fb64e3d3e3d3a4986087181653592bc",
+      "size": 36756
     },
     {
       "executable": false,
       "path": "internal/store/postgres/prometheus_upload_process_integration_test.go",
-      "sha256": "7ec7081be6da4427290e2d060a04872e7e4665b1982a0f526901561571563719",
-      "size": 5380
+      "sha256": "177ca047d0d8ef8ff57b14657148bc28d4ca5b6875515c007092133e307645dc",
+      "size": 9798
     },
     {
       "executable": false,
@@ -5385,8 +5493,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/public_query.go",
-      "sha256": "f65257df9f0f70e728360170390930827333e01d30c3ec5bb44aa3ea4c4e5408",
-      "size": 15575
+      "sha256": "899bae117dfd47a4d72e82c60118c62b0de25b8748f3b77f619a7551ffcc7b36",
+      "size": 15641
     },
     {
       "executable": false,
@@ -5517,8 +5625,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/retention_integration_test.go",
-      "sha256": "2844a8deab1a26651b6620d52de6684c8e920a0e036ce83031e1bebc0c2bec28",
-      "size": 26530
+      "sha256": "65a063b9fca5293d2aaf194d6275e36938cb271f0624c971f783935a5cd9f392",
+      "size": 26588
     },
     {
       "executable": false,
@@ -7040,6 +7148,18 @@
     },
     {
       "executable": false,
+      "path": "migrations/000083_cooling_upload.down.sql",
+      "sha256": "f66e965544e73c346b2ad37c3857b8d789a903b751bcf50abe50f22b0cd88cb3",
+      "size": 664
+    },
+    {
+      "executable": false,
+      "path": "migrations/000083_cooling_upload.up.sql",
+      "sha256": "f1d29626931dbcef56efefd94ad02e202585ff379f70e2dec2cb339a506af05c",
+      "size": 5739
+    },
+    {
+      "executable": false,
       "path": "next.md",
       "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
       "size": 7098
@@ -7049,6 +7169,12 @@
       "path": "scripts/assessment-grants.sql",
       "sha256": "e0f5c3aecf318bfd81af43eb5f637ba5b69d3b9245993e475724f614df620f71",
       "size": 3536
+    },
+    {
+      "executable": false,
+      "path": "scripts/assessment-upload-grants.sql",
+      "sha256": "35598061d85607bd74bcb30b45dbad6b9a84a1ace0dc10da1d0e37991185bac7",
+      "size": 263
     },
     {
       "executable": true,
@@ -7067,6 +7193,12 @@
       "path": "scripts/check-sdk-sync.sh",
       "sha256": "8bb239a61d261d511e95f76b1696355a19be76b54f83b0ff7ccf94e90f159155",
       "size": 588
+    },
+    {
+      "executable": false,
+      "path": "scripts/cooling-upload-grants.sql",
+      "sha256": "bd5dec9ec330d42e13653a2b310396fb90b9ae6ca47561122486b4200517c04c",
+      "size": 814
     },
     {
       "executable": false,
