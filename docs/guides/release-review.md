@@ -200,11 +200,12 @@ directory or relabel its receipt as release approval.
 
 The [preparation workflow](../../.github/workflows/prepare-collector-release.yml)
 builds the collector and its matching control binary from public source commit
-`f60f05d86fb20ac23230daebef0182d6a247d2fe`. This freezes the shared upload endpoint from
-PR #20 with a refreshed public source inventory. The only change after merged
-commit `1676fe79062b6ac9b423be3d8c0f4c3be2b5781e` in this source snapshot is
-`PUBLIC_SOURCE_MANIFEST.json`; collector and intake code is unchanged.
-The proposed package tag is `v0.1.0-rc.3`. Preparation creates no tag.
+`18295e44784671cb3f02f567ba6751021a49aaf8`. This includes the scoped cooling
+upload support for shadow assessment from PR #23 with a refreshed public source
+inventory. The only change after merged commit
+`65541ba5b35b3373b06d6f3f890913cdfa70a657` in this source snapshot is
+`PUBLIC_SOURCE_MANIFEST.json`; collector and intake code is unchanged from that
+merged commit. The proposed package tag is `v0.1.0-rc.4`. Preparation creates no tag.
 
 It uses Go 1.26.9 and two
 independent offline build caches. Both builds must match the pins in the
