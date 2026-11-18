@@ -150,6 +150,9 @@ func run(ctx context.Context, cfg config.Control, logger *slog.Logger) error {
 	}()
 	defer func() { monitoringCancel(); <-slurmDone }()
 
+	stopAssessment := startAssessment(ctx, cfg.Assessment, logger)
+	defer stopAssessment()
+
 	// Execution is opt-in per collector. With no allow-list the diagnostic
 	// endpoints are never registered, so a control plane that grants nobody
 	// execution exposes no execution surface -- not an authenticated one that

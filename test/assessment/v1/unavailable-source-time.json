@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "config": {"assets":[{"entity_key":"fixture-cluster/GPU/fixture-node/GPU-00000000-0000-0000-0000-000000000001/","gpu_uuid":"GPU-00000000-0000-0000-0000-000000000001","node_id":"fixture-node"}],"bindings":[{"metric":"DCGM_FI_DEV_GPU_TEMP","operation":"prometheus.gpu_temperature.v1","schedule_revision":1,"scope_nodes":[]},{"metric":"DCGM_FI_DEV_POWER_USAGE","operation":"prometheus.gpu_power.v1","schedule_revision":1,"scope_nodes":[]}],"budgets_ms":[0,15000,30000,60000,120000],"category":"gpu_cooling","cluster_id":"fixture-cluster","contract":1,"fallback":{"action":"INVESTIGATE","route":"hardware_investigation"},"implementation":1,"inventory_revision":"fixture-inventory","limits":{"fact_count":10000,"gpu_count":1,"node_count":1,"payload_bytes":8388608,"physical_candidates":16},"policy":{"alignment_seconds":15,"cadence_seconds":15,"coverage_ratio":0.8,"edge_tolerance_seconds":15,"endpoint_min_samples":2,"endpoint_seconds":30,"fresh_seconds":45,"gap_seconds":30,"history_seconds":900,"persistence_drop_c":1,"persistence_samples":3,"persistence_seconds":30,"persistent_c":75,"persistent_confirm_seconds":60,"persistent_entry_samples":3,"persistent_entry_seconds":30,"persistent_recovery_c":70,"power_prefix_seconds":120,"profile":"cooling-experiment-v1","rapid_delta_c":10,"rapid_seconds":300,"rearm_seconds":300,"reference_tolerance_c":2,"settling_samples":3,"settling_seconds":45,"slow_delta_c":5,"slow_seconds":600,"stable_ratio":0.05,"stable_watts":10,"transition_ratio":0.2,"transition_seconds":30,"transition_watts":50,"update_delta_c":5},"routes":{"investigate":"hardware_investigation","monitoring":"monitoring_failure","urgent":"hardware_investigation"},"run_duration_seconds":60,"run_id":"fixture-source-time-unavailable","schema":1,"source_id":"fixture-source"},
+  "start_at": "2026-01-01T00:00:00Z",
+  "provenance": "SOURCE_TIME_SIMULATION",
+  "faults": [],
+  "labels": [{"asset":"fixture-cluster/GPU/fixture-node/GPU-00000000-0000-0000-0000-000000000001/","classification":"UNKNOWN","from":"2026-01-01T00:00:00Z","through":"2026-01-01T00:01:00Z"}],
+  "legacy": [],
+  "expected": [],
+  "facts": [
+
+  ]
+}

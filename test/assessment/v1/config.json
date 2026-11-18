@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "run_id": "fixture-run",
+  "category": "gpu_cooling",
+  "contract": 1,
+  "implementation": 1,
+  "cluster_id": "fixture-cluster",
+  "source_id": "fixture-source",
+  "inventory_revision": "fixture-inventory",
+  "assets": [
+    {
+      "entity_key": "fixture-cluster/GPU/fixture-node/GPU-00000000-0000-0000-0000-000000000001/",
+      "node_id": "fixture-node",
+      "gpu_uuid": "GPU-00000000-0000-0000-0000-000000000001"
+    }
+  ],
+  "bindings": [
+    {
+      "metric": "DCGM_FI_DEV_GPU_TEMP",
+      "operation": "prometheus.gpu_temperature.v1",
+      "schedule_revision": 1,
+      "scope_nodes": []
+    },
+    {
+      "metric": "DCGM_FI_DEV_POWER_USAGE",
+      "operation": "prometheus.gpu_power.v1",
+      "schedule_revision": 1,
+      "scope_nodes": []
+    }
+  ],
+  "policy": {
+    "profile": "cooling-experiment-v1",
+    "cadence_seconds": 15,
+    "history_seconds": 900,
+    "fresh_seconds": 45,
+    "edge_tolerance_seconds": 15,
+    "gap_seconds": 30,
+    "coverage_ratio": 0.8,
+    "endpoint_seconds": 30,
+    "endpoint_min_samples": 2,
+    "alignment_seconds": 15,
+    "rapid_seconds": 300,
+    "rapid_delta_c": 10,
+    "slow_seconds": 600,
+    "slow_delta_c": 5,
+    "persistent_entry_seconds": 30,
+    "persistent_entry_samples": 3,
+    "persistent_c": 75,
+    "power_prefix_seconds": 120,
+    "stable_watts": 10,
+    "stable_ratio": 0.05,
+    "persistence_seconds": 30,
+    "persistence_samples": 3,
+    "persistence_drop_c": 1,
+    "persistent_confirm_seconds": 60,
+    "transition_seconds": 30,
+    "transition_watts": 50,
+    "transition_ratio": 0.2,
+    "settling_seconds": 45,
+    "settling_samples": 3,
+    "reference_tolerance_c": 2,
+    "rearm_seconds": 300,
+    "persistent_recovery_c": 70,
+    "update_delta_c": 5
+  },
+  "budgets_ms": [
+    0,
+    15000,
+    30000,
+    60000,
+    120000
+  ],
+  "routes": {
+    "investigate": "hardware_investigation",
+    "urgent": "hardware_investigation",
+    "monitoring": "monitoring_failure"
+  },
+  "fallback": {
+    "action": "INVESTIGATE",
+    "route": "hardware_investigation"
+  },
+  "run_duration_seconds": 60,
+  "limits": {
+    "gpu_count": 1,
+    "node_count": 1,
+    "physical_candidates": 16,
+    "fact_count": 10000,
+    "payload_bytes": 8388608
+  }
+}

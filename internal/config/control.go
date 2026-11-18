@@ -18,6 +18,7 @@ const (
 )
 
 type Control struct {
+	Assessment            Assessment
 	DatabaseURL           string
 	ListenAddress         string
 	ServerCertificate     string
@@ -123,6 +124,9 @@ func loadControl(uploadOnly bool) (Control, error) {
 	}
 	if cfg.ReadHeaderTimeout <= 0 || cfg.ReadTimeout <= 0 || cfg.WriteTimeout < 31*time.Second || cfg.IdleTimeout <= 0 || cfg.ShutdownTimeout <= 0 {
 		return Control{}, fmt.Errorf("control server timeouts must be positive and write timeout must allow bounded long polling")
+	}
+	if !uploadOnly {
+		cfg.Assessment = LoadAssessment()
 	}
 	return cfg, nil
 }

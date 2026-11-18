@@ -269,6 +269,51 @@
         "investigation"
       ],
       "summary": "Opt-in distinct Slurm attempt failure detection, enrollment, durable incidents/outbox, partial evidence and replay/crash qualification."
+    },
+    {
+      "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "investigation"
+      ],
+      "summary": "Experimental cooling replay, restricted shadow enrollment, exports and qualification limits."
+    },
+    {
+      "path": "cmd/sherlock-assessment/README.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "development"
+      ],
+      "summary": "Assessment configuration validation, offline replay and restricted archive export commands."
+    },
+    {
+      "path": "internal/alertassessment/README.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "development"
+      ],
+      "summary": "Versioned assessment host, bounded evidence, candidate deadlines and category registration."
+    },
+    {
+      "path": "internal/alertassessment/cooling/README.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "development"
+      ],
+      "summary": "GPU cooling entry, corroboration, deadline evaluation and recurrence semantics."
+    },
+    {
+      "path": "test/assessment/v1/README.md",
+      "kind": "reference",
+      "topics": [
+        "monitoring",
+        "fixtures"
+      ],
+      "summary": "Deterministic assessment suite and synthetic unavailable-evidence fixture."
     }
   ]
 }
