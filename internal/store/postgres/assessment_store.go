@@ -6,8 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,6 +20,13 @@ var ErrAssessmentPrivileges = errors.New("assessment database privileges are not
 var ErrAssessmentRunBusy = errors.New("RUN_BUSY")
 var ErrAssessmentCapacity = errors.New("CAPACITY")
 var errAssessmentUnsupportedVersion = errors.New("UNSUPPORTED_VERSION")
+var errAssessmentRunClosed = errors.New("RUN_CLOSED")
+
+const (
+	assessmentNotStarted uint32 = iota
+	assessmentStarted
+	assessmentRetentionOnly
+)
 
 type AssessmentStore struct {
 	pool           *pgxpool.Pool
@@ -27,6 +34,7 @@ type AssessmentStore struct {
 	config         a.Config
 	buildHash      string
 	recoveryOnly   bool
+	lifecycle      atomic.Uint32
 	observeGPU     func(asset string, elapsed time.Duration)
 	failureMu      sync.Mutex
 	pendingFailure *assessmentPendingFailure
@@ -59,7 +67,7 @@ func (s *AssessmentStore) matchRecoveryConfig(ctx context.Context, c a.Config) e
 	var body, descriptor []byte
 	var configHash, descriptorHash string
 	var inputConfigHash *string
-	err := s.pool.QueryRow(ctx, `SELECT config,descriptor,config_hash,descriptor_hash,input_config_hash FROM public.assessment_runs WHERE run_id=$1 AND state<>'CLOSED' AND mode='shadow'`, c.RunID).Scan(&body, &descriptor, &configHash, &descriptorHash, &inputConfigHash)
+	err := s.pool.QueryRow(ctx, `SELECT config,descriptor,config_hash,descriptor_hash,input_config_hash FROM public.assessment_runs WHERE run_id=$1 AND mode='shadow'`, c.RunID).Scan(&body, &descriptor, &configHash, &descriptorHash, &inputConfigHash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errAssessmentUnsupportedVersion
 	}
@@ -257,7 +265,13 @@ func beginAssessmentTx(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) 
 	}
 	return tx, nil
 }
+
+// Start opens assessment work once per store. A matching retained CLOSED run
+// starts retention only.
 func (s *AssessmentStore) Start(ctx context.Context) error {
+	if s.lifecycle.Load() != assessmentNotStarted {
+		return nil
+	}
 	wantHash, err := s.config.Hash()
 	if err != nil {
 		return err
@@ -267,6 +281,10 @@ func (s *AssessmentStore) Start(ctx context.Context) error {
 	const attempts = 3
 	for range attempts {
 		err = s.start(ctx, wantHash)
+		if err == nil {
+			s.lifecycle.CompareAndSwap(assessmentNotStarted, assessmentStarted)
+			return nil
+		}
 		if !retryableAssessmentStart(err) || ctx.Err() != nil {
 			return err
 		}
@@ -320,12 +338,18 @@ func (s *AssessmentStore) start(ctx context.Context, wantHash string) error {
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	var exists bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM assessment_runs WHERE run_id=$1)`, s.config.RunID).Scan(&exists); err != nil {
-		return err
+	err = tx.QueryRow(ctx, `SELECT config,config_hash,descriptor,descriptor_hash,mode FROM assessment_runs WHERE run_id=$1 AND state='CLOSED'`, s.config.RunID).Scan(&pinnedConfig, &hash, &pinnedDescriptor, &descriptorHash, &mode)
+	if err == nil {
+		if mode != "shadow" {
+			return ErrAssessmentRunBusy
+		}
+		if _, err := matchedAssessmentDescriptor(s.config, pinnedConfig, pinnedDescriptor, hash, descriptorHash); err != nil {
+			return err
+		}
+		return s.commitAssessmentRetention(ctx, tx)
 	}
-	if exists {
-		return fmt.Errorf("RUN_CLOSED")
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
 	}
 	if s.recoveryOnly {
 		return errAssessmentUnsupportedVersion
@@ -371,4 +395,14 @@ func (s *AssessmentStore) start(ctx context.Context, wantHash string) error {
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func (s *AssessmentStore) commitAssessmentRetention(ctx context.Context, tx pgx.Tx) error {
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	// Cleanup can remove the run row. This store stays in retention mode
+	// for its remaining lifetime, even when that row no longer exists.
+	s.lifecycle.Store(assessmentRetentionOnly)
+	return nil
 }

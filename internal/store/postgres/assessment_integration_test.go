@@ -811,6 +811,114 @@ func TestAssessmentClosedLargeDatabaseCLIArchive(t *testing.T) {
 	t.Logf("SQL_ARCHIVE canonical_payload_bytes=%d records=%d chunks=%d repeated_report_identical=true artifact_directory=%s", payload, m.RecordCount, len(m.Chunks), root)
 }
 
+func TestAssessmentClosedRestartContinuesRetention(t *testing.T) {
+	f := newAssessmentFixture(t)
+	ctx := context.Background()
+	var now time.Time
+	if err := f.admin.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	at := now.UTC().Add(-8 * 24 * time.Hour)
+	body, err := a.Canonical(assessmentFailureBody{Schema: 1, FactIDs: []string{}, Message: "Retention fixture", From: at.UTC(), Through: at.UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := func(runID string) {
+		t.Helper()
+		f.config.RunID = runID
+		f.seedRun(t, at, "shadow")
+		f.seedEnrollment(t, at)
+		f.exec(t, `INSERT INTO assessment_failures(run_id,id,category,kind,code,scope_key,first_at,last_at,count,body)
+		    SELECT $1,lpad(n::text,64,'0'),$2,'COVERAGE','COVERAGE','fixture-'||n,$3,$3,1,$4 FROM generate_series(1,101) n`, runID, f.config.Category, at, body)
+	}
+	closeRun := func(closedAt time.Time) {
+		t.Helper()
+		f.exec(t, `UPDATE assessment_runs SET state='CLOSED',stopped_at=admission_end_at,stop_reason='DURATION',
+		    closed_at=$2 WHERE run_id=$1`, f.config.RunID, closedAt)
+	}
+	pool := f.restrictedPool(t)
+	start := func(registry *a.Registry) *AssessmentStore {
+		t.Helper()
+		store, err := NewAssessmentStore(ctx, pool, registry, f.config, "retention-fixture")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return store
+	}
+	pass := func(store *AssessmentStore, want int) {
+		t.Helper()
+		if err := store.Refresh(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := store.Cleanup(ctx); err != nil || n != want {
+			t.Fatalf("cleanup removed %d rows, want %d: %v", n, want, err)
+		}
+	}
+
+	seed("retention-unexpired")
+	closeRun(now)
+	pass(start(f.registry), 0)
+	var state string
+	var count int
+	if err := f.admin.QueryRow(ctx, `SELECT state,record_count FROM assessment_runs WHERE run_id=$1`, f.config.RunID).Scan(&state, &count); err != nil || state != "CLOSED" || count != 103 {
+		t.Fatalf("unexpired run state=%s rows=%d: %v", state, count, err)
+	}
+	mismatch := f.config
+	mismatch.RunDurationSeconds++
+	rejected, err := NewAssessmentStore(ctx, pool, f.registry, mismatch, "retention-fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rejected.Start(ctx); !errors.Is(err, ErrAssessmentRunBusy) {
+		t.Fatalf("changed config accepted for retained run: %v", err)
+	}
+
+	const expiredRun = "retention-expired"
+	seed(expiredRun)
+	original := start(f.registry)
+	end := at.Add(time.Duration(f.config.RunDurationSeconds) * time.Second)
+	closeRun(end)
+	restarted := start(f.registry)
+	unavailable, err := a.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollback := start(unavailable)
+
+	f.config.RunID = "retention-backlog"
+	f.seedRun(t, at.Add(time.Hour), "shadow")
+	closeRun(end.Add(time.Hour))
+	f.config.RunID = "retention-active"
+	f.seedRun(t, at, "shadow")
+	f.seedEnrollment(t, at)
+
+	pass(restarted, 100)
+	pass(rollback, 3)
+
+	// Even after another worker deletes the configured run, every started
+	// store remains usable for retention and cannot create a new enrollment.
+	original.noteAssessmentFailure(time.Now(), errors.New("synthetic delayed failure"))
+	for _, store := range []*AssessmentStore{original, restarted, rollback} {
+		if err := store.Refresh(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.admin.QueryRow(ctx, `SELECT count(*) FROM assessment_runs WHERE run_id=$1`, expiredRun).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("assessment run recreated, rows=%d: %v", count, err)
+	}
+	pass(restarted, 1)
+	pass(restarted, 0)
+	if err := f.admin.QueryRow(ctx, `SELECT record_count FROM assessment_runs WHERE run_id=$1 AND state='ACTIVE'`, f.config.RunID).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("active run rows=%d: %v", count, err)
+	}
+}
+
 func TestAssessmentClockUsesDatabaseEpoch(t *testing.T) {
 	sample := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	clock := assessmentDatabaseClock(sample)
@@ -836,7 +944,8 @@ func TestAssessmentEmptyLiveRunClosesAtAdmissionEnd(t *testing.T) {
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-2 * time.Minute)
 	f.seedRun(t, at, "shadow")
 	f.seedEnrollment(t, at)
-	s := &AssessmentStore{pool: f.restrictedPool(t), registry: f.registry, config: f.config}
+	pool := f.restrictedPool(t)
+	s := &AssessmentStore{pool: pool, registry: f.registry, config: f.config}
 	if err := s.Refresh(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -845,8 +954,9 @@ func TestAssessmentEmptyLiveRunClosesAtAdmissionEnd(t *testing.T) {
 	if err := f.admin.QueryRow(ctx, `SELECT state,closed_at>=stopped_at AND stopped_at>=start_at FROM assessment_runs WHERE run_id=$1`, f.config.RunID).Scan(&state, &ordered); err != nil || state != "CLOSED" || !ordered {
 		t.Fatalf("state=%s ordered=%v err=%v", state, ordered, err)
 	}
+	pool.Close()
 	if err := s.Refresh(ctx); err != nil {
-		t.Fatal("closed refresh mutated state", err)
+		t.Fatal("closed run attempted another refresh", err)
 	}
 }
 

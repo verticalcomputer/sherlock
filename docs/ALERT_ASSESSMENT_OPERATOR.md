@@ -53,7 +53,7 @@ A source-authority or acquisition-capacity stop drains retained candidates. The 
 
 Disabling assessment starts no pool or worker and leaves durable state unchanged. Re-enabling matching configuration resumes overdue drain. To finish an experiment normally, allow its configured duration and drain to complete. There is no new administrative stop API. Do not change production source schedules as a substitute for stopping assessment.
 
-Closed evidence is retained for seven days. Cleanup deletes at most 100 rows per pass in dependency order. The down migration locks all assessment tables and refuses any retained data. It is not a data-deletion procedure.
+Closed evidence is retained for seven days. Restarting with the matching configuration of a retained closed run resumes cleanup only. The running worker continues cleanup after the run row is deleted. Use a new run ID for a new experiment. Cleanup deletes at most 100 rows per pass in dependency order. The down migration locks all assessment tables and refuses any retained data. It is not a data-deletion procedure.
 
 ## Qualification boundaries
 

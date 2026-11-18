@@ -81,12 +81,19 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 	var truncated bool
 	var overflow int64
 	err := tx.QueryRow(ctx, `SELECT config,config_hash,descriptor,descriptor_hash,start_at,admission_end_at,closed_at,state,followup_truncated,overflow_count,unknown_from,unknown_through,coverage FROM assessment_runs WHERE run_id=$1 FOR UPDATE`, s.config.RunID).Scan(&config, &configHash, &descriptor, &descriptorHash, &start, &end, &closed, &state, &truncated, &overflow, &unknownFrom, &unknownThrough, &coverage)
+	if errors.Is(err, pgx.ErrNoRows) && s.lifecycle.Load() == assessmentStarted {
+		// A peer may have already closed and pruned this admitted run.
+		return nil, snap, errAssessmentRunClosed
+	}
 	if err != nil {
 		return nil, snap, err
 	}
 	pinned, err := matchedAssessmentDescriptor(s.config, config, descriptor, configHash, descriptorHash)
 	if err != nil {
 		return nil, snap, err
+	}
+	if state == "CLOSED" {
+		return nil, snap, errAssessmentRunClosed
 	}
 	_, _, installedHash, installedErr := s.registry.LookupVersion(s.config.Category, s.config.Implementation)
 	recoverOnly := s.recoveryOnly || installedErr != nil || installedHash != descriptorHash
@@ -140,7 +147,7 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 	}
 	e.Shadow = true
 	e.ObserveGPU = s.observeGPU
-	if recoverOnly && e.State != "CLOSED" {
+	if recoverOnly {
 		e.BeginDrain("UNSUPPORTED_VERSION")
 		historical, selectNow, forced = true, false, "UNSUPPORTED_VERSION"
 	}

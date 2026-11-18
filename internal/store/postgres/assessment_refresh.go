@@ -14,6 +14,9 @@ import (
 // Refresh has one serial pass and a dedicated pool. Writers lock run first,
 // enrollment assets second, then arm budgets. No transaction spans collection.
 func (s *AssessmentStore) Refresh(ctx context.Context) error {
+	if s.lifecycle.Load() == assessmentRetentionOnly {
+		return nil
+	}
 	started := time.Now() // Monotonic elapsed duration only; never a durable clock.
 	pass, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
 	defer cancel()
@@ -30,8 +33,11 @@ func (s *AssessmentStore) Refresh(ctx context.Context) error {
 		_ = s.flushAssessmentFailure(pass)
 		err = s.refreshAssessment(pass, true, "CAPACITY")
 	}
-	if err == nil {
+	if err == nil && s.lifecycle.Load() != assessmentRetentionOnly {
 		err = s.refreshAssessment(pass, false)
+	}
+	if s.lifecycle.Load() == assessmentRetentionOnly {
+		return nil
 	}
 	if err != nil && !errors.Is(ctx.Err(), context.Canceled) {
 		s.noteAssessmentFailure(started, err)
@@ -72,11 +78,11 @@ func (s *AssessmentStore) refreshAssessmentTx(pass context.Context, tx pgx.Tx, d
 	} else {
 		engine, snapshot, err = s.loadEngine(pass, tx, at, dueOnly)
 	}
+	if errors.Is(err, errAssessmentRunClosed) {
+		return s.commitAssessmentRetention(pass, tx)
+	}
 	if err != nil {
 		return err
-	}
-	if engine.State == "CLOSED" {
-		return tx.Commit(pass)
 	}
 	if dueOnly {
 		due := engine.State == "DRAINING" || !at.Before(engine.AdmissionEndAt)
@@ -211,10 +217,10 @@ func (s *AssessmentStore) refreshAssessmentTx(pass context.Context, tx pgx.Tx, d
 		}
 		return ErrAssessmentCapacity
 	}
-	if err = tx.Commit(pass); err != nil {
-		return err
+	if engine.State == "CLOSED" {
+		return s.commitAssessmentRetention(pass, tx)
 	}
-	return nil
+	return tx.Commit(pass)
 }
 
 // Anchor intra-evaluation deadline checks to the database sample and monotonic
@@ -281,12 +287,13 @@ func (s *AssessmentStore) flushAssessmentFailure(ctx context.Context) error {
 	var state string
 	var at, start time.Time
 	var encoded []byte
-	if err = tx.QueryRow(bounded, `SELECT state,start_at,coverage,date_trunc('microseconds',clock_timestamp()) FROM assessment_runs WHERE run_id=$1 FOR UPDATE`, s.config.RunID).Scan(&state, &start, &encoded, &at); err != nil {
-		return err
-	}
-	if state == "CLOSED" {
+	err = tx.QueryRow(bounded, `SELECT state,start_at,coverage,date_trunc('microseconds',clock_timestamp()) FROM assessment_runs WHERE run_id=$1 FOR UPDATE`, s.config.RunID).Scan(&state, &start, &encoded, &at)
+	if (err == nil && state == "CLOSED") || (errors.Is(err, pgx.ErrNoRows) && s.lifecycle.Load() == assessmentStarted) {
 		s.pendingFailure = nil
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	at, start = at.UTC(), start.UTC()
 	from := at.Add(-time.Since(pending.started)).Truncate(time.Microsecond)
