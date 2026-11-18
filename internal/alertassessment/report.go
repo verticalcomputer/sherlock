@@ -1,6 +1,7 @@
 package alertassessment
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -556,7 +557,7 @@ func (e *Engine) ReportWithLegacy(provenance string, labels []Label, legacy []Le
 		if c.Terminal != nil {
 			availability, ok := e.endpointAvailability[c.ID]
 			if !ok {
-				availability = e.temperatureCoverage(c)
+				availability = e.temperatureCoverage(context.Background(), c)
 			}
 			r.HigherTemperatureCoverage[c.ID] = availability
 		}
@@ -571,7 +572,7 @@ func (e *Engine) ReportWithLegacy(provenance string, labels []Label, legacy []Le
 		}
 		change, ok := e.previewComparisons[d.ID]
 		if !ok {
-			change, ok = e.previewChange(d)
+			change, ok = e.previewChange(context.Background(), d)
 		}
 		if ok {
 			r.previewChanges[d.ID] = change
@@ -608,13 +609,13 @@ func (e *Engine) ReportWithLegacy(provenance string, labels []Label, legacy []Le
 	return r, nil
 }
 
-func (e *Engine) previewChange(d Decision) (previewChange, bool) {
+func (e *Engine) previewChange(ctx context.Context, d Decision) (previewChange, bool) {
 	if d.TerminalEndpoint == nil {
 		return previewChange{}, false
 	}
 	var prior *Feature
 	for _, id := range d.Support {
-		f, ok := e.fact(id)
+		f, ok := e.fact(ctx, id)
 		var feature Feature
 		if !ok || f.Kind != "FEATURE" || json.Unmarshal(f.Body, &feature) != nil || feature.FeatureKind != "temperature_endpoint" || feature.Unit != "celsius" || !feature.SourceAt.Before(d.TerminalEndpoint.SourceAt) {
 			continue
@@ -629,14 +630,14 @@ func (e *Engine) previewChange(d Decision) (previewChange, bool) {
 	return previewChange{value: d.TerminalEndpoint.Value - prior.Value, sourceAt: prior.SourceAt}, true
 }
 
-func (e *Engine) endpointConflicts(asset, id string) ([][32]byte, bool) {
-	f, ok := e.fact(id)
+func (e *Engine) endpointConflicts(ctx context.Context, asset, id string) ([][32]byte, bool) {
+	f, ok := e.fact(ctx, id)
 	if !ok {
 		return nil, false
 	}
 	var out [][32]byte
 	for _, sid := range factRefs(f) {
-		measured, ok := e.fact(sid)
+		measured, ok := e.fact(ctx, sid)
 		var sample Sample
 		if !ok || measured.Kind != "SAMPLE" || json.Unmarshal(measured.Body, &sample) != nil {
 			continue
@@ -650,19 +651,19 @@ func (e *Engine) endpointConflicts(asset, id string) ([][32]byte, bool) {
 	return out, len(out) > 0
 }
 
-func (e *Engine) temperatureCoverage(c *Candidate) string {
+func (e *Engine) temperatureCoverage(ctx context.Context, c *Candidate) string {
 	if c.Terminal.Endpoint == nil {
 		return "UNAVAILABLE"
 	}
 	refs, ok := e.endpointConflictIDs[c.ID]
 	if !ok {
-		refs, ok = e.endpointConflicts(c.Asset, c.Terminal.Endpoint.ID)
+		refs, ok = e.endpointConflicts(ctx, c.Asset, c.Terminal.Endpoint.ID)
 	}
 	if !ok {
 		return "UNAVAILABLE"
 	}
 	for _, id := range refs {
-		if f, ok := e.fact(hex.EncodeToString(id[:])); ok && (e.ClosedAt.IsZero() || !f.AvailableAt.After(e.ClosedAt)) {
+		if f, ok := e.fact(ctx, hex.EncodeToString(id[:])); ok && (e.ClosedAt.IsZero() || !f.AvailableAt.After(e.ClosedAt)) {
 			return "UNAVAILABLE"
 		}
 	}
