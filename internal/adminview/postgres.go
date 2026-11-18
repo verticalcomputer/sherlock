@@ -195,10 +195,11 @@ func (store *PostgresStore) loadScheduleFreshness(ctx context.Context, ids []str
 			WHERE r.cluster_id=d.cluster_id AND r.source_id=d.source_id
 			AND r.query_kind=CASE WHEN d.mode='legacy' THEN d.legacy_query_kind ELSE d.operation END
 			AND r.completed_at<=$2
+			AND NOT starts_with(r.run_id,$3)
 			ORDER BY r.completed_at DESC,r.run_id DESC LIMIT 1
 		) latest ON true
 		WHERE d.cluster_id=ANY($1::text[]) AND d.enabled
-		GROUP BY d.cluster_id`, ids, at)
+		GROUP BY d.cluster_id`, ids, at, domain.CoolingUploadRunPrefix)
 	if err != nil {
 		return fmt.Errorf("load schedule freshness: %w", err)
 	}

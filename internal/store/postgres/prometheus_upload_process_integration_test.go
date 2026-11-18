@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -23,12 +24,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
+type coolingProcessFixture struct {
+	profile domain.CoolingUploadProfile
+	pool    *pgxpool.Pool
+}
+
 func exerciseSharedUploadProcess(t *testing.T, ctx context.Context, binary, dsn string, caPEM, caKey []byte,
 	firstID domain.CollectorID, firstSource domain.SourceID, firstCert tls.Certificate, firstPayload []byte,
-	secondID domain.CollectorID, secondSource domain.SourceID, secondCert tls.Certificate, secondPayload []byte) {
+	secondID domain.CollectorID, secondSource domain.SourceID, secondCert tls.Certificate, secondPayload []byte,
+	cooling ...coolingProcessFixture) {
 	t.Helper()
 	root := t.TempDir()
 	block, _ := pem.Decode(caPEM)
@@ -87,6 +95,31 @@ func exerciseSharedUploadProcess(t *testing.T, ctx context.Context, binary, dsn 
 	process.Env = append(process.Env, "SHERLOCK_DATABASE_URL="+dsn, "SHERLOCK_CONTROL_ADDRESS="+address,
 		"SHERLOCK_CONTROL_CERT_FILE="+filepath.Join(root, "server.crt"), "SHERLOCK_CONTROL_KEY_FILE="+filepath.Join(root, "server.key"),
 		"SHERLOCK_COLLECTOR_CA_FILE="+filepath.Join(root, "ca.crt"), "SHERLOCK_PROMETHEUS_UPLOAD_BINDINGS="+string(bindings))
+	var profileHash string
+	if len(cooling) == 1 {
+		body, err := json.Marshal(cooling[0].profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		profilePath := filepath.Join(root, "cooling-profile.json")
+		if err := os.WriteFile(profilePath, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		profileHash = domain.ChecksumSHA256(body).String()
+		// Exercise optional assessment startup failure in the real intake process;
+		// it must leave both upload routes running and must never use the intake DSN.
+		fixtureConfig, err := os.ReadFile("../../../test/assessment/v1/config.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assessmentPath := filepath.Join(root, "assessment.json")
+		if err := os.WriteFile(assessmentPath, fixtureConfig, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		process.Env = append(process.Env, "SHERLOCK_PROMETHEUS_COOLING_PROFILE_FILE="+profilePath,
+			"SHERLOCK_ASSESSMENT_MODE=shadow", "SHERLOCK_ASSESSMENT_CONFIG_FILE="+assessmentPath,
+			"SHERLOCK_ASSESSMENT_DATABASE_URL=postgres://unused@127.0.0.1:1/unavailable?sslmode=disable&connect_timeout=1")
+	}
 	log, err := os.Create(filepath.Join(root, "intake.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +175,71 @@ func exerciseSharedUploadProcess(t *testing.T, ctx context.Context, binary, dsn 
 		status, err := send(upload.client, upload.payload)
 		if err != nil || status != upload.status {
 			t.Fatalf("shared binary upload status=%d want=%d err=%v", status, upload.status, err)
+		}
+	}
+	if len(cooling) == 1 {
+		f := cooling[0]
+		slot := time.Now().UTC().Truncate(domain.CoolingUploadInterval).Add(domain.CoolingUploadInterval)
+		timer := time.NewTimer(time.Until(slot))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			t.Fatal(ctx.Err())
+		case <-timer.C:
+		}
+		asset := f.profile.Assets[0]
+		task := f.profile.Task(domain.QueryGPUTemperature, slot)
+		completed := time.Now().UTC()
+		sourceAt := slot.Add(-time.Second)
+		entity := domain.EntityIdentity{ClusterID: f.profile.ClusterID, Kind: domain.EntityGPU,
+			NodeID: asset.NodeID, PhysicalGPUUUID: asset.GPUUUID}
+		report := domain.CoolingUploadReport{Version: 2, ProfileID: f.profile.ProfileID,
+			ProfileRevision: f.profile.Revision, ProfileHash: profileHash,
+			Result: domain.CollectionResult{Task: task, Status: domain.ResultSucceeded, StartedAt: slot, CompletedAt: completed,
+				Coverage: domain.Coverage{Complete: true, SeriesReturned: 1, BytesRead: 100},
+				Observations: []domain.Observation{{ID: "cooling-process-observation", SchemaVersion: 1,
+					ClusterID: f.profile.ClusterID, SourceID: f.profile.SourceID, Kind: "gpu_temperature",
+					EntityKey: entity.Key(), Metric: "DCGM_FI_DEV_GPU_TEMP", Unit: "celsius", Value: 60,
+					Labels:     domain.SortedLabels(map[string]string{"Hostname": string(asset.NodeID), "UUID": string(asset.GPUUUID)}),
+					ObservedAt: sourceAt, CollectedAt: completed, SourceReference: domain.DCGMSourceReference(task.Query)}}}}
+		payload, err := json.Marshal(report)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, upload := range []struct {
+			client *http.Client
+			want   int
+		}{{first, http.StatusNoContent}, {first, http.StatusNoContent}, {second, http.StatusForbidden}} {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+address+domain.CoolingUploadPath, bytes.NewReader(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Sherlock-Protocol-Version", "2")
+			req.Header.Set("X-Correlation-ID", "cooling-process")
+			response, err := upload.client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+			response.Body.Close()
+			if response.StatusCode != upload.want {
+				t.Fatalf("V2 status=%d want=%d body=%s", response.StatusCode, upload.want, body)
+			}
+		}
+		var receipts int
+		var observed time.Time
+		if err := f.pool.QueryRow(ctx, `SELECT count(*),min(o.observed_at) FROM prometheus_cooling_upload_receipts r
+ JOIN observations o USING(run_id) WHERE r.run_id=$1`, task.RunID).Scan(&receipts, &observed); err != nil || receipts != 1 || !observed.Equal(sourceAt) {
+			t.Fatalf("V2 receipt/sample=%d observed=%s err=%v", receipts, observed, err)
+		}
+		status, err := send(first, firstPayload)
+		if err != nil || status != http.StatusNoContent {
+			t.Fatalf("V1 stopped after V2: status=%d err=%v", status, err)
+		}
+		logBody, _ := os.ReadFile(filepath.Join(root, "intake.log"))
+		if !bytes.Contains(logBody, []byte("control.assessment_disabled")) || !bytes.Contains(logBody, []byte("dedicated database unavailable")) {
+			t.Fatalf("optional assessment startup not observed: %s", logBody)
 		}
 	}
 	if err := process.Process.Signal(os.Interrupt); err != nil {

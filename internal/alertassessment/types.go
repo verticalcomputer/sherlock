@@ -142,6 +142,8 @@ type Provenance struct {
 	ConfigurationRevision *int64 `json:"configuration_revision,omitempty"`
 	WorkID                string `json:"work_id,omitempty"`
 	CollectorID           string `json:"collector_id,omitempty"`
+	UploadProfileID       string `json:"upload_profile_id,omitempty"`
+	UploadProfileHash     string `json:"upload_profile_hash,omitempty"`
 }
 type Sample struct {
 	Metric       string     `json:"metric"`

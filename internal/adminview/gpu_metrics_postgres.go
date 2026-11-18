@@ -235,8 +235,9 @@ func (reader gpuMetricsReader) loadGPUMetricsRuns(ctx context.Context, clusterID
 			source_id, query_kind, run_id, status, scheduled_for, completed_at, coverage_complete, metric_fields
 		FROM collection_runs
 		WHERE cluster_id=$1 AND source_id=ANY($2::text[]) AND query_kind=ANY($3::text[]) AND range_start IS NULL
+		  AND NOT starts_with(run_id,$5)
 		ORDER BY source_id, query_kind, completed_at DESC, run_id DESC
-		LIMIT $4`, clusterID, ids, kinds, GPUMetricsSourceLimit*len(kinds))
+		LIMIT $4`, clusterID, ids, kinds, GPUMetricsSourceLimit*len(kinds), domain.CoolingUploadRunPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("load GPU metric runs: %w", err)
 	}

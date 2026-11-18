@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+
+	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
 type Asset struct {
@@ -13,11 +15,37 @@ type Asset struct {
 	GPUUUID   string `json:"gpu_uuid"`
 }
 type Binding struct {
-	Metric           string   `json:"metric"`
-	Operation        string   `json:"operation"`
-	ScheduleRevision int64    `json:"schedule_revision"`
-	ScopeNodes       []string `json:"scope_nodes"`
+	Metric            string   `json:"metric"`
+	Operation         string   `json:"operation"`
+	ScheduleRevision  int64    `json:"schedule_revision"`
+	ScopeNodes        []string `json:"scope_nodes"`
+	UploadCollectorID string   `json:"upload_collector_id,omitempty"`
+	UploadProfileID   string   `json:"upload_profile_id,omitempty"`
+	UploadProfileHash string   `json:"upload_profile_hash,omitempty"`
 }
+
+func (b *Binding) UnmarshalJSON(data []byte) error {
+	type binding Binding
+	var wire struct {
+		binding
+		CollectorID json.RawMessage `json:"upload_collector_id"`
+		ProfileID   json.RawMessage `json:"upload_profile_id"`
+		ProfileHash json.RawMessage `json:"upload_profile_hash"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.CollectorID) > 0 || len(wire.ProfileID) > 0 || len(wire.ProfileHash) > 0 {
+		if json.Unmarshal(wire.CollectorID, &wire.UploadCollectorID) != nil || json.Unmarshal(wire.ProfileID, &wire.UploadProfileID) != nil ||
+			json.Unmarshal(wire.ProfileHash, &wire.UploadProfileHash) != nil ||
+			!ValidID(wire.UploadCollectorID, 128) || !ValidID(wire.UploadProfileID, 128) || !ValidHash(wire.UploadProfileHash) {
+			return ErrInvalid
+		}
+	}
+	*b = Binding(wire.binding)
+	return nil
+}
+
 type Routes struct {
 	Investigate string `json:"investigate"`
 	Urgent      string `json:"urgent"`
@@ -54,6 +82,10 @@ type Config struct {
 
 	originalInputHash string
 	boundTypedHash    string
+}
+
+func (c Config) usesUpload() bool {
+	return len(c.Bindings) > 0 && c.Bindings[0].UploadProfileID != ""
 }
 
 func ParseConfig(ctx context.Context, data []byte, r *Registry) (Config, error) {
@@ -207,6 +239,19 @@ func (c Config) validateCommon(d *Descriptor) error {
 	for i, b := range c.Bindings {
 		if !ValidID(b.Metric, 128) || d != nil && !slices.ContainsFunc(d.Metrics, func(m Metric) bool { return m.Metric == b.Metric }) || !ValidID(b.Operation, 128) || b.ScheduleRevision < 1 || Set(b.ScopeNodes, 2) != nil || i > 0 && c.Bindings[i-1].Metric >= b.Metric {
 			return ErrInvalid
+		}
+		first := c.Bindings[0]
+		if b.UploadProfileID != first.UploadProfileID || b.UploadProfileHash != first.UploadProfileHash || b.UploadCollectorID != first.UploadCollectorID {
+			return ErrInvalid
+		}
+		if b.UploadProfileID != "" || b.UploadProfileHash != "" || b.UploadCollectorID != "" {
+			operation, ok := domain.ReviewedCollectionOperation(domain.CollectionOperationID(b.Operation))
+			field, cooling := domain.CoolingUploadField(operation.Query)
+			if !ValidID(b.UploadProfileID, 128) || !ValidHash(b.UploadProfileHash) || !ValidID(b.UploadCollectorID, 128) ||
+				!ok || operation.Source != domain.CollectionSourcePrometheus || !cooling || field.Name != b.Metric ||
+				b.ScheduleRevision != first.ScheduleRevision || len(b.ScopeNodes) == 0 || !slices.Equal(b.ScopeNodes, first.ScopeNodes) {
+				return ErrInvalid
+			}
 		}
 		for node := range nodes {
 			if len(b.ScopeNodes) > 0 && !slices.Contains(b.ScopeNodes, node) {

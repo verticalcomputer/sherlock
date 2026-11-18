@@ -125,9 +125,9 @@ func loadControl(uploadOnly bool) (Control, error) {
 	if cfg.ReadHeaderTimeout <= 0 || cfg.ReadTimeout <= 0 || cfg.WriteTimeout < 31*time.Second || cfg.IdleTimeout <= 0 || cfg.ShutdownTimeout <= 0 {
 		return Control{}, fmt.Errorf("control server timeouts must be positive and write timeout must allow bounded long polling")
 	}
-	if !uploadOnly {
-		cfg.Assessment = LoadAssessment()
-	}
+	// Assessment has its own restricted pool and is optional in either runtime.
+	// Upload intake must not start the full control loops just to assess evidence.
+	cfg.Assessment = LoadAssessment()
 	return cfg, nil
 }
 

@@ -26,6 +26,23 @@ func TestLoadControlSafeDefaults(t *testing.T) {
 	}
 }
 
+func TestUploadIntakeLoadsOptionalAssessmentWithoutSigningAuthority(t *testing.T) {
+	setControlRequiredEnv(t)
+	t.Setenv("SHERLOCK_COLLECTOR_CA_KEY_FILE", "")
+	t.Setenv("SHERLOCK_ASSESSMENT_MODE", "shadow")
+	t.Setenv("SHERLOCK_ASSESSMENT_DATABASE_URL", "postgres://restricted.test/assessment")
+	t.Setenv("SHERLOCK_ASSESSMENT_CONFIG_FILE", "/private/assessment.json")
+	cfg, err := LoadPrometheusUploadControl()
+	if err != nil || cfg.Assessment.Mode != "shadow" || cfg.Assessment.Invalid || cfg.CollectorCAPrivateKey != "" {
+		t.Fatalf("upload assessment config=%v err=%v", cfg.Assessment, err)
+	}
+	t.Setenv("SHERLOCK_ASSESSMENT_DATABASE_URL", "")
+	cfg, err = LoadPrometheusUploadControl()
+	if err != nil || !cfg.Assessment.Invalid || cfg.Assessment.DatabaseURL != "" {
+		t.Fatal("optional assessment either inherited intake credentials or stopped intake config")
+	}
+}
+
 func TestLoadControlRequiresAllKeyMaterialPaths(t *testing.T) {
 	setControlRequiredEnv(t)
 	t.Setenv("SHERLOCK_COLLECTOR_CA_KEY_FILE", "")
