@@ -225,7 +225,10 @@ The [collector signer](../../.github/workflows/sign-collector-release.yml)
 runs by manual dispatch from public `main`. This lets the release tag point
 to the source commit before the workflow update. The review record separately binds that source commit and the commit that runs both
 collector workflows. Prepare the artifact again if the workflow commit advances
-before signing. The proposed version tag in preparation does not create a tag.
+before signing. The source is selected by its exact pinned commit and tree;
+workflow execution is verified against `main`. A squash merge can leave the source
+commit outside main ancestry, so retain its reviewed release branch until the
+approved source tag makes that exact commit durably fetchable. The proposed version tag in preparation does not create a tag.
 
 Before authorizing a signing run, review the exact preparation artifact and its
 five digests, including both binary hashes. Establish the
