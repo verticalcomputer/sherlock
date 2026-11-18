@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,15 +30,16 @@ const (
 )
 
 type AssessmentStore struct {
-	pool           *pgxpool.Pool
-	registry       *a.Registry
-	config         a.Config
-	buildHash      string
-	recoveryOnly   bool
-	lifecycle      atomic.Uint32
-	observeGPU     func(asset string, elapsed time.Duration)
-	failureMu      sync.Mutex
-	pendingFailure *assessmentPendingFailure
+	pool              *pgxpool.Pool
+	registry          *a.Registry
+	config            a.Config
+	buildHash         string
+	requireUploadRead bool
+	recoveryOnly      bool
+	lifecycle         atomic.Uint32
+	observeGPU        func(asset string, elapsed time.Duration)
+	failureMu         sync.Mutex
+	pendingFailure    *assessmentPendingFailure
 }
 
 func NewAssessmentStore(ctx context.Context, pool *pgxpool.Pool, registry *a.Registry, c a.Config, buildID string) (*AssessmentStore, error) {
@@ -46,7 +48,12 @@ func NewAssessmentStore(ctx context.Context, pool *pgxpool.Pool, registry *a.Reg
 	}
 	normalized, err := a.NormalizeConfig(ctx, c, registry)
 	sum := sha256.Sum256([]byte(buildID))
-	s := &AssessmentStore{pool: pool, registry: registry, config: normalized, buildHash: hex.EncodeToString(sum[:])}
+	// Normalization can fail before recovery loads a matching stored run. Use
+	// the submitted binding to retain the upload grant requirement in that case.
+	upload := slices.ContainsFunc(c.Bindings, func(b a.Binding) bool {
+		return b.UploadProfileID != "" || b.UploadProfileHash != "" || b.UploadCollectorID != ""
+	})
+	s := &AssessmentStore{pool: pool, registry: registry, config: normalized, buildHash: hex.EncodeToString(sum[:]), requireUploadRead: upload}
 	if preflightErr := s.Preflight(ctx); preflightErr != nil {
 		return nil, preflightErr
 	}
@@ -124,6 +131,7 @@ func matchedAssessmentDescriptor(c a.Config, body, descriptor []byte, configHash
 
 var assessmentTables = []string{"assessment_runs", "assessment_enrollments", "assessment_facts", "assessment_bundles", "assessment_candidates", "assessment_decisions", "assessment_failures"}
 var assessmentReadTables = []string{"desired_schedules", "collection_jobs", "collection_runs", "collection_run_jobs", "collector_work_items", "durable_schedule_occurrences", "durable_schedule_executions", "collector_result_ingestions", "goodput_inventory_revisions", "goodput_inventory_revision_entities", "observations"}
+var assessmentUploadReadTables = []string{"prometheus_cooling_upload_profiles", "prometheus_cooling_upload_receipts"}
 var assessmentReadColumns = map[string][]string{
 	"clusters": {"cluster_id", "removed_at"}, "sources": {"cluster_id", "source_id", "kind"},
 	"gp09_monitor_enrollments": {"policy_id", "cluster_id", "source_id", "entity_key", "rule_id", "rule_version", "operation", "scope_key", "enrollment_revision", "policy", "enabled"},
@@ -154,8 +162,13 @@ func (s *AssessmentStore) Preflight(ctx context.Context) error {
 			tableNames, columnNames = append(tableNames, table), append(columnNames, column)
 		}
 	}
+	allowedReads := slices.Concat(assessmentReadTables, assessmentUploadReadTables)
+	requiredReads := assessmentReadTables
+	if s.requireUploadRead {
+		requiredReads = allowedReads
+	}
 	var allowed bool
-	if err := tx.QueryRow(ctx, assessmentPreflightSQL, assessmentTables, assessmentReadTables, tableNames, columnNames, assessmentRoutines).Scan(&allowed); err != nil {
+	if err := tx.QueryRow(ctx, assessmentPreflightSQL, assessmentTables, allowedReads, tableNames, columnNames, assessmentRoutines, requiredReads).Scan(&allowed); err != nil {
 		return err
 	}
 	if !allowed {
@@ -207,9 +220,9 @@ AND NOT EXISTS (
     SELECT 1 FROM actors a WHERE has_parameter_privilege(a.oid,'session_replication_role','SET')
        OR EXISTS (SELECT 1 FROM pg_parameter_acl p WHERE has_parameter_privilege(a.oid,p.parname::text,'ALTER SYSTEM'))
 )
--- Every expected table, invoker view and permitted column must exist and be readable.
+-- Required tables, the invoker view and permitted columns must exist and be readable.
 AND NOT EXISTS (
-    SELECT 1 FROM unnest($1::text[] || $2::text[] || ARRAY['assessment_edges']) AS expected(relname)
+    SELECT 1 FROM unnest($1::text[] || $6::text[] || ARRAY['assessment_edges']) AS expected(relname)
     WHERE NOT EXISTS (
         SELECT 1 FROM relations r WHERE r.relname=expected.relname
           AND (r.stored OR r.read_all) AND has_table_privilege(r.oid,'SELECT')
@@ -358,10 +371,15 @@ func (s *AssessmentStore) start(ctx context.Context, wantHash string) error {
 	if err = tx.QueryRow(ctx, `SELECT transaction_timestamp()`).Scan(&now); err != nil {
 		return err
 	}
+	end := now.Add(time.Duration(s.config.RunDurationSeconds) * time.Second)
 	for _, asset := range s.config.Assets {
 		for _, binding := range s.config.Bindings {
-			if _, err = validateAssessmentAuthority(ctx, tx, s.config, asset, binding, now); err != nil {
-				return err
+			authority, authorityErr := validateAssessmentAuthority(ctx, tx, s.config, asset, binding, now)
+			if authorityErr != nil {
+				return authorityErr
+			}
+			if p := authority.upload; p != nil && (!now.Before(p.EndsAt) || !p.StartsAt.Before(end)) {
+				return ErrMonitoringAuthority
 			}
 		}
 	}
@@ -381,7 +399,6 @@ func (s *AssessmentStore) start(ctx context.Context, wantHash string) error {
 	if err != nil {
 		return err
 	}
-	end := now.Add(time.Duration(s.config.RunDurationSeconds) * time.Second)
 	if _, err = tx.Exec(ctx, `INSERT INTO assessment_runs(run_id,config,config_hash,input_config_hash,descriptor,descriptor_hash,build_hash,mode,state,start_at,admission_end_at) VALUES($1,$2,$3,$4,$5,$6,$7,'shadow','ACTIVE',$8,$9)`, s.config.RunID, c, wantHash, inputHash, d, dh, s.buildHash, now, end); err != nil {
 		return err
 	}

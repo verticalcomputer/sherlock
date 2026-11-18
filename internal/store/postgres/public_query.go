@@ -239,7 +239,8 @@ func (store *PublicQueryStore) GetHealth(ctx context.Context, clusterID domain.C
 		SELECT run_id, source_id, query_kind, status, scheduled_for, started_at,
 		       completed_at, series_expected, series_returned, bytes_read, coverage_complete
 		FROM collection_runs WHERE cluster_id=$1
-		ORDER BY completed_at DESC, run_id DESC LIMIT 1`, clusterID).Scan(
+		  AND NOT starts_with(run_id,$2)
+		ORDER BY completed_at DESC, run_id DESC LIMIT 1`, clusterID, domain.CoolingUploadRunPrefix).Scan(
 		&run.RunID, &run.SourceID, &run.Query, &run.Status, &run.ScheduledFor,
 		&run.StartedAt, &run.CompletedAt, &run.Coverage.SeriesExpected, &run.Coverage.SeriesReturned,
 		&run.Coverage.BytesRead, &run.Coverage.Complete)

@@ -52,15 +52,22 @@ func validProvenance(p Provenance) bool {
 	if p.ScheduleRevision <= 0 {
 		return false
 	}
+	digest, reserved := strings.CutPrefix(p.CollectionRunID, domain.CoolingUploadRunPrefix)
+	if reserved != (p.Mode == "upload") || reserved && !ValidHash(digest) {
+		return false
+	}
 	legacy := p.JobID != "" || p.ConfigurationRevision != nil
 	durable := p.WorkID != "" || p.CollectorID != ""
+	upload := p.UploadProfileID != "" || p.UploadProfileHash != ""
 	switch p.Mode {
 	case "legacy":
-		return !durable && ValidID(p.JobID, 128) && p.ConfigurationRevision != nil && *p.ConfigurationRevision >= 0
+		return !upload && !durable && ValidID(p.JobID, 128) && p.ConfigurationRevision != nil && *p.ConfigurationRevision >= 0
 	case "durable":
-		return !legacy && ValidID(p.WorkID, 128) && ValidID(p.CollectorID, 128)
+		return !upload && !legacy && ValidID(p.WorkID, 128) && ValidID(p.CollectorID, 128)
 	case "fixture":
-		return !legacy && !durable
+		return !upload && !legacy && !durable
+	case "upload":
+		return !legacy && p.WorkID == "" && ValidID(p.CollectorID, 128) && ValidID(p.UploadProfileID, 128) && ValidHash(p.UploadProfileHash)
 	default:
 		return false
 	}
@@ -119,6 +126,8 @@ func encodeSampleBody(s Sample) ([]byte, error) {
 		Operation             string `json:"operation"`
 		ScheduleRevision      int64  `json:"schedule_revision"`
 		SourceRecord          string `json:"source_record"`
+		UploadProfileHash     string `json:"upload_profile_hash,omitempty"`
+		UploadProfileID       string `json:"upload_profile_id,omitempty"`
 		WorkID                string `json:"work_id,omitempty"`
 	}
 	if s.Value == 0 {
@@ -140,6 +149,7 @@ func encodeSampleBody(s Sample) ([]byte, error) {
 			CollectionRunID: p.CollectionRunID, CollectorID: p.CollectorID, ConfigurationRevision: p.ConfigurationRevision,
 			InventoryRevision: p.InventoryRevision, JobID: p.JobID, Mode: p.Mode, Operation: p.Operation,
 			ScheduleRevision: p.ScheduleRevision, SourceRecord: p.SourceRecord, WorkID: p.WorkID,
+			UploadProfileID: p.UploadProfileID, UploadProfileHash: p.UploadProfileHash,
 		},
 		SourceAt: s.SourceAt, SourceRecord: s.SourceRecord, Unit: s.Unit, Value: s.Value,
 	})

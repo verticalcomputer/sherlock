@@ -35,7 +35,14 @@ type assessmentFixture struct {
 	dsn        string
 }
 
+const assessmentV1Migration = "000082_alert_assessment.up.sql"
+
 func newAssessmentFixture(t *testing.T) *assessmentFixture {
+	t.Helper()
+	return newAssessmentFixtureThrough(t, "")
+}
+
+func newAssessmentFixtureThrough(t *testing.T, lastMigration string) *assessmentFixture {
 	t.Helper()
 	dsn := os.Getenv("SHERLOCK_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -70,6 +77,9 @@ func newAssessmentFixture(t *testing.T) *assessmentFixture {
 	}
 	sort.Strings(paths)
 	for _, path := range paths {
+		if lastMigration != "" && filepath.Base(path) > lastMigration {
+			break
+		}
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -226,14 +236,18 @@ func TestAssessmentEffectivePrivileges(t *testing.T) {
 	if _, err := pool.Exec(ctx, `SELECT cluster_id,removed_at FROM clusters LIMIT 1`); err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`SELECT * FROM clusters LIMIT 1`, `UPDATE sources SET kind=kind`, `SELECT * FROM gp09_alert_outbox LIMIT 1`} {
+	for _, sql := range []string{`SELECT * FROM clusters LIMIT 1`, `UPDATE sources SET kind=kind`, `SELECT * FROM gp09_alert_outbox LIMIT 1`, `SELECT * FROM public.prometheus_cooling_upload_receipts LIMIT 1`} {
 		if _, err := pool.Exec(ctx, sql); err == nil {
 			t.Fatalf("forbidden access accepted: %s", sql)
 		}
 	}
-	f.exec(t, "GRANT UPDATE(kind) ON sources TO "+pgx.Identifier{f.role}.Sanitize())
-	if err := store.Preflight(ctx); err == nil {
-		t.Fatal("inherited extra privilege admitted")
+	role := pgx.Identifier{f.role}.Sanitize()
+	for _, privilege := range []string{"UPDATE(kind) ON sources", "UPDATE(received_at) ON public.prometheus_cooling_upload_receipts"} {
+		f.exec(t, "GRANT "+privilege+" TO "+role)
+		if err := store.Preflight(ctx); !errors.Is(err, ErrAssessmentPrivileges) {
+			t.Fatalf("forbidden assessment privilege %s returned %v", privilege, err)
+		}
+		f.exec(t, "REVOKE "+privilege+" FROM "+role)
 	}
 }
 func TestAssessmentExportClosedAge(t *testing.T) {
@@ -304,7 +318,7 @@ func (f *assessmentFixture) seedSource(t *testing.T, warm bool) {
 	}
 }
 func TestAssessmentShadowRefreshAndRestart(t *testing.T) {
-	f := newAssessmentFixture(t)
+	f := newAssessmentFixtureThrough(t, assessmentV1Migration)
 	f.seedSource(t, true)
 	pool := f.restrictedPool(t)
 	ctx := context.Background()
@@ -812,7 +826,7 @@ func TestAssessmentClosedLargeDatabaseCLIArchive(t *testing.T) {
 }
 
 func TestAssessmentClosedRestartContinuesRetention(t *testing.T) {
-	f := newAssessmentFixture(t)
+	f := newAssessmentFixtureThrough(t, assessmentV1Migration)
 	ctx := context.Background()
 	var now time.Time
 	if err := f.admin.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {

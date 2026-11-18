@@ -135,10 +135,10 @@ func loadGPUHealthFacts(ctx context.Context, queryer gpuReadQueryer, clusterID s
  FROM collection_runs r JOIN sources s ON s.source_id=r.source_id AND s.cluster_id=r.cluster_id
  LEFT JOIN collection_run_jobs j ON j.run_id=r.run_id
  LEFT JOIN collector_work_items w ON w.run_id=r.run_id
- WHERE r.cluster_id=$1 AND s.kind='prometheus' AND r.range_start IS NULL
+ WHERE r.cluster_id=$1 AND s.kind='prometheus' AND r.range_start IS NULL AND NOT starts_with(r.run_id,$2)
  ), ranked AS (SELECT *,row_number() OVER(PARTITION BY source_id,query_kind,nodes,finite ORDER BY completed_at DESC,run_id DESC) AS rank FROM scoped)
  SELECT run_id,source_id,query_kind,completed_at,status,coverage_complete,metric_fields,nodes,finite
- FROM ranked WHERE rank=1 ORDER BY source_id,query_kind,nodes LIMIT 4097`, clusterID)
+ FROM ranked WHERE rank=1 ORDER BY source_id,query_kind,nodes LIMIT 4097`, clusterID, domain.CoolingUploadRunPrefix)
 	if err != nil {
 		return gpuHealthFacts{}, fmt.Errorf("read scoped GPU health attempts: %w", err)
 	}

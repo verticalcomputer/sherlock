@@ -99,6 +99,60 @@ func collectionResultJobID(ctx context.Context, tx pgx.Tx, task domain.Collectio
 // caller's transaction. The source event reflects the chosen source update.
 func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, jobID *string,
 	updateSource func(context.Context, pgx.Tx, domain.CollectionResult, bool) error) (bool, error) {
+	inserted, err := persistCollectionResultRowsTx(ctx, tx, result, jobID, true)
+	if err != nil || !inserted {
+		return inserted, err
+	}
+	if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
+		return false, err
+	}
+
+	if envelope, present, evidenceErr := domain.CollectionEvidenceForCollection(result); evidenceErr != nil {
+		return false, evidenceErr
+	} else if present {
+		created, insertErr := insertEvidenceEnvelope(ctx, tx, envelope)
+		if insertErr != nil {
+			return false, insertErr
+		}
+		if !created {
+			return false, fmt.Errorf("collection evidence %s conflicts with a distinct collection run", envelope.ID())
+		}
+	}
+
+	if err := updateSource(ctx, tx, result, sourceResponded(result)); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO collection_events (run_id, event_type) VALUES ($1, 'collection.completed')`, result.Task.RunID); err != nil {
+		return false, fmt.Errorf("insert collection event for run %s: %w", result.Task.RunID, err)
+	}
+	if _, err := events.AppendTx(ctx, tx, result.Task.ClusterID, events.CollectionUpdatedV1{
+		RunID: result.Task.RunID, SourceID: result.Task.SourceID, Status: result.Status,
+		CompletedAt: result.CompletedAt, CoverageComplete: result.Coverage.Complete,
+	}); err != nil {
+		return false, fmt.Errorf("append durable collection event for run %s: %w", result.Task.RunID, err)
+	}
+	var availability events.SourceAvailability
+	var lastAttempt time.Time
+	var lastSuccess *time.Time
+	var lastFailure *domain.FailureCode
+	if err := tx.QueryRow(ctx, `
+		SELECT availability, last_attempt_at, last_success_at, last_failure_code
+		FROM sources WHERE source_id=$1 AND cluster_id=$2`, result.Task.SourceID, result.Task.ClusterID).
+		Scan(&availability, &lastAttempt, &lastSuccess, &lastFailure); err != nil {
+		return false, fmt.Errorf("read updated source %s for durable event: %w", result.Task.SourceID, err)
+	}
+	if _, err := events.AppendTx(ctx, tx, result.Task.ClusterID, events.SourceUpdatedV1{
+		SourceID: result.Task.SourceID, Availability: availability, LastAttemptAt: lastAttempt,
+		LastSuccessAt: lastSuccess, LastFailureCode: lastFailure,
+	}); err != nil {
+		return false, fmt.Errorf("append durable source event for source %s: %w", result.Task.SourceID, err)
+	}
+	return true, nil
+}
+
+// persistCollectionResultRowsTx stores the base run, failure and observation
+// rows. Only collection paths that publish fleet state write projections.
+func persistCollectionResultRowsTx(ctx context.Context, tx pgx.Tx, result domain.CollectionResult, jobID *string, publishProjections bool) (bool, error) {
 	metricFields := result.Coverage.MetricFields
 	if metricFields == nil {
 		metricFields = []domain.DCGMFieldEvidence{}
@@ -157,6 +211,9 @@ func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.Col
 				observation.CollectedAt.UTC(), observation.SourceReference, fingerprint[:], semantics); err != nil {
 				return false, fmt.Errorf("insert observation %s: %w", observation.ID, err)
 			}
+			if !publishProjections {
+				continue
+			}
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO current_projections (
 					cluster_id, source_id, entity_key, metric, observation_id, observed_at, last_success_at, updated_at
@@ -172,50 +229,6 @@ func persistCollectionResultTx(ctx context.Context, tx pgx.Tx, result domain.Col
 				return false, fmt.Errorf("update current projection for observation %s: %w", observation.ID, err)
 			}
 		}
-	}
-	if err := recordTargetInventoryTx(ctx, tx, result); err != nil {
-		return false, err
-	}
-
-	if envelope, present, evidenceErr := domain.CollectionEvidenceForCollection(result); evidenceErr != nil {
-		return false, evidenceErr
-	} else if present {
-		created, insertErr := insertEvidenceEnvelope(ctx, tx, envelope)
-		if insertErr != nil {
-			return false, insertErr
-		}
-		if !created {
-			return false, fmt.Errorf("collection evidence %s conflicts with a distinct collection run", envelope.ID())
-		}
-	}
-
-	if err := updateSource(ctx, tx, result, sourceResponded(result)); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO collection_events (run_id, event_type) VALUES ($1, 'collection.completed')`, result.Task.RunID); err != nil {
-		return false, fmt.Errorf("insert collection event for run %s: %w", result.Task.RunID, err)
-	}
-	if _, err := events.AppendTx(ctx, tx, result.Task.ClusterID, events.CollectionUpdatedV1{
-		RunID: result.Task.RunID, SourceID: result.Task.SourceID, Status: result.Status,
-		CompletedAt: result.CompletedAt, CoverageComplete: result.Coverage.Complete,
-	}); err != nil {
-		return false, fmt.Errorf("append durable collection event for run %s: %w", result.Task.RunID, err)
-	}
-	var availability events.SourceAvailability
-	var lastAttempt time.Time
-	var lastSuccess *time.Time
-	var lastFailure *domain.FailureCode
-	if err := tx.QueryRow(ctx, `
-		SELECT availability, last_attempt_at, last_success_at, last_failure_code
-		FROM sources WHERE source_id=$1 AND cluster_id=$2`, result.Task.SourceID, result.Task.ClusterID).
-		Scan(&availability, &lastAttempt, &lastSuccess, &lastFailure); err != nil {
-		return false, fmt.Errorf("read updated source %s for durable event: %w", result.Task.SourceID, err)
-	}
-	if _, err := events.AppendTx(ctx, tx, result.Task.ClusterID, events.SourceUpdatedV1{
-		SourceID: result.Task.SourceID, Availability: availability, LastAttemptAt: lastAttempt,
-		LastSuccessAt: lastSuccess, LastFailureCode: lastFailure,
-	}); err != nil {
-		return false, fmt.Errorf("append durable source event for source %s: %w", result.Task.SourceID, err)
 	}
 	return true, nil
 }

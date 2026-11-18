@@ -1102,6 +1102,9 @@ func (e *Engine) admit(at time.Time, facts []Fact) ([]Fact, error) {
 		if err := ValidateFact(e.Config.Category, f, closure); err != nil {
 			return nil, err
 		}
+		if f.Kind == "PROVENANCE" && !e.provenanceFactAuthorized(f, closure) {
+			return nil, ErrInvalid
+		}
 	}
 	var addedBytes int64
 	if !e.Shadow && !e.archiveInput {
@@ -1221,17 +1224,40 @@ func (e *Engine) inlinePayloadBytes() int64 {
 }
 
 func (e *Engine) sampleAuthorized(s Sample) bool {
+	if s.SourceRecord != s.Provenance.SourceRecord || !e.provenanceAuthorized(s.Metric, s.Provenance) {
+		return false
+	}
+	return slices.ContainsFunc(e.descriptor.Metrics, func(m Metric) bool {
+		return m.Metric == s.Metric && m.Unit == s.Unit
+	})
+}
+
+func (e *Engine) provenanceAuthorized(metric string, p Provenance) bool {
+	if e.Config.InventoryRevision != p.InventoryRevision {
+		return false
+	}
 	for _, b := range e.Config.Bindings {
-		if b.Metric != s.Metric || b.Operation != s.Provenance.Operation || b.ScheduleRevision != s.Provenance.ScheduleRevision {
+		if b.Metric != metric || b.Operation != p.Operation || b.ScheduleRevision != p.ScheduleRevision {
 			continue
 		}
-		for _, m := range e.descriptor.Metrics {
-			if m.Metric == s.Metric && m.Unit == s.Unit && s.SourceRecord == s.Provenance.SourceRecord && e.Config.InventoryRevision == s.Provenance.InventoryRevision {
-				return true
-			}
+		if b.UploadProfileID == "" {
+			return p.Mode != "upload"
 		}
+		return p.Mode == "upload" && b.UploadProfileID == p.UploadProfileID && b.UploadProfileHash == p.UploadProfileHash && b.UploadCollectorID == p.CollectorID
 	}
 	return false
+}
+
+func (e *Engine) provenanceFactAuthorized(f Fact, index map[string]Fact) bool {
+	var p ProvenanceFact
+	if json.Unmarshal(f.Body, &p) != nil {
+		return false
+	}
+	if p.Provenance.Mode != "upload" && !e.Config.usesUpload() {
+		return true
+	}
+	var s Sample
+	return json.Unmarshal(index[p.SampleID].Body, &s) == nil && s.Provenance.CollectorID == p.Provenance.CollectorID && e.provenanceAuthorized(s.Metric, p.Provenance)
 }
 
 func (e *Engine) qualifiedTelemetry(en *Enrollment, cutoff time.Time, priorSequence int64) {
@@ -2072,6 +2098,9 @@ func validateSuite(s Suite, registry *Registry) error {
 	}
 	if err := s.Config.Validate(context.Background(), registry); err != nil {
 		return err
+	}
+	if s.Config.usesUpload() && s.Provenance != "OBSERVED_AVAILABILITY" {
+		return ErrInvalid
 	}
 	if len(s.Facts) > 200000 || len(s.Labels) > 200000 || len(s.Legacy) > 200000 || len(s.Faults) > 200000 || len(s.Expected) > 200000 {
 		return ErrInvalid
@@ -3148,6 +3177,9 @@ func ReplayArchiveWithEvidence(ctx context.Context, dir string, registry *Regist
 		return result, ErrInvalid
 	}
 	c = normalized
+	if c.usesUpload() && reader.manifest.Provenance != "OBSERVED_AVAILABILITY" {
+		return result, ErrInvalid
+	}
 	configHash, err := c.Hash()
 	if err != nil || reader.run.PayloadBytes > c.Limits.PayloadBytes || reader.run.FactCount > c.Limits.FactCount || reader.run.PhysicalCount > c.Limits.PhysicalCandidates || configHash != reader.run.ConfigHash || c.RunID != reader.run.RunID || !reader.run.AdmissionEndAt.Equal(reader.run.StartAt.Add(time.Duration(c.RunDurationSeconds)*time.Second)) {
 		return result, ErrInvalid
@@ -3419,6 +3451,9 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 				if json.Unmarshal(f.Body, &s) != nil || !e.sampleAuthorized(s) {
 					return ErrInvalid
 				}
+			}
+			if f.Kind == "PROVENANCE" && !e.provenanceFactAuthorized(f, index) {
+				return ErrInvalid
 			}
 			if stickyQualification(f) {
 				assetIndex := slices.IndexFunc(e.Config.Assets, func(asset Asset) bool { return asset.EntityKey == f.Asset })

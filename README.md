@@ -53,7 +53,7 @@ An explicitly empty or malformed binding list prevents startup. Binding changes
 take effect on intake restart. The shared mode uses the existing tables and
 intake privileges.
 
-The intake serves only `POST /collector/v1/prometheus/reports`. It uses the
+By default, intake serves only `POST /collector/v1/prometheus/reports`. It uses the
 existing collector CA certificate to verify identities and checks coverage
 against the expected GPU inventory in PostgreSQL. The intake accepts a
 server certificate and key, and rejects collector CA signing keys and
@@ -70,6 +70,13 @@ GRANT SELECT (cluster_id, source_id, target_kind, target_id, node_id, last_obser
       UPDATE (node_id, last_observed_at)
 ON public.collection_target_inventory TO sherlock_prometheus_upload;
 ```
+
+A separately configured [cooling upload profile](docs/ALERT_ASSESSMENT_OPERATOR.md#optional-cooling-uploads)
+adds bounded 15-second temperature/power collection for at most eight GPUs on two
+nodes, verified receipt provenance, and optional shadow assessment in the intake.
+It preserves V1 uploads and does not start full-control monitoring or send
+hardware-team notifications. Client rollout and live qualification remain
+separate steps.
 
 ## Build and check
 

@@ -113,11 +113,12 @@ func (s *CollectionStore) EnrollDiscoveredDCGM(ctx context.Context, run domain.R
 	}
 	var fieldsJSON []byte
 	err = tx.QueryRow(ctx, `SELECT metric_fields FROM collection_runs WHERE run_id=$1 AND cluster_id=$2 AND source_id=$3 AND query_kind=$4
+ AND NOT starts_with(run_id,$5)
  AND status IN ('SUCCEEDED','PARTIAL') AND range_start IS NULL
  AND completed_at BETWEEN clock_timestamp()-interval '2 minutes' AND clock_timestamp()
  AND scheduled_for BETWEEN clock_timestamp()-interval '2 minutes' AND clock_timestamp()
  AND EXISTS(SELECT 1 FROM observations o WHERE o.run_id=collection_runs.run_id
- AND o.observed_at BETWEEN clock_timestamp()-interval '2 minutes' AND clock_timestamp()+interval '1 second')`, run, seed.ClusterID, seed.SourceID, op.Query).Scan(&fieldsJSON)
+ AND o.observed_at BETWEEN clock_timestamp()-interval '2 minutes' AND clock_timestamp()+interval '1 second')`, run, seed.ClusterID, seed.SourceID, op.Query, domain.CoolingUploadRunPrefix).Scan(&fieldsJSON)
 	if err == pgx.ErrNoRows {
 		return false, tx.Commit(ctx)
 	}

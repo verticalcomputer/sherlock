@@ -107,6 +107,7 @@ func TestRetentionForeignKeyGraph(t *testing.T) {
 		"collection_runs:collection_events:a", "collection_runs:collection_failures:c",
 		"collection_runs:collector_result_ingestions:a", "collection_runs:collector_typed_result_ingestions:a",
 		"collection_runs:evidence_envelopes:n", "collection_runs:observations:a",
+		"collection_runs:prometheus_cooling_upload_receipts:c",
 		"observations:current_projections:a", "observations:goodput_metric_nodes:a",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

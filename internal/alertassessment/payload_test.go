@@ -109,6 +109,9 @@ func TestAssessmentGoldenConfig(t *testing.T) {
 	if h != "c615bf1d75283522a3a06a70c54ede2d4c036bcf49b12a08e4bf27711d6ef4da" {
 		t.Fatal(h)
 	}
+	if input, err := c.InputConfigHash(); err != nil || input != "8d4f56e2dfa17757141acc106c83034cd3dca512d215486014a24a00f7e8b0ff" {
+		t.Fatalf("V1 config input hash %s: %v", input, err)
+	}
 	p, e := a.NewPayload(c.Category, "policy", 1, cooling.DefaultPolicy())
 	if e != nil {
 		t.Fatal(e)

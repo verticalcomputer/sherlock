@@ -600,6 +600,17 @@ func testPrometheusUploadThroughAccess(t *testing.T, shared bool) {
 		}
 		exerciseSharedUploadProcess(t, ctx, binary, uploadPool.Config().ConnString(), caPEM, caKey,
 			collector, source, clientCert, primaryPayload, secondCollector, secondSource, secondCert, secondaryPayload)
+		// A scoped V2 profile coexists with both V1 collector bindings in the real
+		// upload-only process. An unavailable optional assessment DB must not
+		// stop either intake path or widen the V2 collector's scope.
+		profileStart := time.Now().UTC().Truncate(domain.CoolingUploadInterval)
+		profile := domain.CoolingUploadProfile{Version: 2, ProfileID: "process-" + suffix, Revision: 1,
+			CollectorID: collector, ClusterID: cluster, SourceID: source, InventoryRevision: "access-revision-" + suffix,
+			StartsAt: profileStart, EndsAt: profileStart.Add(5 * time.Minute),
+			Assets: []domain.CoolingUploadAsset{{NodeID: "fixture-comp001", GPUUUID: "GPU-001-0"}}}
+		exerciseSharedUploadProcess(t, ctx, binary, uploadPool.Config().ConnString(), caPEM, caKey,
+			collector, source, clientCert, primaryPayload, secondCollector, secondSource, secondCert, secondaryPayload,
+			coolingProcessFixture{profile: profile, pool: pool})
 		send(client, domain.PrometheusUploadPath, "", secondaryPayload, http.StatusBadRequest)
 		send(secondClient, domain.PrometheusUploadPath, "", primaryPayload, http.StatusBadRequest)
 		foreignSource := makeReport(cluster, source+"-unbound", entities, domain.QueryGPUUtilization, slot)

@@ -10,21 +10,32 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
+	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
 // Assessment uses an ordinary snapshot. It never acquires monitoring's source
 // row/advisory locks or claims authority extending beyond that snapshot.
-func validateAssessmentAuthority(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, at time.Time) (monitoringAuthority, error) {
+type assessmentAuthority struct {
+	monitoringAuthority
+	upload *domain.CoolingUploadProfile
+}
+
+func validateAssessmentAuthority(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, at time.Time) (assessmentAuthority, error) {
 	op, ok := domain.ReviewedCollectionOperation(domain.CollectionOperationID(b.Operation))
 	if !ok || op.Source != domain.CollectionSourcePrometheus {
-		return monitoringAuthority{}, ErrMonitoringAuthority
+		return assessmentAuthority{}, ErrMonitoringAuthority
 	}
 	if !slices.ContainsFunc(domain.DCGMFields(op.Query), func(field domain.DCGMField) bool { return field.Name == b.Metric }) &&
 		!(op.Query == domain.QueryGPUUtilization && b.Metric == "DCGM_FI_DEV_GPU_UTIL") {
-		return monitoringAuthority{}, ErrMonitoringAuthority
+		return assessmentAuthority{}, ErrMonitoringAuthority
 	}
-	authority := monitoringAuthority{query: op.Query}
+	authority := assessmentAuthority{monitoringAuthority: monitoringAuthority{query: op.Query}}
+	if b.UploadProfileID != "" {
+		profile, err := loadAssessmentUploadProfile(ctx, tx, c, asset, b, op.Query, at)
+		authority.upload = &profile
+		return authority, err
+	}
 	var kind string
 	var removed *time.Time
 	var enabled bool
@@ -81,6 +92,56 @@ func validateAssessmentAuthority(ctx context.Context, tx pgx.Tx, c a.Config, ass
 	}
 	return authority, nil
 }
+
+func loadAssessmentUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, at time.Time) (domain.CoolingUploadProfile, error) {
+	var profile domain.CoolingUploadProfile
+	if field, ok := domain.CoolingUploadField(query); !ok || field.Name != b.Metric {
+		return profile, ErrMonitoringAuthority
+	}
+	var body []byte
+	var collector domain.CollectorID
+	var starts, ends time.Time
+	err := tx.QueryRow(ctx, `SELECT p.profile,p.collector_id,p.starts_at,p.ends_at
+ FROM public.prometheus_cooling_upload_profiles p
+ JOIN sources s ON s.cluster_id=p.cluster_id AND s.source_id=p.source_id
+ JOIN clusters k ON k.cluster_id=p.cluster_id
+ WHERE p.profile_id=$1 AND p.revision=$2 AND p.profile_hash=$3 AND p.cluster_id=$4 AND p.source_id=$5
+ AND p.inventory_revision=$6 AND p.registered_at<=$7 AND p.revoked_at IS NULL
+ AND s.kind='prometheus' AND k.removed_at IS NULL`, b.UploadProfileID, b.ScheduleRevision, b.UploadProfileHash, c.ClusterID, c.SourceID, c.InventoryRevision, at).Scan(&body, &collector, &starts, &ends)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return profile, ErrMonitoringAuthority
+	}
+	if err != nil {
+		return profile, err
+	}
+	if a.DecodeStrict(body, &profile, 16<<10) != nil || profile.Validate() != nil ||
+		profile.ProfileID != b.UploadProfileID || profile.Revision != b.ScheduleRevision || profile.CollectorID != collector || string(collector) != b.UploadCollectorID ||
+		string(profile.ClusterID) != c.ClusterID || string(profile.SourceID) != c.SourceID || profile.InventoryRevision != c.InventoryRevision ||
+		!profile.StartsAt.Equal(starts) || !profile.EndsAt.Equal(ends) {
+		return profile, ErrMonitoringAuthority
+	}
+	nodes := make([]string, 0, len(profile.Assets))
+	for _, scoped := range profile.Assets {
+		nodes = append(nodes, string(scoped.NodeID))
+	}
+	if !slices.Equal(slices.Compact(nodes), b.ScopeNodes) || !slices.Contains(profile.Assets, domain.CoolingUploadAsset{NodeID: domain.StableNodeID(asset.NodeID), GPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID)}) {
+		return profile, ErrMonitoringAuthority
+	}
+	var current string
+	var sourceAt time.Time
+	err = tx.QueryRow(ctx, `SELECT revision_id,source_at FROM goodput_inventory_revisions WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=$3 AND observed_at<=$3 ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1`, c.ClusterID, c.SourceID, at).Scan(&current, &sourceAt)
+	if err != nil {
+		return profile, err
+	}
+	if current != c.InventoryRevision || sourceAt.After(at) {
+		return profile, ErrMonitoringAuthority
+	}
+	err = requireCoolingUploadAssets(ctx, tx, profile)
+	if errors.Is(err, collectorcontrol.ErrCoolingUploadRejected) {
+		err = ErrMonitoringAuthority
+	}
+	return profile, err
+}
 func assessmentCoverage(c a.Config, asset a.Asset, metric, code, record string, from, through, at time.Time) (a.Fact, error) {
 	return a.NewFact(c.Category, c.RunID, asset.EntityKey, "COVERAGE", at, a.Coverage{Metric: metric, From: from, Through: through, Code: code, SourceRecord: record})
 }
@@ -114,6 +175,31 @@ LEFT JOIN LATERAL (
  ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1
 ) i ON true ORDER BY r.completed_at DESC,r.run_id DESC`
 
+// Both clocks must be within the acquisition cutoff. Keeping collector
+// completion separate lets assessment preserve the original sensor timeline.
+const assessmentUploadAttemptSQL = `
+WITH attempts AS MATERIALIZED (
+ SELECT r.run_id,r.scheduled_for,r.completed_at,r.status,r.coverage_complete,r.metric_fields,u.received_at
+ FROM public.prometheus_cooling_upload_receipts u
+ JOIN public.prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision
+   AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
+ JOIN collection_runs r ON r.run_id=u.run_id AND r.cluster_id=p.cluster_id AND r.source_id=p.source_id
+ WHERE p.cluster_id=$1 AND p.source_id=$2 AND r.query_kind=$3 AND r.range_start IS NULL AND r.job_id IS NULL
+ AND r.idempotency_key='prometheus-cooling-report-v2-' || u.payload_hash
+ AND u.received_at BETWEEN $4 AND $5 AND r.completed_at<=$5
+ AND p.profile_id=$6 AND p.revision=$7 AND p.profile_hash=$8 AND p.collector_id=$9 AND p.revoked_at IS NULL
+ AND r.scheduled_for>=p.starts_at AND r.scheduled_for<p.ends_at AND p.registered_at<r.scheduled_for AND r.scheduled_for<=u.received_at
+ ORDER BY u.received_at DESC,r.run_id DESC LIMIT 257
+)
+SELECT r.run_id,r.scheduled_for,r.completed_at,r.received_at,r.status,r.coverage_complete,
+       CASE WHEN octet_length(r.metric_fields::text)<=16384 THEN r.metric_fields END,i.revision_id,i.source_at
+FROM attempts r
+LEFT JOIN LATERAL (
+ SELECT revision_id,source_at FROM goodput_inventory_revisions
+ WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=r.scheduled_for AND observed_at<=r.completed_at
+ ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1
+) i ON true ORDER BY r.received_at DESC,r.run_id DESC`
+
 const assessmentObservationSQL = `
 SELECT observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,
        CASE WHEN octet_length(labels::text)<=16384 THEN labels END,value,unit,observed_at,collected_at,
@@ -127,11 +213,15 @@ ORDER BY observed_at DESC,observation_id DESC LIMIT 257`
 
 type assessmentAttempt struct {
 	completed  time.Time
+	scheduled  time.Time
 	usable     bool
 	provenance a.Provenance
 }
 
-func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, auth monitoringAuthority, from time.Time) (map[string]assessmentAttempt, []string, bool, error) {
+func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, auth assessmentAuthority, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
+	if auth.upload != nil {
+		return loadAssessmentUploadAttempts(ctx, tx, c, asset, b, auth.query, *auth.upload, from, at)
+	}
 	rows, err := tx.Query(ctx, assessmentAttemptSQL, c.ClusterID, c.SourceID, auth.query, b.Operation, from, auth.mode, auth.jobID, auth.configurationRevision, b.ScheduleRevision)
 	if err != nil {
 		return nil, nil, false, err
@@ -185,6 +275,46 @@ func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.
 	return attempts, ids, truncated, rows.Err()
 }
 
+func loadAssessmentUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, profile domain.CoolingUploadProfile, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
+	rows, err := tx.Query(ctx, assessmentUploadAttemptSQL, c.ClusterID, c.SourceID, query, from, at, profile.ProfileID, profile.Revision, b.UploadProfileHash, profile.CollectorID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	defer rows.Close()
+	attempts := make(map[string]assessmentAttempt)
+	ids := make([]string, 0, 256)
+	identity := domain.GPUObservationIdentity{EntityKey: asset.EntityKey, NodeID: domain.StableNodeID(asset.NodeID), PhysicalGPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID), Canonical: true}
+	seen := 0
+	for rows.Next() {
+		seen++
+		if seen > 256 {
+			return attempts, ids, true, nil
+		}
+		var id string
+		var slot, completed, received time.Time
+		var status domain.ResultStatus
+		var complete bool
+		var fieldBody []byte
+		var inventory *string
+		var inventoryAt *time.Time
+		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &fieldBody, &inventory, &inventoryAt); err != nil {
+			return nil, nil, false, err
+		}
+		slot, completed = slot.UTC(), completed.UTC()
+		task := profile.Task(query, slot)
+		if string(task.RunID) != id || !slot.Equal(slot.Truncate(domain.CoolingUploadInterval)) || completed.Before(slot) || completed.After(task.Deadline) || received.After(at) {
+			continue
+		}
+		var fields []domain.DCGMFieldEvidence
+		fieldOK := len(fieldBody) > 0 && json.Unmarshal(fieldBody, &fields) == nil && monitoringFieldState(fields, identity, b.Metric) == "SUPPORTED"
+		provenance := a.Provenance{Mode: "upload", CollectionRunID: id, Operation: b.Operation, ScheduleRevision: profile.Revision, InventoryRevision: profile.InventoryRevision,
+			CollectorID: string(profile.CollectorID), UploadProfileID: profile.ProfileID, UploadProfileHash: b.UploadProfileHash}
+		ids = append(ids, id)
+		attempts[id] = assessmentAttempt{completed: completed, scheduled: slot, provenance: provenance, usable: status == domain.ResultSucceeded && complete && fieldOK && inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)}
+	}
+	return attempts, ids, false, rows.Err()
+}
+
 func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time, attempts map[string]assessmentAttempt, ids []string, known map[string]a.Sample) ([]a.Fact, bool, error) {
 	if len(ids) == 0 {
 		return nil, false, nil
@@ -229,6 +359,10 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 		if sourceClockQualified {
 			o.SourceReference = sourceContract
 		}
+		upload := attempt.provenance.Mode == "upload"
+		if upload && (!sourceClockQualified || o.EntityKey != asset.EntityKey || !o.ObservedAt.After(attempt.scheduled.Add(-domain.CoolingUploadInterval)) || o.ObservedAt.After(attempt.scheduled) || !domain.CoolingUploadValueValid(query, o.Value)) {
+			continue
+		}
 		// A valid original DCGM clock may lead its completed collection by one
 		// second. Preserve that fact at admission, but only source eligibility
 		// (derived from its original timestamp) permits later category use.
@@ -237,7 +371,7 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 			validateAt = o.ObservedAt
 		}
 		if !ok || !i.Canonical || i.EntityKey != asset.EntityKey || o.ObservedAt.Before(from) || attempt.completed.After(at) ||
-			!monitoringValidOperationObservation(query, o, validateAt, attempt.completed, 900*time.Second, true) {
+			!monitoringValidOperationObservation(query, o, validateAt, attempt.completed, 900*time.Second, !upload) {
 			continue
 		}
 		p := attempt.provenance
@@ -293,7 +427,7 @@ func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Ass
 			}
 			return nil, err
 		}
-		attempts, ids, truncated, err := loadAssessmentAttempts(ctx, tx, c, asset, binding, authority, from)
+		attempts, ids, truncated, err := loadAssessmentAttempts(ctx, tx, c, asset, binding, authority, from, at)
 		if err != nil {
 			return nil, err
 		}

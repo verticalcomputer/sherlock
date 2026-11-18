@@ -76,12 +76,15 @@ func runPrometheusUpload(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	handler = configureCoolingUpload(ctx, handler, identity, auth, store, clock, scope, logger)
 	server, err := controlplane.NewHTTPServer(cfg, handler, tlsConfig)
 	if err != nil {
 		return err
 	}
 	fail := make(chan error, 1)
 	go func() { fail <- server.ListenAndServeTLS("", "") }()
+	stopAssessment := startAssessment(ctx, cfg.Assessment, logger)
+	defer stopAssessment()
 	logger.Info("control.prometheus_upload_listening", "address", cfg.ListenAddress)
 	select {
 	case <-ctx.Done():
