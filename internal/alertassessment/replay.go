@@ -204,11 +204,12 @@ type Engine struct {
 	bundleBytes                int64
 	CoverageIntervals          []CoverageInterval
 	endpointConflictIDs        map[string][][32]byte
-	// ObserveGPU records attempted category work for optional local diagnostics.
-	ObserveGPU          func(asset string, elapsed time.Duration)
-	attemptedInvocation bool
-	inlineTxn           *inlineCheckpoint
-	trustedEntryProofs  map[string]bool
+	// ObserveGPU records one duration per asset advance that attempts evaluation,
+	// historical reconstruction or due fallback, including work before invocation.
+	ObserveGPU         func(asset string, elapsed time.Duration)
+	attemptedGPUWork   bool
+	inlineTxn          *inlineCheckpoint
+	trustedEntryProofs map[string]bool
 	// ExpiryFailure suppresses source/category work for the specified asset.
 	// The empty key applies to the entire existing run.
 	ExpiryFailure map[string]string
@@ -816,9 +817,6 @@ func faultMatches(f Fault, r Request) bool {
 }
 
 func (e *Engine) invoke(ctx context.Context, r Request, faults []Fault) (Result, Request, error) {
-	if e.ObserveGPU != nil {
-		e.attemptedInvocation = true
-	}
 	if e.exhausted || ctx.Err() != nil {
 		return Result{}, Request{}, fmt.Errorf("TIME_BUDGET")
 	}
@@ -1393,10 +1391,12 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 	if c.Phase != "OBSERVING" {
 		return
 	}
-	if code := e.expiryCause(c.Asset); code != "" {
-		if at.Before(c.DueAt) {
-			return
-		}
+	code := e.expiryCause(c.Asset)
+	if code != "" && at.Before(c.DueAt) {
+		return
+	}
+	e.attemptedGPUWork = true
+	if code != "" {
 		if !e.trusted(ctx, c) {
 			e.quarantine(c, executed)
 			return
@@ -1491,6 +1491,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 }
 
 func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, commit time.Time, faults []Fault, catchingUp bool) time.Time {
+	e.attemptedGPUWork = true
 	if e.budgetSpent(ctx) {
 		e.fail("TIME_BUDGET", Request{Asset: en.Asset, Sequence: en.Sequence, Purpose: "DISCOVER", LogicalAt: at, ExecutedAt: executed, DiscoveryFloor: en.DiscoveryFloor})
 		next := at.Add(time.Second)
@@ -1596,6 +1597,7 @@ func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, com
 }
 
 func (e *Engine) followTracker(ctx context.Context, en *Enrollment, at, executed time.Time, faults []Fault) bool {
+	e.attemptedGPUWork = true
 	if e.budgetSpent(ctx) {
 		e.fail("TIME_BUDGET", Request{Asset: en.Asset, Sequence: en.Sequence, Purpose: "FOLLOW_UP", LogicalAt: at, ExecutedAt: executed})
 		return false
@@ -1812,8 +1814,8 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 		var started time.Time
 		if e.ObserveGPU != nil {
 			started = time.Now()
-			e.attemptedInvocation = false
 		}
+		e.attemptedGPUWork = false
 		pass := ctx
 		cancel := func() {}
 		if e.Shadow {
@@ -1824,7 +1826,7 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 		e.passFeatures = map[string]time.Time{}
 		e.trustedEntryProofs = map[string]bool{}
 		e.advanceAsset(pass, en, at, executed, committed, admitted, faults, selected == nil || slices.Contains(selected, en.Asset))
-		if e.ObserveGPU != nil && e.attemptedInvocation {
+		if e.ObserveGPU != nil && e.attemptedGPUWork {
 			e.ObserveGPU(en.Asset, time.Since(started))
 		}
 		cancel()
@@ -1972,6 +1974,7 @@ func (e *Engine) applyArmEvent(ctx context.Context, en *Enrollment, at, executed
 			if e.State != "ACTIVE" || !changed || !c.Terminal.LogicalAt.Before(at) || len(c.ReservedCodes) == len(e.descriptor.Updates) {
 				continue
 			}
+			e.attemptedGPUWork = true
 			if e.budgetSpent(ctx) {
 				e.fail("TIME_BUDGET", Request{Asset: en.Asset, CandidateID: c.ID, Sequence: c.Sequence, Purpose: "FOLLOW_UP", LogicalAt: at, ExecutedAt: executed})
 				continue
@@ -1999,6 +2002,7 @@ func (e *Engine) applyArmEvent(ctx context.Context, en *Enrollment, at, executed
 // nonterminal state is staged in this same pass; overdue arms receive their
 // final disposition before the pass commits.
 func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, entered, at, executed, committed time.Time, faults []Fault, includeWake bool) {
+	e.attemptedGPUWork = true
 	times := []time.Time{}
 	samples := checkedSamples(ctx)
 	if includeWake {

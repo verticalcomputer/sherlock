@@ -46,14 +46,18 @@ func (s *AssessmentStore) refreshAssessment(pass context.Context, dueOnly bool, 
 		return err
 	}
 	defer rollbackMonitoringTx(tx)
+	return s.refreshAssessmentTx(pass, tx, dueOnly, forcedFailure...)
+}
+
+func (s *AssessmentStore) refreshAssessmentTx(pass context.Context, tx pgx.Tx, dueOnly bool, forcedFailure ...string) error {
 	var at time.Time
-	if err = tx.QueryRow(pass, `SELECT transaction_timestamp()`).Scan(&at); err != nil {
+	if err := tx.QueryRow(pass, `SELECT transaction_timestamp()`).Scan(&at); err != nil {
 		return err
 	}
 	at = at.UTC()
 	if dueOnly {
 		var due bool
-		if err = tx.QueryRow(pass, `SELECT EXISTS(SELECT 1 FROM assessment_runs r WHERE r.run_id=$1 AND r.state<>'CLOSED' AND (r.state='DRAINING' OR r.admission_end_at<=$2 OR EXISTS(SELECT 1 FROM assessment_candidates c WHERE c.run_id=r.run_id AND c.phase='OBSERVING' AND c.due_at<=$2)))`, s.config.RunID, at).Scan(&due); err != nil {
+		if err := tx.QueryRow(pass, `SELECT EXISTS(SELECT 1 FROM assessment_runs r WHERE r.run_id=$1 AND r.state<>'CLOSED' AND (r.state='DRAINING' OR r.admission_end_at<=$2 OR EXISTS(SELECT 1 FROM assessment_candidates c WHERE c.run_id=r.run_id AND c.phase='OBSERVING' AND c.due_at<=$2)))`, s.config.RunID, at).Scan(&due); err != nil {
 			return err
 		}
 		if !due {
@@ -62,6 +66,7 @@ func (s *AssessmentStore) refreshAssessment(pass context.Context, dueOnly bool, 
 	}
 	var engine *a.Engine
 	var snapshot assessmentSnapshot
+	var err error
 	if len(forcedFailure) > 0 {
 		engine, snapshot, err = s.loadEngineForFallback(pass, tx, at, forcedFailure[0])
 	} else {
@@ -145,9 +150,22 @@ func (s *AssessmentStore) refreshAssessment(pass context.Context, dueOnly bool, 
 		overdue = overdue || (candidate.Phase == "OBSERVING" && !candidate.DueAt.After(committed))
 	}
 	if overdue {
-		if err = engine.AdvanceAssets(pass, committed, committed, committed, nil, nil, []string{}); err != nil {
+		catchUpAt := committed
+		if err = reloadAssessmentExpiryWindows(pass, tx, engine, snapshot, catchUpAt); err != nil {
 			return err
 		}
+		if err = tx.QueryRow(pass, `SELECT clock_timestamp()`).Scan(&executed); err != nil {
+			return err
+		}
+		executed = executed.UTC()
+		engine.CommitClock = assessmentDatabaseClock(executed)
+		if err = engine.AdvanceAssets(pass, catchUpAt, executed, executed, nil, nil, []string{}); err != nil {
+			return err
+		}
+		if err = tx.QueryRow(pass, `SELECT clock_timestamp()`).Scan(&committed); err != nil {
+			return err
+		}
+		committed = committed.UTC()
 	}
 	for i := range engine.Decisions {
 		d := &engine.Decisions[i]

@@ -333,18 +333,30 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 		}
 		return b, true
 	}
-	// The due-only transaction reconstructs the original cutoff history even
-	// after it has aged out of the current acquisition window. Arms sharing a
-	// cohort consume disjoint cutoff views of one bounded retained window.
+	if err = loadAssessmentRetainedWindows(ctx, tx, e, snap, at, historical, selectNow); err != nil {
+		return nil, snap, err
+	}
+	if err = loadAssessmentFaults(ctx, tx, e); err != nil {
+		return nil, snap, err
+	}
+	for _, f := range e.Failures {
+		snap.failureCount[f.ID] = f.Count
+	}
+	return e, snap, nil
+}
+
+// Expiry reconstructs the original cutoff history even after it has aged out
+// of the current acquisition window. Arms share a bounded retained window and
+// the host selects each arm's cutoff view from it.
+func loadAssessmentRetainedWindows(ctx context.Context, tx pgx.Tx, e *a.Engine, snap assessmentSnapshot, at time.Time, historical, selectNow bool) error {
+	if e.ExpiryFailure[""] != "" {
+		return nil
+	}
 	type cutoffRange struct{ first, last time.Time }
 	deadlines := make(map[string]cutoffRange)
 	if historical || selectNow {
-		dueThrough := at
-		if selectNow {
-			dueThrough = at.Add(750 * time.Millisecond)
-		}
 		for _, c := range e.Candidates {
-			if c.Phase != "OBSERVING" || c.DueAt.After(dueThrough) {
+			if c.Phase != "OBSERVING" || c.DueAt.After(at) {
 				continue
 			}
 			r := deadlines[c.Asset]
@@ -357,13 +369,12 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 			deadlines[c.Asset] = r
 		}
 	}
-	loaded, loadedBytes := 0, 0
-	// Each bounded lookback is staged in full. A capacity witness suppresses
-	// only that asset; no partial history can support a category result.
-	for _, asset := range s.config.Assets {
-		if forced != "" {
-			break
-		}
+	type retainedWindow struct {
+		asset         string
+		from, through time.Time
+	}
+	var dueWindows, acquisitionWindows []retainedWindow
+	for _, asset := range e.Config.Assets {
 		from, through := at.Add(-900*time.Second), at
 		r, due := deadlines[asset.EntityKey]
 		current := !historical && (!selectNow || slices.Contains(snap.selected, asset.EntityKey))
@@ -372,16 +383,24 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 				continue
 			}
 			from, through = r.first.Add(-900*time.Second), r.last
-			if through.After(at) {
-				through = at
-			}
 		} else if due && r.first.Add(-900*time.Second).Before(from) {
 			from = r.first.Add(-900 * time.Second)
 		}
-		en := e.Enrollments[asset.EntityKey]
-		rows, err = tx.Query(ctx, assessmentRetainedLookbackSQL, s.config.RunID, asset.EntityKey, from, en.Active, en.DiscoveryFloor, through)
+		w := retainedWindow{asset.EntityKey, from, through}
+		if due {
+			dueWindows = append(dueWindows, w)
+		} else {
+			acquisitionWindows = append(acquisitionWindows, w)
+		}
+	}
+	loaded, loadedBytes := 0, 0
+	// Stage each lookback in full. Due work has first use of the aggregate
+	// allowance, and a capacity witness suppresses only the affected asset.
+	for _, w := range append(dueWindows, acquisitionWindows...) {
+		en := e.Enrollments[w.asset]
+		rows, err := tx.Query(ctx, assessmentRetainedLookbackSQL, e.Config.RunID, w.asset, w.from, en.Active, en.DiscoveryFloor, w.through)
 		if err != nil {
-			return nil, snap, err
+			return err
 		}
 		var window []a.Fact
 		windowBytes := 0
@@ -390,7 +409,7 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 			var body []byte
 			if err = rows.Scan(&body); err != nil {
 				rows.Close()
-				return nil, snap, err
+				return err
 			}
 			windowBytes += len(body)
 			if len(window) >= a.MaxFacts || loaded+len(window) >= 8192 || loadedBytes+windowBytes > a.MaxInputBytes {
@@ -400,21 +419,21 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 			f, decodeErr := decodeAssessmentFact(body, 65536)
 			if decodeErr != nil {
 				rows.Close()
-				return nil, snap, decodeErr
+				return decodeErr
 			}
-			h, fe := a.FactIdentity(s.config.Category, f)
-			if fe != nil || h != f.ID || f.Asset != asset.EntityKey {
+			h, fe := a.FactIdentity(e.Config.Category, f)
+			if fe != nil || h != f.ID || f.Run != e.Config.RunID || f.Asset != w.asset {
 				rows.Close()
-				return nil, snap, a.ErrInvalid
+				return a.ErrInvalid
 			}
 			window = append(window, f)
 		}
 		rows.Close()
 		if err = rows.Err(); err != nil {
-			return nil, snap, err
+			return err
 		}
 		if overflowed {
-			e.SuppressAsset(asset.EntityKey, "CAPACITY")
+			e.SuppressAsset(w.asset, "CAPACITY")
 			continue
 		}
 		loaded += len(window)
@@ -424,13 +443,25 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 			snap.facts[f.ID] = true
 		}
 	}
-	if err = loadAssessmentFaults(ctx, tx, e); err != nil {
-		return nil, snap, err
+	return nil
+}
+
+// Rebuild the retained view around the still-observing arms due at the new
+// clock sample. First-pass windows no longer consume the retained allowance.
+// Facts admitted or derived by the first advance have yet to be written, so
+// keep them in memory. Request assembly still enforces its own input bounds.
+func reloadAssessmentExpiryWindows(ctx context.Context, tx pgx.Tx, e *a.Engine, snap assessmentSnapshot, at time.Time) error {
+	for id := range e.Facts {
+		if snap.facts[id] {
+			delete(e.Facts, id)
+		}
 	}
-	for _, f := range e.Failures {
-		snap.failureCount[f.ID] = f.Count
+	for asset, cause := range e.ExpiryFailure {
+		if asset != "" && cause == "CAPACITY" {
+			delete(e.ExpiryFailure, asset)
+		}
 	}
-	return e, snap, nil
+	return loadAssessmentRetainedWindows(ctx, tx, e, snap, at, true, false)
 }
 
 // The three indexed sources are disjoint. Only IDs/timestamps are sorted;

@@ -288,8 +288,8 @@ func assessmentProfileInput(t *testing.T, ctx context.Context, f *assessmentFixt
 // Test instrumentation leaves the cooling descriptor, policy and results intact.
 // A GPU callback group is the set of invocations sharing the host's deadline.
 // Its wall time includes the host work before/between callbacks, and excludes
-// whatever host work occurs after the last callback. Refresh and failure counts
-// below cover invocations that never enter a callback or fail to commit.
+// whatever host work occurs after the last callback. The full host distribution
+// below also includes attempted groups that never reach a callback.
 type assessmentProfileCategory struct {
 	cooling.Category
 	mu        sync.Mutex
@@ -619,6 +619,8 @@ func runAssessmentMaximumProfile(t *testing.T, trials int) {
 		gpuTimes = append(gpuTimes, d)
 	}
 	assessmentProfileDistribution(t, "gpu_through_last_callback", gpuTimes)
+	// The p99 gate uses the host samples, including failed preparation and due
+	// fallback groups that do not enter a category callback.
 	gpuP99 := assessmentProfileDistribution(t, "gpu_full_host", gpuFullTimes)
 	if trace != nil {
 		for stage, values := range trace.byStage {

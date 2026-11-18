@@ -183,8 +183,13 @@ func TestAssessmentReplayAggregateTimeoutLeavesFutureArmsObserving(t *testing.T)
 	}
 	budget := int64(15000)
 	faults := []a.Fault{{At: entry, Asset: s.Config.Assets[0].EntityKey, Purpose: "ASSESS", BudgetMS: &budget, Code: "TIME_BUDGET"}}
+	var observed []string
+	e.ObserveGPU = func(asset string, _ time.Duration) { observed = append(observed, asset) }
 	if err = e.Advance(t.Context(), entry, entry, entry, batch, faults); err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(observed, []string{s.Config.Assets[0].EntityKey}) {
+		t.Fatalf("assessment arms sharing a budget produced observations %v", observed)
 	}
 	if len(e.Candidates) != 5 || len(e.Decisions) != 1 || e.Decisions[0].DecisionSource != "CATEGORY" || len(e.Failures) != 4 {
 		t.Fatalf("bad partial pass candidates=%d decisions=%+v failures=%+v", len(e.Candidates), e.Decisions, e.Failures)
@@ -199,6 +204,91 @@ func TestAssessmentReplayAggregateTimeoutLeavesFutureArmsObserving(t *testing.T)
 	}
 	if len(e.Candidates) != 5 || len(e.Decisions) != 1 {
 		t.Fatal("retry duplicated committed entry")
+	}
+}
+
+func TestAssessmentObserveGPUPreInvocationWork(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		code string
+	}{
+		{name: "preparation timeout", code: "TIME_BUDGET"},
+		{name: "due host fallback", code: "COVERAGE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, reg := fixture(t)
+			e, err := a.NewEngine(t.Context(), s.Config, s.StartAt, reg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry := s.StartAt.Add(30*time.Second + 125*time.Microsecond)
+			var facts []a.Fact
+			for _, f := range s.Facts {
+				if f.Kind == "SAMPLE" && !f.AvailableAt.After(entry) {
+					facts = append(facts, f)
+				}
+			}
+			asset := s.Config.Assets[0].EntityKey
+			var observed []string
+			e.ObserveGPU = func(asset string, elapsed time.Duration) {
+				if elapsed < 0 {
+					t.Errorf("negative GPU elapsed time %s", elapsed)
+				}
+				observed = append(observed, asset)
+			}
+			if err := e.Advance(t.Context(), entry, entry, entry, facts, nil); err != nil {
+				t.Fatal(err)
+			}
+			if len(e.Candidates) != 5 || !slices.Equal(observed, []string{asset}) {
+				t.Fatalf("entry produced %d arms and observations %v", len(e.Candidates), observed)
+			}
+			observed = nil
+			if err := e.AdvanceAssets(t.Context(), entry, entry, entry, nil, nil, []string{}); err != nil {
+				t.Fatal(err)
+			}
+			if err := e.Advance(t.Context(), entry, entry, entry, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if len(observed) != 0 {
+				t.Fatalf("idle advances produced observations %v", observed)
+			}
+			arm := e.Candidates[1]
+			if arm.BudgetMS != 15000 || arm.Phase != "OBSERVING" {
+				t.Fatalf("expected a pending 15s arm: %+v", arm)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.code == "TIME_BUDGET" {
+				bundle := e.Bundles[arm.Entry.BundleID]
+				delete(e.Bundles, bundle.ID)
+				lookups := 0
+				e.LookupBundle = func(id string) (a.Bundle, bool) {
+					if id != bundle.ID {
+						return a.Bundle{}, false
+					}
+					lookups++
+					// The first lookup proves the retained entry. The request
+					// then reloads the bundle before resolving its fact IDs.
+					if lookups == 2 {
+						cancel()
+					}
+					return bundle, true
+				}
+			} else {
+				e.SuppressAsset(asset, tc.code)
+			}
+			due := arm.DueAt
+			if err := e.AdvanceAssets(ctx, due, due, due, nil, nil, []string{}); err != nil {
+				t.Fatal(err)
+			}
+			last := e.Decisions[len(e.Decisions)-1]
+			if last.CandidateID != arm.ID || last.DecisionSource != "HOST_FALLBACK" || last.FailureCode != tc.code {
+				t.Fatalf("unexpected due decision %+v", last)
+			}
+			if !slices.Equal(observed, []string{asset}) {
+				t.Fatalf("due GPU work produced observations %v", observed)
+			}
+		})
 	}
 }
 
