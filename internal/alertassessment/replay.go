@@ -177,9 +177,14 @@ type Engine struct {
 	// CommitClock samples actual statement time after evaluation when supplied by
 	// the live caller. Replay always uses the provided deterministic commit time.
 	CommitClock   func() time.Time
-	LookupFact    func(string) (Fact, bool)
-	LookupBundle  func(string) (Bundle, bool)
-	LookupContext func(asset string, cutoff, floor time.Time) (Fact, bool)
+	LookupFact    func(context.Context, string) (Fact, bool)
+	LookupBundle  func(context.Context, string) (Bundle, bool)
+	LookupContext func(ctx context.Context, asset string, cutoff, floor time.Time) (Fact, bool)
+	// PrefetchFacts resolves a bounded set into the backing resolver's positive
+	// cache and returns confirmed absences. Absences live for one GPU pass only;
+	// newly admitted/derived in-memory facts always take precedence.
+	PrefetchFacts func(context.Context, []string) ([]string, error)
+	passMissing   map[string]bool
 	// LookupAdmittedFact only returns already-admitted facts. The archive reader
 	// exposes its full index through LookupFact for validation, not admission.
 	archiveInput               bool
@@ -319,27 +324,30 @@ func (e *Engine) expiryCause(asset string) string {
 
 func clock(at time.Time) time.Time { return at.UTC().Truncate(time.Microsecond) }
 
-func (e *Engine) fact(id string) (Fact, bool) {
+func (e *Engine) fact(ctx context.Context, id string) (Fact, bool) {
 	if f, ok := e.Facts[id]; ok {
 		return f, true
 	}
 	if e.LookupFact != nil {
-		return e.LookupFact(id)
+		if e.passMissing[id] {
+			return Fact{}, false
+		}
+		return e.LookupFact(ctx, id)
 	}
 	return Fact{}, false
 }
 
-func (e *Engine) bundle(id string) (Bundle, bool) {
+func (e *Engine) bundle(ctx context.Context, id string) (Bundle, bool) {
 	if b, ok := e.Bundles[id]; ok {
 		return b, true
 	}
 	if e.LookupBundle != nil {
-		return e.LookupBundle(id)
+		return e.LookupBundle(ctx, id)
 	}
 	return Bundle{}, false
 }
 
-func (e *Engine) RequestContext(en *Enrollment, at time.Time) (*SharedContext, string) {
+func (e *Engine) RequestContext(ctx context.Context, en *Enrollment, at time.Time) (*SharedContext, string) {
 	var best *SharedContext
 	var id string
 	consider := func(f Fact) {
@@ -359,7 +367,7 @@ func (e *Engine) RequestContext(en *Enrollment, at time.Time) (*SharedContext, s
 		consider(f)
 	}
 	if best == nil && e.LookupContext != nil {
-		if f, ok := e.LookupContext(en.Asset, at, en.DiscoveryFloor); ok {
+		if f, ok := e.LookupContext(ctx, en.Asset, at, en.DiscoveryFloor); ok {
 			consider(f)
 		}
 	}
@@ -376,19 +384,55 @@ func stickyQualification(f Fact) bool {
 	return f.Kind == "QUALIFIED" && json.Unmarshal(f.Body, &q) == nil && q.Rule != "telemetry_loss" && q.Severity == "CRITICAL" && q.Transition == "OPEN"
 }
 
-func (e *Engine) matchingRecovery(f Fact, at time.Time) (Fact, bool) {
+func (e *Engine) matchingRecovery(ctx context.Context, f Fact, at time.Time) (Fact, bool) {
 	var open Qualified
 	if json.Unmarshal(f.Body, &open) != nil {
 		return Fact{}, false
 	}
 	id, _ := Identity("qualified", e.Config.Category, map[string]any{"run": f.Run, "asset": f.Asset, "policy_id": open.PolicyID, "occurrence": open.Occurrence, "transition": "RECOVER"})
-	recovery, ok := e.fact(id)
+	recovery, ok := e.fact(ctx, id)
 	var q Qualified
 	if !ok || recovery.AvailableAt.After(at) || json.Unmarshal(recovery.Body, &q) != nil ||
 		q.Rule != open.Rule || q.RuleVersion != open.RuleVersion || q.EnrollmentRevision != open.EnrollmentRevision || q.QualifiedAt.Before(open.QualifiedAt) {
 		return Fact{}, false
 	}
 	return recovery, true
+}
+
+// prefetchFacts keeps network round trips out of per-reference traversal. The
+// resolver owns bounded positive storage; only confirmed misses are pass-local.
+func (e *Engine) prefetchFacts(ctx context.Context, ids []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if e.PrefetchFacts == nil {
+		return nil
+	}
+	if len(ids) > MaxFacts {
+		return ErrInvalid
+	}
+	pending := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := e.Facts[id]; !ok && !e.passMissing[id] {
+			pending = append(pending, id)
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	missing, err := e.PrefetchFacts(ctx, pending)
+	if err != nil {
+		return err
+	}
+	if e.passMissing != nil {
+		if len(e.passMissing)+len(missing) > 6144 {
+			return fmt.Errorf("CAPACITY")
+		}
+		for _, id := range missing {
+			e.passMissing[id] = true
+		}
+	}
+	return ctx.Err()
 }
 
 func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.Time, purpose string, c *Candidate) (Request, error) {
@@ -404,7 +448,13 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 		if _, ok := index[id]; ok {
 			return nil
 		}
-		f, ok := e.fact(id)
+		if err := e.prefetchFacts(ctx, []string{id}); err != nil {
+			return err
+		}
+		f, ok := e.fact(ctx, id)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if !ok || f.Asset != en.Asset || f.Run != e.Config.RunID || f.AvailableAt.After(at) || len(index) >= MaxFacts {
 			return ErrInvalid
 		}
@@ -421,9 +471,15 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 		return nil
 	}
 	addBundle := func(id string) error {
-		b, ok := e.bundle(id)
+		b, ok := e.bundle(ctx, id)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if !ok || b.Asset != en.Asset || b.Run != e.Config.RunID || b.AvailabilityCutoff.After(at) {
 			return ErrInvalid
+		}
+		if err := e.prefetchFacts(ctx, append(slices.Clone(b.Facts), b.Features...)); err != nil {
+			return err
 		}
 		for _, ids := range [][]string{b.Facts, b.Features} {
 			for _, id := range ids {
@@ -438,7 +494,7 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 	var shared *SharedContext
 	var contextID string
 	if c != nil || en.Active {
-		shared, contextID = e.RequestContext(en, at)
+		shared, contextID = e.RequestContext(ctx, en, at)
 	}
 	if c != nil {
 		r.Scope, r.CandidateID, r.BudgetMS, r.Sequence, r.ExpectedRevision = "ARM", c.ID, &c.BudgetMS, c.Sequence, c.Revision
@@ -488,7 +544,7 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 			keep = recentFact(f, lower)
 		}
 		if !keep && en.Active && !f.AvailableAt.Before(en.DiscoveryFloor) && stickyQualification(f) {
-			recovered, matched := e.matchingRecovery(f, at)
+			recovered, matched := e.matchingRecovery(ctx, f, at)
 			keep = !matched || maxTime(recovered.AvailableAt, rawBoundary(recovered)).After(at)
 		}
 		if t, ok := e.passFeatures[f.ID]; ok && !t.After(at) {
@@ -522,11 +578,11 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 			if _, ok := index[id]; ok {
 				continue
 			}
-			f, ok := e.fact(id)
+			f, ok := e.fact(ctx, id)
 			if !ok {
 				return r, ErrInvalid
 			}
-			recovery, matched := e.matchingRecovery(f, at)
+			recovery, matched := e.matchingRecovery(ctx, f, at)
 			if !recentFact(f, lower) && matched && !maxTime(recovery.AvailableAt, rawBoundary(recovery)).After(at) {
 				continue
 			}
@@ -540,7 +596,7 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 			if !stickyQualification(f) {
 				continue
 			}
-			if recovery, ok := e.matchingRecovery(f, at); ok {
+			if recovery, ok := e.matchingRecovery(ctx, f, at); ok {
 				if err := add(recovery.ID); err != nil {
 					return r, err
 				}
@@ -548,19 +604,29 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 		}
 	}
 	if e.LookupFact != nil && (en.Active || c != nil) {
-		refs := make([]Fact, 0, len(index))
+		ids := make([]string, 0, len(index))
 		for _, f := range index {
-			if f.Kind == "SAMPLE" {
-				refs = append(refs, f)
+			if err := ctx.Err(); err != nil {
+				return r, err
 			}
-		}
-		for _, f := range refs {
+			if f.Kind != "SAMPLE" {
+				continue
+			}
 			sample, err := samples.decodeForSelection(e.Config.Category, f)
 			if err != nil || !sample.SourceAt.Before(lower) {
 				continue
 			}
 			id, _ := Identity("conflict", e.Config.Category, map[string]any{"run": e.Config.RunID, "asset": f.Asset, "metric": sample.Metric, "source_at": sample.SourceAt})
-			if conflict, ok := e.fact(id); ok && !conflict.AvailableAt.After(at) {
+			ids = append(ids, id)
+		}
+		if err := e.prefetchFacts(ctx, ids); err != nil {
+			return r, err
+		}
+		for _, id := range ids {
+			if err := ctx.Err(); err != nil {
+				return r, err
+			}
+			if conflict, ok := e.fact(ctx, id); ok && !conflict.AvailableAt.After(at) {
 				if err := add(id); err != nil {
 					return r, err
 				}
@@ -806,6 +872,9 @@ func preparationFailure(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "TIME_BUDGET"
 	}
+	if strings.Contains(err.Error(), "CAPACITY") {
+		return "CAPACITY"
+	}
 	return "INVALID_INPUT"
 }
 
@@ -853,7 +922,7 @@ func (e *Engine) invoke(ctx context.Context, r Request, faults []Fault) (Result,
 	}
 	return x, m, nil
 }
-func (e *Engine) terminal(c *Candidate, r Request, x Result, cause string, committed time.Time) {
+func (e *Engine) terminal(ctx context.Context, c *Candidate, r Request, x Result, cause string, committed time.Time) {
 	if c.Terminal != nil {
 		return
 	}
@@ -896,11 +965,11 @@ func (e *Engine) terminal(c *Candidate, r Request, x Result, cause string, commi
 			if e.endpointConflictIDs == nil {
 				e.endpointConflictIDs = map[string][][32]byte{}
 			}
-			if refs, ok := e.endpointConflicts(c.Asset, d.TerminalEndpoint.ID); ok {
+			if refs, ok := e.endpointConflicts(ctx, c.Asset, d.TerminalEndpoint.ID); ok {
 				e.endpointConflictIDs[c.ID] = refs
 			}
 		}
-		if change, ok := e.previewChange(d); ok {
+		if change, ok := e.previewChange(ctx, d); ok {
 			e.previewComparisons[d.ID] = change
 		}
 	}
@@ -971,7 +1040,7 @@ func (e *Engine) commitTime(fallback time.Time) time.Time {
 	return fallback
 }
 
-func (e *Engine) admit(at time.Time, facts []Fact) ([]Fact, error) {
+func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact, error) {
 	if len(facts) == 0 {
 		return nil, nil
 	}
@@ -994,7 +1063,7 @@ func (e *Engine) admit(at time.Time, facts []Fact) ([]Fact, error) {
 			f, ok := e.Facts[id]
 			return f, ok
 		}
-		return e.fact(id)
+		return e.fact(ctx, id)
 	}
 	type sampleKey struct {
 		asset, metric string
@@ -1092,7 +1161,7 @@ func (e *Engine) admit(at time.Time, facts []Fact) ([]Fact, error) {
 		for _, id := range factRefs(f) {
 			ref, ok := lookup(id)
 			if !ok && e.archiveInput {
-				ref, ok = e.fact(id)
+				ref, ok = e.fact(ctx, id)
 			}
 			if !ok {
 				return nil, ErrInvalid
@@ -1260,7 +1329,7 @@ func (e *Engine) provenanceFactAuthorized(f Fact, index map[string]Fact) bool {
 	return json.Unmarshal(index[p.SampleID].Body, &s) == nil && s.Provenance.CollectorID == p.Provenance.CollectorID && e.provenanceAuthorized(s.Metric, p.Provenance)
 }
 
-func (e *Engine) qualifiedTelemetry(en *Enrollment, cutoff time.Time, priorSequence int64) {
+func (e *Engine) qualifiedTelemetry(ctx context.Context, en *Enrollment, cutoff time.Time, priorSequence int64) {
 	if lostUntil, ok := e.archiveInputBound[en.Asset]; ok && !cutoff.After(lostUntil) {
 		return
 	}
@@ -1309,7 +1378,7 @@ func (e *Engine) qualifiedTelemetry(en *Enrollment, cutoff time.Time, priorSeque
 			if rec.RecoverFact != "" || p.recover == nil {
 				continue
 			}
-			f, ok := e.fact(rec.OpenFact)
+			f, ok := e.fact(ctx, rec.OpenFact)
 			var q Qualified
 			if ok && json.Unmarshal(f.Body, &q) == nil && matches(q, p.recover) && !p.recover.at.Before(rec.FirstAt) {
 				e.stageSourceMutation()
@@ -1352,7 +1421,14 @@ func (e *Engine) quarantine(c *Candidate, at time.Time) {
 	e.recordFailure("HOST_STATE", c.Asset, c.ID, c.ID, at, "", nil)
 }
 
+type fallbackContextKey struct{}
+
 func (e *Engine) trusted(ctx context.Context, c *Candidate) bool {
+	// An expired category budget cannot erase a previously admitted deadline.
+	// Host-only entry verification may finish under the enclosing refresh budget.
+	if parent, ok := ctx.Value(fallbackContextKey{}).(context.Context); ok {
+		ctx = parent
+	}
 	id, _ := Identity("candidate", e.Config.Category, map[string]any{"run": e.Config.RunID, "category": e.Config.Category, "asset": c.Asset, "sequence": c.Sequence, "budget_ms": c.BudgetMS})
 	terminalID, _ := Identity("terminal", e.Config.Category, map[string]any{"candidate": id})
 	entry := c.Entry
@@ -1371,10 +1447,13 @@ func (e *Engine) trusted(ctx context.Context, c *Candidate) bool {
 			return true
 		}
 	}
-	b, ok := e.bundle(entry.BundleID)
+	b, ok := e.bundle(ctx, entry.BundleID)
 	hash, err := BundleID(e.Config.Category, b)
 	if !ok || err != nil || hash != b.ID || b.ID != entry.BundleID || b.Run != e.Config.RunID || b.Asset != c.Asset ||
 		!b.AvailabilityCutoff.Equal(c.EnteredAt) || !b.LogicalAt.Equal(c.EnteredAt) || b.LookbackSeconds != 900 || len(b.Facts)+len(b.Features) > MaxFacts || Set(b.Facts, MaxFacts) != nil || Set(b.Features, MaxFacts) != nil {
+		return false
+	}
+	if err := e.prefetchFacts(ctx, entry.Support); err != nil {
 		return false
 	}
 	index := map[string]Fact{}
@@ -1383,13 +1462,16 @@ func (e *Engine) trusted(ctx context.Context, c *Candidate) bool {
 		if !ValidHash(id) || !slices.Contains(b.Facts, id) && !slices.Contains(b.Features, id) {
 			return false
 		}
-		f, ok := e.fact(id)
+		f, ok := e.fact(ctx, id)
 		if !ok || f.Run != b.Run || f.Asset != b.Asset || (f.Kind == "FEATURE") != slices.Contains(b.Features, id) {
 			return false
 		}
 		index[id] = f
+		if err := e.prefetchFacts(ctx, factRefs(f)); err != nil {
+			return false
+		}
 		for _, ref := range factRefs(f) {
-			raw, ok := e.fact(ref)
+			raw, ok := e.fact(ctx, ref)
 			if !ok || raw.Run != b.Run || raw.Asset != b.Asset {
 				return false
 			}
@@ -1429,7 +1511,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 		}
 		r := Request{CandidateID: c.ID, Asset: c.Asset, LogicalAt: c.DueAt, ExecutedAt: maxTime(executed, c.DueAt), Purpose: "ASSESS"}
 		e.fail(code, r)
-		e.terminal(c, r, Result{}, code, e.commitTime(commit))
+		e.terminal(ctx, c, r, Result{}, code, e.commitTime(commit))
 		return
 	}
 	if e.budgetSpent(ctx) {
@@ -1446,7 +1528,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 		}
 		r.LogicalAt = c.DueAt
 		r.ExecutedAt = maxTime(executed, c.DueAt)
-		e.terminal(c, r, Result{}, "TIME_BUDGET", committed)
+		e.terminal(ctx, c, r, Result{}, "TIME_BUDGET", committed)
 		return
 	}
 	if !e.trusted(ctx, c) {
@@ -1478,7 +1560,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 				e.stageSourceMutation()
 			}
 			e.retain(m)
-			e.terminal(c, m, x, "", committed)
+			e.terminal(ctx, c, m, x, "", committed)
 			return
 		}
 		if !committed.Before(c.DueAt) && !(len(catchingUp) > 0 && catchingUp[0] && at.Before(c.DueAt)) {
@@ -1498,7 +1580,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 			if r.ExecutedAt.Before(r.LogicalAt) {
 				r.ExecutedAt = committed
 			}
-			e.terminal(c, r, Result{}, code, committed)
+			e.terminal(ctx, c, r, Result{}, code, committed)
 			return
 		}
 		if err == nil {
@@ -1609,7 +1691,7 @@ func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, com
 		if basis == "INDEPENDENT_URGENT" {
 			final := x
 			final.State = nil // DISCOVER returns the tracker state, never the arm state.
-			e.terminal(c, view, final, "", e.commitTime(commit))
+			e.terminal(ctx, c, view, final, "", e.commitTime(commit))
 		} else {
 			armAt := qualified
 			if budget > 0 && !catchingUp && !qualified.Before(at) && !e.commitTime(commit).Before(due) {
@@ -1814,13 +1896,13 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 	admitted := []Fact{}
 	if e.State == "ACTIVE" {
 		var err error
-		admitted, err = e.admit(at, facts)
+		admitted, err = e.admit(ctx, at, facts)
 		if err != nil {
 			return err
 		}
 	}
 	if e.archiveInput && len(admitted) > 0 {
-		e.trimArchiveRing(at)
+		e.trimArchiveRing(ctx, at)
 	}
 	if e.boundaries == nil {
 		e.boundaries = map[string][]time.Time{}
@@ -1842,14 +1924,15 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 			started = time.Now()
 		}
 		e.attemptedGPUWork = false
-		pass := ctx
+		pass := context.WithValue(ctx, fallbackContextKey{}, ctx)
 		cancel := func() {}
 		if e.Shadow {
-			pass, cancel = context.WithTimeout(ctx, 50*time.Millisecond)
+			pass, cancel = context.WithTimeout(pass, 50*time.Millisecond)
 		}
 		pass = withFactValidationCache(pass)
 		e.proposalBytes, e.exhausted = 0, false
 		e.passFeatures = map[string]time.Time{}
+		e.passMissing = map[string]bool{}
 		e.trustedEntryProofs = map[string]bool{}
 		e.advanceAsset(pass, en, at, executed, committed, admitted, faults, selected == nil || slices.Contains(selected, en.Asset))
 		if e.ObserveGPU != nil && e.attemptedGPUWork {
@@ -1857,6 +1940,7 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 		}
 		cancel()
 		e.trustedEntryProofs = nil
+		e.passMissing = nil
 	}
 	e.lastPass = at
 	if tx != nil && (len(admitted) > 0 || len(e.Candidates) > len(tx.candidates) || tx.sourceEffects) &&
@@ -1957,12 +2041,12 @@ func (e *Engine) advanceAsset(ctx context.Context, en *Enrollment, at, executed,
 			entered = e.discover(ctx, en, at, executed, committed, faults, false)
 		}
 		if !entered.IsZero() && entered.Before(at) {
-			e.qualifiedTelemetry(en, entered, 0)
+			e.qualifiedTelemetry(ctx, en, entered, 0)
 			en.ProcessedAt = entered
 			e.reconstructAfterEntry(ctx, en, entered, at, executed, committed, faults, true)
 		}
 		if changed {
-			e.qualifiedTelemetry(en, at, priorSequence)
+			e.qualifiedTelemetry(ctx, en, at, priorSequence)
 		}
 		en.ProcessedAt = at
 		return
@@ -1979,7 +2063,7 @@ func (e *Engine) advanceAsset(ctx context.Context, en *Enrollment, at, executed,
 	e.applyArmEvent(ctx, en, at, executed, committed, faults, changed, false)
 	if e.State == "ACTIVE" {
 		if changed {
-			e.qualifiedTelemetry(en, at, priorSequence)
+			e.qualifiedTelemetry(ctx, en, at, priorSequence)
 		}
 		en.ProcessedAt = at
 	}
@@ -2070,7 +2154,7 @@ func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, ente
 		} else {
 			e.discover(ctx, en, event, executed, committed, faults, event.Before(at))
 		}
-		e.qualifiedTelemetry(en, event, priorSequence)
+		e.qualifiedTelemetry(ctx, en, event, priorSequence)
 		en.ProcessedAt = event
 	}
 }
@@ -3000,7 +3084,7 @@ func parseArchiveLine(line []byte) (ArchiveRow, any, int64, error) {
 	return row, cols, n, err
 }
 
-func (r *archiveReader) fact(id string) (Fact, bool) {
+func (r *archiveReader) fact(ctx context.Context, id string) (Fact, bool) {
 	var f Fact
 	raw, err := hex.DecodeString(id)
 	if err != nil || len(raw) != 32 {
@@ -3043,14 +3127,14 @@ func (r *archiveReader) decodeFact(v *archiveFactsRow) (Fact, error) {
 
 var errArchiveFound = errors.New("archive lookup found")
 
-func (r *archiveReader) bundle(id string) (Bundle, bool) {
+func (r *archiveReader) bundle(ctx context.Context, id string) (Bundle, bool) {
 	var b Bundle
 	i := sort.Search(len(r.bundles), func(i int) bool { return r.bundles[i].last >= id })
 	if i == len(r.bundles) || r.bundles[i].first > id {
 		return b, false
 	}
 	chunk := r.bundles[i].chunk
-	err := r.scan(context.Background(), chunk, func(_, _, _ int, row ArchiveRow, cols any, _ int64) error {
+	err := r.scan(ctx, chunk, func(_, _, _ int, row ArchiveRow, cols any, _ int64) error {
 		if row.Key != id {
 			return nil
 		}
@@ -3112,7 +3196,7 @@ type archiveTelemetryBody struct {
 	PreviewID        string `json:"preview_id,omitempty"`
 }
 
-func (r *archiveReader) refs(ids []string) (map[string]Fact, error) {
+func (r *archiveReader) refs(ctx context.Context, ids []string) (map[string]Fact, error) {
 	out := make(map[string]Fact, len(ids))
 	queue := slices.Clone(ids)
 	for len(queue) > 0 {
@@ -3124,7 +3208,7 @@ func (r *archiveReader) refs(ids []string) (map[string]Fact, error) {
 		if len(out) >= MaxFacts {
 			return nil, ErrInvalid
 		}
-		f, ok := r.fact(id)
+		f, ok := r.fact(ctx, id)
 		if !ok {
 			return nil, ErrInvalid
 		}
@@ -3282,10 +3366,10 @@ func ReplayArchiveWithEvidence(ctx context.Context, dir string, registry *Regist
 	result.Mismatched = SortedUnique(result.Mismatched)
 	// Read-only disk resolvers are valid only while processing the archive.
 	// Retain bounded evidence referenced by observed reports before closing.
-	if err := reader.copyPresentationEvidence(observed); err != nil {
+	if err := reader.copyPresentationEvidence(ctx, observed); err != nil {
 		return result, err
 	}
-	if err := reader.copyPresentationEvidence(ideal); err != nil {
+	if err := reader.copyPresentationEvidence(ctx, ideal); err != nil {
 		return result, err
 	}
 	ideal.LookupFact, ideal.LookupBundle = nil, nil
@@ -3438,7 +3522,7 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 			if err != nil || e.Enrollments[f.Asset] == nil {
 				return ErrInvalid
 			}
-			index, err := r.refs(factRefs(f))
+			index, err := r.refs(ctx, factRefs(f))
 			if err != nil {
 				return err
 			}
@@ -3469,11 +3553,11 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 			if json.Unmarshal(f.Body, &t) != nil {
 				return ErrInvalid
 			}
-			b, ok := r.bundle(t.BundleID)
+			b, ok := r.bundle(ctx, t.BundleID)
 			if !ok {
 				return ErrInvalid
 			}
-			index, err = r.refs(joinBundle(b))
+			index, err = r.refs(ctx, joinBundle(b))
 			if err != nil {
 				return err
 			}
@@ -3484,7 +3568,7 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 			if err != nil || e.Enrollments[b.Asset] == nil {
 				return ErrInvalid
 			}
-			index, err := r.refs(joinBundle(b))
+			index, err := r.refs(ctx, joinBundle(b))
 			if err != nil {
 				return err
 			}
@@ -3534,7 +3618,7 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 			if c == nil || c.Terminal == nil {
 				return ErrInvalid
 			}
-			d, err := r.validateDecision(e, v, c, terminals, reservations)
+			d, err := r.validateDecision(ctx, e, v, c, terminals, reservations)
 			if err != nil {
 				return err
 			}
@@ -3544,7 +3628,7 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 				return ErrInvalid
 			}
 			if v.Kind == "QUALIFIED_TELEMETRY" {
-				return r.validateTelemetry(e, v)
+				return r.validateTelemetry(ctx, e, v)
 			}
 			if v.Kind != "COMPONENT" && v.Kind != "COVERAGE" {
 				return ErrInvalid
@@ -3557,13 +3641,13 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 				return ErrInvalid
 			}
 			if d.BundleID != "" {
-				b, ok := r.bundle(d.BundleID)
+				b, ok := r.bundle(ctx, d.BundleID)
 				if !ok || b.Asset != v.Asset || b.AvailabilityCutoff.After(v.FirstAt) {
 					return ErrInvalid
 				}
 			}
 			for _, id := range d.FactIDs {
-				f, ok := r.fact(id)
+				f, ok := r.fact(ctx, id)
 				if !ok || f.Asset != v.Asset || f.AvailableAt.After(v.FirstAt) {
 					return ErrInvalid
 				}
@@ -3640,12 +3724,12 @@ func joinBundle(b Bundle) []string {
 	return append(append(ids, b.Facts...), b.Features...)
 }
 
-func (r *archiveReader) validateDecision(e *Engine, v *archiveDecisionsRow, c *Candidate, terminals map[string]bool, reserved map[string][]string) (Decision, error) {
+func (r *archiveReader) validateDecision(ctx context.Context, e *Engine, v *archiveDecisionsRow, c *Candidate, terminals map[string]bool, reserved map[string][]string) (Decision, error) {
 	d := Decision{ID: v.ID, CandidateID: c.ID, Asset: c.Asset, Sequence: c.Sequence, BudgetMS: c.BudgetMS, Kind: v.Kind, LogicalAt: v.LogicalAt, ExecutedAt: v.ExecutedAt, CommittedAt: v.CommittedAt, LatenessUS: v.LatenessUS, Action: v.Action, DecisionSource: v.DecisionSource, Outcome: v.Outcome, HostCause: v.HostCause, FailureCode: v.FailureCode, BundleID: v.BundleID, Codes: v.Codes, Reasons: v.Reasons, Support: v.Support, Summary: v.Summary}
 	if Set(v.Codes, 8) != nil || Set(v.Reasons, 8) != nil || Set(v.Support, 32) != nil || len(v.Summary) > 2048 || v.LogicalAt.Before(c.EnteredAt) || v.ExecutedAt.Before(v.LogicalAt) || v.CommittedAt.Before(v.ExecutedAt) {
 		return d, ErrInvalid
 	}
-	b, ok := r.bundle(v.BundleID)
+	b, ok := r.bundle(ctx, v.BundleID)
 	if !ok || b.Asset != c.Asset || b.AvailabilityCutoff.After(v.LogicalAt) {
 		return d, ErrInvalid
 	}
@@ -3686,7 +3770,7 @@ func (r *archiveReader) validateDecision(e *Engine, v *archiveDecisionsRow, c *C
 			return d, ErrInvalid
 		}
 		if d.TerminalEndpoint != nil {
-			f, ok := r.fact(d.TerminalEndpoint.ID)
+			f, ok := r.fact(ctx, d.TerminalEndpoint.ID)
 			var feature Feature
 			if !ok || !slices.Contains(d.Support, f.ID) || f.Kind != "FEATURE" || json.Unmarshal(f.Body, &feature) != nil || feature.FeatureKind != "temperature_endpoint" || feature.Unit != "celsius" || f.AvailableAt != d.TerminalEndpoint.AvailableAt || feature.SourceAt != d.TerminalEndpoint.SourceAt || feature.Value != d.TerminalEndpoint.Value {
 				return d, ErrInvalid
@@ -3721,7 +3805,7 @@ func (r *archiveReader) validateDecision(e *Engine, v *archiveDecisionsRow, c *C
 	return d, nil
 }
 
-func (r *archiveReader) validateTelemetry(e *Engine, v *archiveFailuresRow) error {
+func (r *archiveReader) validateTelemetry(ctx context.Context, e *Engine, v *archiveFailuresRow) error {
 	var d archiveTelemetryBody
 	if err := decodeArchivePayload(v.Body, 16<<10, &d); err != nil {
 		return err
@@ -3733,7 +3817,7 @@ func (r *archiveReader) validateTelemetry(e *Engine, v *archiveFailuresRow) erro
 		!slices.Contains([]string{"PREVIEW", "ANNOTATION"}, d.Disposition) {
 		return ErrInvalid
 	}
-	b, ok := r.bundle(d.BundleID)
+	b, ok := r.bundle(ctx, d.BundleID)
 	if !ok || b.Asset != v.Asset || b.AvailabilityCutoff.After(v.FirstAt) || !slices.Contains(b.Facts, d.OpenFact) {
 		return ErrInvalid
 	}
@@ -3741,7 +3825,7 @@ func (r *archiveReader) validateTelemetry(e *Engine, v *archiveFailuresRow) erro
 		if i == 1 && ref == "" {
 			continue
 		}
-		f, ok := r.fact(ref)
+		f, ok := r.fact(ctx, ref)
 		var q Qualified
 		if !ok || f.Asset != v.Asset || f.Kind != "QUALIFIED" || json.Unmarshal(f.Body, &q) != nil || q.Rule != "telemetry_loss" || q.PolicyID != d.PolicyID || q.Occurrence != d.Occurrence {
 			return ErrInvalid
@@ -3768,13 +3852,13 @@ func (r *archiveReader) runIdeal(ctx context.Context, e *Engine) error {
 		}
 		before := len(e.Bundles)
 		if len(admit) > 0 {
-			e.trimArchiveRing(wake)
+			e.trimArchiveRing(ctx, wake)
 		}
 		if err := e.Advance(ctx, wake, wake, wake, admit, nil); err != nil {
 			return err
 		}
 		if len(admit) > 0 || len(e.Bundles) != before {
-			e.trimArchiveRing(wake)
+			e.trimArchiveRing(ctx, wake)
 		}
 		return e.archiveEvidenceErr
 	}
@@ -3842,14 +3926,14 @@ func (r *archiveReader) runIdeal(ctx context.Context, e *Engine) error {
 	return nextTick(e.AdmissionEndAt.Add(121 * time.Second))
 }
 
-func (e *Engine) trimArchiveRing(at time.Time) {
+func (e *Engine) trimArchiveRing(ctx context.Context, at time.Time) {
 	bundles := map[string]bool{}
 	frozen := map[string]bool{}
 	for _, en := range e.Enrollments {
 		if !en.Active {
 			continue
 		}
-		if c, id := e.RequestContext(en, at); c != nil {
+		if c, id := e.RequestContext(ctx, en, at); c != nil {
 			bundles[c.BundleID] = true
 			frozen[id] = true
 		}
@@ -3928,7 +4012,7 @@ func (e *Engine) trimArchiveRing(at time.Time) {
 	}
 }
 
-func (r *archiveReader) copyPresentationEvidence(e *Engine) error {
+func (r *archiveReader) copyPresentationEvidence(ctx context.Context, e *Engine) error {
 	if e.previewComparisons == nil {
 		e.previewComparisons = make(map[string]previewChange)
 	}
@@ -3937,10 +4021,10 @@ func (r *archiveReader) copyPresentationEvidence(e *Engine) error {
 		if c.Terminal == nil {
 			continue
 		}
-		e.endpointAvailability[c.ID] = e.temperatureCoverage(c)
+		e.endpointAvailability[c.ID] = e.temperatureCoverage(ctx, c)
 	}
 	for _, d := range e.Decisions {
-		if change, ok := e.previewChange(d); ok {
+		if change, ok := e.previewChange(ctx, d); ok {
 			e.previewComparisons[d.ID] = change
 		}
 	}

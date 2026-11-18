@@ -499,7 +499,7 @@ func TestAssessmentRequestFindsExternalConflictForPinnedOldSample(t *testing.T) 
 			}
 		}
 		var lookedUp []string
-		e.LookupFact = func(id string) (Fact, bool) {
+		e.LookupFact = func(ctx context.Context, id string) (Fact, bool) {
 			lookedUp = append(lookedUp, id)
 			f, ok := restored[id]
 			return f, ok
@@ -677,5 +677,108 @@ func TestAssessmentRequestBoundsBeforeModuleEvaluation(t *testing.T) {
 	}
 	if boundedRequestBytes(r) {
 		t.Fatal("oversized aggregate request accepted")
+	}
+}
+
+func TestAssessmentAgedConflictMissesArePassLocal(t *testing.T) {
+	at := testTime.Add(1800 * time.Second)
+	old := testSample(t, testTime, testTime, 41)
+	other := testSample(t, testTime, testTime, 42)
+	recent := testSample(t, at, at, 43)
+	conflict, err := NewFact("test", "run", testAsset, "CONFLICT", testTime, Conflict{Metric: "temperature", SourceAt: testTime, Code: "CONFLICT", Values: SortedUnique([]string{old.ID, other.ID})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := NewBundle("test", "run", testAsset, testTime, []Fact{old})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := Engine{Config: Config{RunID: "run", Category: "test"}, Facts: indexFacts([]Fact{recent}), Bundles: map[string]Bundle{bundle.ID: bundle}, passMissing: map[string]bool{}}
+	stored := indexFacts([]Fact{old})
+	cache := map[string]Fact{}
+	queries := 0
+	e.PrefetchFacts = func(ctx context.Context, ids []string) ([]string, error) {
+		var missing []string
+		read := false
+		for _, id := range ids {
+			if _, ok := cache[id]; ok {
+				continue
+			}
+			read = true
+			if f, ok := stored[id]; ok {
+				cache[id] = f
+			} else {
+				missing = append(missing, id)
+			}
+		}
+		if read {
+			queries++
+		}
+		return missing, ctx.Err()
+	}
+	e.LookupFact = func(ctx context.Context, id string) (Fact, bool) {
+		f, ok := cache[id]
+		if !ok {
+			t.Errorf("unbatched lookup %s", id)
+		}
+		return f, ok
+	}
+	en := &Enrollment{Asset: testAsset, DiscoveryFloor: testTime}
+	c := &Candidate{Entry: Entry{BundleID: bundle.ID}, EnteredAt: testTime}
+	request := func() Request {
+		t.Helper()
+		r, err := e.request(withFactValidationCache(t.Context()), en, at, at, "FOLLOW_UP", c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	request()
+	request()
+	if queries != 2 {
+		t.Fatalf("support and absent conflict should be read once, got %d queries", queries)
+	}
+	// Same-pass admissions must override a cached absence immediately.
+	e.Facts[conflict.ID] = conflict
+	e.Facts[other.ID] = other
+	if r := request(); !slices.Contains(r.Bundle.Facts, conflict.ID) {
+		t.Fatal("same-pass conflict admission was hidden")
+	}
+	delete(e.Facts, conflict.ID)
+	delete(e.Facts, other.ID)
+	stored[conflict.ID] = conflict
+	stored[other.ID] = other
+	e.passMissing = map[string]bool{} // The next GPU pass must observe the new row.
+	if r := request(); !slices.Contains(r.Bundle.Facts, conflict.ID) {
+		t.Fatal("next-pass conflict was hidden by an old miss")
+	}
+}
+
+func TestAssessmentRequestStopsCancelledConflictScan(t *testing.T) {
+	at := testTime.Add(1800 * time.Second)
+	var facts []Fact
+	for i := 0; i < 64; i++ {
+		when := testTime.Add(time.Duration(i) * time.Second)
+		facts = append(facts, testSample(t, when, when, 41))
+	}
+	bundle, err := NewBundle("test", "run", testAsset, testTime.Add(time.Minute+3*time.Second), facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := Engine{Config: Config{RunID: "run", Category: "test"}, Facts: indexFacts(facts), Bundles: map[string]Bundle{bundle.ID: bundle}}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	reads := 0
+	e.LookupFact = func(got context.Context, id string) (Fact, bool) {
+		reads++
+		if got != ctx {
+			t.Fatal("resolver lost request cancellation context")
+		}
+		cancel()
+		return Fact{}, false
+	}
+	_, err = e.request(ctx, &Enrollment{Asset: testAsset, DiscoveryFloor: testTime}, at, at, "FOLLOW_UP", &Candidate{Entry: Entry{BundleID: bundle.ID}, EnteredAt: testTime})
+	if err != context.Canceled || reads != 1 {
+		t.Fatalf("cancelled conflict scan err=%v reads=%d", err, reads)
 	}
 }

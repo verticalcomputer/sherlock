@@ -272,34 +272,97 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 	// trusted entry support needed by a failed asset or deadline fallback.
 	lazyFacts := make(map[string]a.Fact)
 	lazyBytes := 0
-	loadFact := func(id string) (a.Fact, bool) {
+	cacheFact := func(id string, body []byte) (a.Fact, error) {
+		if len(lazyFacts) >= 6144 {
+			return a.Fact{}, ErrAssessmentCapacity
+		}
+		f, err := decodeAssessmentFact(body, min(65536, a.MaxInputBytes-lazyBytes))
+		if err != nil {
+			return a.Fact{}, err
+		}
+		h, err := a.FactIdentity(s.config.Category, f)
+		if err != nil || h != id || f.ID != id || f.Run != s.config.RunID {
+			return a.Fact{}, a.ErrInvalid
+		}
+		lazyBytes += len(body)
+		lazyFacts[id] = f
+		snap.facts[f.ID] = true
+		return f, nil
+	}
+	loadFact := func(ctx context.Context, id string) (a.Fact, bool) {
 		if f, ok := lazyFacts[id]; ok {
 			f.Body = bytes.Clone(f.Body)
 			return f, true
 		}
-		var body []byte
-		if len(lazyFacts) >= 6144 {
+		if ctx.Err() != nil || len(lazyFacts) >= 6144 {
 			return a.Fact{}, false
 		}
+		var body []byte
 		if err := tx.QueryRow(ctx, `SELECT body FROM assessment_facts WHERE run_id=$1 AND id=$2`, s.config.RunID, id).Scan(&body); err != nil {
 			return a.Fact{}, false
 		}
-		f, decodeErr := decodeAssessmentFact(body, min(65536, a.MaxInputBytes-lazyBytes))
-		if decodeErr != nil {
-			return a.Fact{}, false
-		}
-		h, err := a.FactIdentity(s.config.Category, f)
-		if err != nil || h != id || f.ID != id || f.Run != s.config.RunID {
-			return a.Fact{}, false
-		}
-		lazyBytes += len(body)
-		lazyFacts[id] = f
+		f, err := cacheFact(id, body)
 		f.Body = bytes.Clone(f.Body)
-		snap.facts[f.ID] = true
-		return f, true
+		return f, err == nil
+	}
+	// Populate the same bounded positive cache in one indexed read. Negative
+	// results are returned to the engine, never retained across GPU passes or
+	// writes: a later admission must still be visible to direct lookup.
+	e.PrefetchFacts = func(ctx context.Context, ids []string) ([]string, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if len(ids) > a.MaxFacts {
+			return nil, fmt.Errorf("CAPACITY")
+		}
+		pending := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			if _, ok := lazyFacts[id]; !ok {
+				pending[id] = true
+			}
+		}
+		if len(pending) == 0 {
+			return nil, nil
+		}
+		keys := make([]string, 0, len(pending))
+		for id := range pending {
+			keys = append(keys, id)
+		}
+		slices.Sort(keys)
+		rows, err := tx.Query(ctx, `SELECT incoming.id,f.body FROM unnest($2::text[]) AS incoming(id)
+ CROSS JOIN LATERAL (SELECT body FROM assessment_facts WHERE run_id=$1 AND id=incoming.id LIMIT 1) f`, s.config.RunID, keys)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			var id string
+			var body []byte
+			if err := rows.Scan(&id, &body); err != nil {
+				return nil, err
+			}
+			if _, err := cacheFact(id, body); err != nil {
+				if errors.Is(err, ErrAssessmentCapacity) {
+					return nil, fmt.Errorf("CAPACITY")
+				}
+				return nil, err
+			}
+			delete(pending, id)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		missing := make([]string, 0, len(pending))
+		for id := range pending {
+			missing = append(missing, id)
+		}
+		return missing, ctx.Err()
 	}
 	e.LookupFact = loadFact
-	e.LookupContext = func(asset string, cutoff, floor time.Time) (a.Fact, bool) {
+	e.LookupContext = func(ctx context.Context, asset string, cutoff, floor time.Time) (a.Fact, bool) {
 		var body []byte
 		if tx.QueryRow(ctx, `SELECT body FROM assessment_facts WHERE run_id=$1 AND asset=$2 AND kind='TRACKER_CONTEXT' AND available_at BETWEEN $3 AND $4 ORDER BY available_at DESC,(convert_from(body,'UTF8')::jsonb#>>'{body,revision}')::bigint DESC,id DESC LIMIT 1`, s.config.RunID, asset, floor, cutoff).Scan(&body) != nil {
 			return a.Fact{}, false
@@ -315,7 +378,7 @@ func (s *AssessmentStore) loadEngineSnapshot(ctx context.Context, tx pgx.Tx, at 
 	// immutable hits from this transaction, and copy arrays at the boundary.
 	lazyBundles := make(map[string]a.Bundle)
 	lazyBundleBytes := 0
-	e.LookupBundle = func(id string) (a.Bundle, bool) {
+	e.LookupBundle = func(ctx context.Context, id string) (a.Bundle, bool) {
 		if b, ok := lazyBundles[id]; ok {
 			b.Facts, b.Features = slices.Clone(b.Facts), slices.Clone(b.Features)
 			return b, true
@@ -549,13 +612,13 @@ func prefetchAssessmentAdmissions(ctx context.Context, tx pgx.Tx, e *a.Engine, f
 		return err
 	}
 	previous := e.LookupFact
-	e.LookupFact = func(id string) (a.Fact, bool) {
+	e.LookupFact = func(ctx context.Context, id string) (a.Fact, bool) {
 		if _, checked := checked[id]; checked {
 			f, ok := stored[id]
 			return f, ok
 		}
 		if previous != nil {
-			return previous(id)
+			return previous(ctx, id)
 		}
 		return a.Fact{}, false
 	}

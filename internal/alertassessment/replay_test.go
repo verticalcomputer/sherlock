@@ -262,7 +262,7 @@ func TestAssessmentObserveGPUPreInvocationWork(t *testing.T) {
 				bundle := e.Bundles[arm.Entry.BundleID]
 				delete(e.Bundles, bundle.ID)
 				lookups := 0
-				e.LookupBundle = func(id string) (a.Bundle, bool) {
+				e.LookupBundle = func(ctx context.Context, id string) (a.Bundle, bool) {
 					if id != bundle.ID {
 						return a.Bundle{}, false
 					}
@@ -1647,7 +1647,7 @@ func TestAssessmentDiscoverySkipsUnusedTrackerContextLookup(t *testing.T) {
 	asset := s.Config.Assets[0].EntityKey
 	activeLookups, inactiveLookups := 0, 0
 	var retained a.Fact
-	e.LookupContext = func(key string, cutoff, floor time.Time) (a.Fact, bool) {
+	e.LookupContext = func(ctx context.Context, key string, cutoff, floor time.Time) (a.Fact, bool) {
 		if e.Enrollments[asset].Active {
 			activeLookups++
 		} else {
@@ -1671,7 +1671,7 @@ func TestAssessmentDiscoverySkipsUnusedTrackerContextLookup(t *testing.T) {
 	if retained.ID == "" {
 		t.Fatal("fixture did not retain entry tracker context")
 	}
-	e.LookupFact = func(id string) (a.Fact, bool) { return retained, id == retained.ID }
+	e.LookupFact = func(ctx context.Context, id string) (a.Fact, bool) { return retained, id == retained.ID }
 	wake := entry.Add(time.Second)
 	if err = e.Advance(t.Context(), wake, wake, wake, []a.Fact{assessmentSampleAt(t, s, wake, 75)}, nil); err != nil {
 		t.Fatal(err)
@@ -1837,5 +1837,49 @@ func TestAssessmentArchiveAdmissionInputWitness(t *testing.T) {
 				t.Fatal("witness changed replay semantics")
 			}
 		})
+	}
+}
+
+func TestAssessmentRequestResolverUsesGPUDeadline(t *testing.T) {
+	s, reg := fixture(t)
+	e, err := a.NewEngine(t.Context(), s.Config, s.StartAt, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := s.StartAt.Add(30*time.Second + 125*time.Microsecond)
+	if err := e.Advance(t.Context(), entry, entry, entry, assessmentWarmFacts(s, entry), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Candidates) != 5 {
+		t.Fatal("fixture requires active cohort")
+	}
+	e.Shadow = true
+	e.Bundles = map[string]a.Bundle{}
+	calls := 0
+	e.LookupBundle = func(ctx context.Context, _ string) (a.Bundle, bool) {
+		calls++
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > 50*time.Millisecond {
+			t.Fatal("request lookup did not receive the 50 ms GPU deadline")
+		}
+		<-ctx.Done()
+		return a.Bundle{}, false
+	}
+	wake := entry.Add(time.Second)
+	parent, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := e.Advance(parent, wake, wake, wake, []a.Fact{assessmentSampleAt(t, s, wake, 75)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || parent.Err() != nil {
+		t.Fatalf("lookup calls=%d parent=%v", calls, parent.Err())
+	}
+	if !slices.ContainsFunc(e.Failures, func(f a.Failure) bool { return f.Code == "TIME_BUDGET" && f.ScopeKey == "FOLLOW_UP/1" }) {
+		t.Fatalf("missing TIME_BUDGET: %+v", e.Failures)
+	}
+	for _, c := range e.Candidates {
+		if c.Phase == "QUARANTINED" {
+			t.Fatal("request timeout quarantined an admitted arm")
+		}
 	}
 }

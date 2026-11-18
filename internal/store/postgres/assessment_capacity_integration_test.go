@@ -865,7 +865,7 @@ func TestAssessmentIndexedLookbackPreservesDelayedSourceAndActiveQualifications(
 		t.Fatal(err)
 	}
 	fallbacks := 0
-	e.LookupFact = func(id string) (a.Fact, bool) {
+	e.LookupFact = func(ctx context.Context, id string) (a.Fact, bool) {
 		fallbacks++
 		return recent, id == recent.ID
 	}
@@ -878,13 +878,13 @@ func TestAssessmentIndexedLookbackPreservesDelayedSourceAndActiveQualifications(
 	if err := prefetchAssessmentAdmissions(ctx, tx, e, []a.Fact{incoming, unseen}); err != nil {
 		t.Fatal(err)
 	}
-	if fact, ok := e.LookupFact(incoming.ID); !ok || !fact.AvailableAt.Equal(old) {
+	if fact, ok := e.LookupFact(ctx, incoming.ID); !ok || !fact.AvailableAt.Equal(old) {
 		t.Fatal("prefetch changed admitted availability")
 	}
-	if _, ok := e.LookupFact(unseen.ID); ok || fallbacks != 0 {
+	if _, ok := e.LookupFact(ctx, unseen.ID); ok || fallbacks != 0 {
 		t.Fatal("prefetch repeated a known absent lookup")
 	}
-	if _, ok := e.LookupFact(recent.ID); !ok || fallbacks != 1 {
+	if _, ok := e.LookupFact(ctx, recent.ID); !ok || fallbacks != 1 {
 		t.Fatal("prefetch suppressed an unrelated closure lookup")
 	}
 }
@@ -1476,28 +1476,28 @@ func TestAssessmentSnapshotMemoizesOnlyValidatedImmutableLookups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fact, ok := engine.LookupFact(initial.ID)
+	fact, ok := engine.LookupFact(ctx, initial.ID)
 	if !ok {
 		t.Fatal("valid fact missing")
 	}
 	fact.Body[0] = 'x'
-	if restored, ok := engine.LookupFact(initial.ID); !ok || !bytes.Equal(restored.Body, initial.Body) {
+	if restored, ok := engine.LookupFact(ctx, initial.ID); !ok || !bytes.Equal(restored.Body, initial.Body) {
 		t.Fatal("mutated fact result poisoned the cached body")
 	}
-	loaded, ok := engine.LookupBundle(bundle.ID)
+	loaded, ok := engine.LookupBundle(ctx, bundle.ID)
 	if !ok {
 		t.Fatal("valid bundle missing")
 	}
 	loaded.Facts[0] = corrupt.ID
-	if restored, ok := engine.LookupBundle(bundle.ID); !ok || !slices.Equal(restored.Facts, bundle.Facts) {
+	if restored, ok := engine.LookupBundle(ctx, bundle.ID); !ok || !slices.Equal(restored.Facts, bundle.Facts) {
 		t.Fatal("mutated bundle result poisoned the cached manifest")
 	}
 	for range 2 {
-		if _, ok := engine.LookupFact(corrupt.ID); ok {
+		if _, ok := engine.LookupFact(ctx, corrupt.ID); ok {
 			t.Fatal("invalid fact passed validation")
 		}
 	}
-	if _, ok := engine.LookupFact(newFact.ID); ok {
+	if _, ok := engine.LookupFact(ctx, newFact.ID); ok {
 		t.Fatal("unadmitted fact passed lookup")
 	}
 	body, err = a.Canonical(newFact)
@@ -1508,7 +1508,7 @@ func TestAssessmentSnapshotMemoizesOnlyValidatedImmutableLookups(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if _, ok := engine.LookupFact(newFact.ID); !ok {
+		if _, ok := engine.LookupFact(ctx, newFact.ID); !ok {
 			t.Fatal("earlier miss hid a new write in the transaction")
 		}
 	}
