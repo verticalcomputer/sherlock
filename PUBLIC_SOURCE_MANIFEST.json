@@ -272,6 +272,24 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-assessment/README.md",
+      "sha256": "8d8fb4a19a9a049676e636413a8da715b712830fe1ea80b7abd64aeb065d91c0",
+      "size": 1278
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-assessment/main.go",
+      "sha256": "7105802859a7ea9059f83742e7e5a07e0500283ff85394ba453034311290fa3d",
+      "size": 8995
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-assessment/main_test.go",
+      "sha256": "1498af251b082ca81fcb033849740792fc0ce4baf043dff7b99b9d97ef1cf629",
+      "size": 6172
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-collector/bcm_access_test_role_test.go",
       "sha256": "d4bb0453036a6399cd0ec28c086b130aff1f9e6bca4c6685d416e80ba200855e",
       "size": 2140
@@ -362,6 +380,18 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-control/assessment.go",
+      "sha256": "d599654ec39ffa2683120a7d0a26ebee3fae610500058cef15a8ba9a5b4d6546",
+      "size": 3186
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-control/assessment_test.go",
+      "sha256": "96ff8e6bcbd2141775df67970686a8ed79ab26c1182f4da40d6aeb8f5901647f",
+      "size": 1700
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-control/credential_access.go",
       "sha256": "449a5287acb96033a82ff8b6a3e4708013914f1205cb1cb503e80febd4ee7fe5",
       "size": 5070
@@ -369,8 +399,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/main.go",
-      "sha256": "9aada08f47547a7d081670a468454a61988d9ee710927a14ec5a1a599e2c3d3d",
-      "size": 9826
+      "sha256": "b580aef9d0cbfb4dad52fc6dbd1d1c962e8468c8c5bc4697c0637033b4cf9ff9",
+      "size": 9915
     },
     {
       "executable": false,
@@ -914,9 +944,15 @@
     },
     {
       "executable": false,
+      "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
+      "sha256": "099490d0e6f4e200786a05575a59fb54e39fb9a2b4f1d367032353660b03eaf6",
+      "size": 8733
+    },
+    {
+      "executable": false,
       "path": "docs/README.md",
-      "sha256": "7282b464176b077ad19f20090581259af570f1705b65c24827d0a96566057d34",
-      "size": 2758
+      "sha256": "3477de174268ae4e44d94df7e49aa1fa689b7c61f174e315841b4eea3331be7c",
+      "size": 2886
     },
     {
       "executable": false,
@@ -933,8 +969,8 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "822c07c864411d467893019f087b3f8838bd2c14dac2546528167628bef88916",
-      "size": 16605
+      "sha256": "210b04f77327d7af02f756e6efc4705a9904d578fa0eb1d5e57ea18ed5b1b84e",
+      "size": 16948
     },
     {
       "executable": false,
@@ -975,8 +1011,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "071aa345f38f699470a0aeac6d4ecd700ce5781717c4c27f0cf989d607f96ccc",
-      "size": 7250
+      "sha256": "fe07746f519b15178c16266921197bd13638072b4e4de58b0e951ba033c1cc8d",
+      "size": 8591
     },
     {
       "executable": false,
@@ -1991,6 +2027,138 @@
       "path": "internal/adminview/service_test.go",
       "sha256": "87f6702b25b5cbae2eb464a839497cdd2490079b395b3418a798d97f39de78c4",
       "size": 7639
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/README.md",
+      "sha256": "a72118ea1c40efa95fc0a50e13705a7c70d451da0bd02d9398f5fb4fb351ed0f",
+      "size": 2115
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/README.md",
+      "sha256": "2ef84c1c4b414d2c95672872bcf3d837b0d3dea56d952facf631f8438f19e8cd",
+      "size": 2224
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/codec.go",
+      "sha256": "5325f55782b3147f45fe7b1c198eec33752a66f429090d6a27d350cbd9093bc7",
+      "size": 10178
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/codec_test.go",
+      "sha256": "a223af532080d936fe73edafb17d69aff91c31a80ea79ada5211ba6f0475df4d",
+      "size": 5406
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/evaluator.go",
+      "sha256": "6b35f257f4fe77d74d92490a00e2d7f5faa43f26b545e714a61dfb144f193b72",
+      "size": 15905
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/evaluator_test.go",
+      "sha256": "dab4a24f25afcda09e3429190d2002ecc3804f9d1635cda49bac3331996faf50",
+      "size": 26202
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/evidence.go",
+      "sha256": "8faa5c125e7da60a3236307a602d93cf65db7a3e6c57836f9364aa79016fd28a",
+      "size": 17326
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/evidence_test.go",
+      "sha256": "c554894c978714453b1bcaaf91fca92421fb16f83fe728f7f52dfba44a973ae0",
+      "size": 8046
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/policy.go",
+      "sha256": "26957e639b604d3fbf4679d0bbea4548632e765d2f11b542d35d4645ab8f764c",
+      "size": 8938
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/host.go",
+      "sha256": "7af4ee391180783aae20d39393730ccf1a7f680b668606ae9cacaea751bd72bf",
+      "size": 49007
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/host_test.go",
+      "sha256": "e688c7f2b7790511dd4b524611669444ac9a8a00425e9f522ee1bc629fd37d6e",
+      "size": 27576
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/payload.go",
+      "sha256": "a7fc114d18b89a273ff1fed8099aa0f91de882cda00c7d1c5a79ef87464b0dd9",
+      "size": 11079
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/payload_test.go",
+      "sha256": "cd5d4eae38e2db07f86f901b87dc46c697a70b7c79a8e2c8d74a8f2cfab99f37",
+      "size": 6994
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/policy.go",
+      "sha256": "967b23b1fabfe54f0989b28e4aba68a31cac6e8b68b0d562ca5ab060ecdb43d1",
+      "size": 9144
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/registry.go",
+      "sha256": "9c86348b85089e306b3d57095f1ec4ffd898a36b4ded5cb5513f93c7da90f5f5",
+      "size": 5128
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/registry_test.go",
+      "sha256": "792cde11b57007f59c1a62985ce849e7d46d54b97f9597118429c5c618440a18",
+      "size": 4754
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/replay.go",
+      "sha256": "88eb166b1cd68850f5f7843c3f610cffd43b9b909b88607e051b739b343692c9",
+      "size": 130921
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/replay_test.go",
+      "sha256": "f58ab96cd5b1bfc6f61ccc51295ff8194645ab1c86df87696d51731e74e29840",
+      "size": 73299
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/report.go",
+      "sha256": "8e82784c2c2d57e1f0c0d4d8dc2db40a5202b9dc192aa11f6e7adcd437b04f05",
+      "size": 27243
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/report_test.go",
+      "sha256": "70517ba06161fe33a8784bea804e679410fac227ba25813c67b94a1988d6ad10",
+      "size": 6044
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/scalar_adapter_test.go",
+      "sha256": "e5796b92f70a06ca4cd9383ee76a1d1d41e5ec0a5730bdb5ea1a406b86f6caf2",
+      "size": 8875
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/types.go",
+      "sha256": "dc8a76769adc7cd74b8dc2e9a851edb400c970758d7c34d36aa1196e53b5fabe",
+      "size": 9489
     },
     {
       "executable": false,
@@ -3026,6 +3194,18 @@
     },
     {
       "executable": false,
+      "path": "internal/config/assessment.go",
+      "sha256": "54d5f8c6fe01468ba9d86734a2f2243b8062d77c9d20fd9158d27be75f8b1ff5",
+      "size": 2227
+    },
+    {
+      "executable": false,
+      "path": "internal/config/assessment_test.go",
+      "sha256": "4dc91a8944b7997b7f32449b4c9ad0273a108018a35cb142b04c1e02a666b054",
+      "size": 2105
+    },
+    {
+      "executable": false,
       "path": "internal/config/bcm_access_test_test.go",
       "sha256": "f58c9e1c5b86ff20de80290570c5eeff7dafa4f5faa623a0b9ae8eccc1fcb565",
       "size": 3421
@@ -3075,8 +3255,8 @@
     {
       "executable": false,
       "path": "internal/config/control.go",
-      "sha256": "3434aca45ff9dd1b39fcf8be8cf6262b471e2c2e256cc7085487aeffdff7e3f5",
-      "size": 8896
+      "sha256": "e12c1e673499fd379fbb3084b31e2a61a3647a6b0c23f8faf1e0d243f30e1140",
+      "size": 8987
     },
     {
       "executable": false,
@@ -4625,6 +4805,60 @@
       "path": "internal/store/postgres/artifact_reconciliation_integration_test.go",
       "sha256": "682bda0b703f84d4562cfacaf5ecfbe1439436b49a6160b71218bb1d73a36c68",
       "size": 3912
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_capacity_integration_test.go",
+      "sha256": "0c6e9b7b8777776c6b35fe476a1a201580671d893c9123f2ceff10cc987ccb5c",
+      "size": 65957
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_evidence.go",
+      "sha256": "7032c0bc928df6fba98435f8f8c604a5f61da7bcd05d26656ae4742f062a87f8",
+      "size": 36261
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_expiry_window_integration_test.go",
+      "sha256": "d42e2dd18c8d443436ee7b3cbdee9d17aaad2633226388d8a007abefeadcd78d",
+      "size": 15305
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_input.go",
+      "sha256": "050a2497d778b7569d718b6beaeb9d2daeca30027c83cf98f05799b15c8255aa",
+      "size": 19760
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_integration_test.go",
+      "sha256": "4c4f344de64e728eeab5a9535f03c8b2727840584eb5bbc2f4a88d2298c315af",
+      "size": 60801
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_isolation_integration_test.go",
+      "sha256": "97766f47a617892f3a2f31e9cc2589fae1891541c018db5ee887678edc8b767f",
+      "size": 7603
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_refresh.go",
+      "sha256": "327a6d27c9885ef73e385721ab02e41ac01965cd52d476884786c52ab7d9fa5b",
+      "size": 18974
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_retention.go",
+      "sha256": "19f4c0ec84763fe31cc949ad7fe8cf5b4f1a5181e08e39d2f0070a6b93a0a81a",
+      "size": 2752
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/assessment_store.go",
+      "sha256": "815b46b720ae407e469cfeefbc83214c1f285f20bc22b323e8b67e62230a5273",
+      "size": 17396
     },
     {
       "executable": false,
@@ -6794,9 +7028,27 @@
     },
     {
       "executable": false,
+      "path": "migrations/000082_alert_assessment.down.sql",
+      "sha256": "60953bcca2d288b52335b7b17995893d140fc6f5917baca448f82da1a72f770d",
+      "size": 1012
+    },
+    {
+      "executable": false,
+      "path": "migrations/000082_alert_assessment.up.sql",
+      "sha256": "d542d966153e2d67f90898352f09e1534defe80e1ba9ea486c57dc8f19d2b74d",
+      "size": 30124
+    },
+    {
+      "executable": false,
       "path": "next.md",
-      "sha256": "8859b50f40ca6178c0026ced930b9411c9655155cba71a2be3bcfdc2c06cb39f",
-      "size": 6792
+      "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
+      "size": 7098
+    },
+    {
+      "executable": false,
+      "path": "scripts/assessment-grants.sql",
+      "sha256": "e0f5c3aecf318bfd81af43eb5f637ba5b69d3b9245993e475724f614df620f71",
+      "size": 3536
     },
     {
       "executable": true,
@@ -6867,8 +7119,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "9bb0854416dffec02607ce4d6b958f8ea886e2b8c78bfc2966d6a60b6ee1f5ed",
-      "size": 18685
+      "sha256": "5d2bda9de14744b9b1a1179e589a30553d4fb5f8a9fba9079aff798b1aabd1e3",
+      "size": 18761
     },
     {
       "executable": false,
@@ -6969,7 +7221,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "e4f39dc871d1c2b9da8c8131a1142cf20c40505d8bcfd3c7f498db7352653c70",
+      "sha256": "a9580b2cdff9aeef23330e99750e7f155d290527b4bec32d0bd0351b069e35b0",
       "size": 12908
     },
     {
@@ -7043,6 +7295,30 @@
       "path": "sdk/typescript/tsconfig.json",
       "sha256": "b102fbbee95a4b99607df448e30e011d20aec8a409c7960372e99e97cf6d9c87",
       "size": 395
+    },
+    {
+      "executable": false,
+      "path": "test/assessment/v1/README.md",
+      "sha256": "774efdf873f832285a3cda9beb82ce3366ad78d6871f872635be2740f3e4d61d",
+      "size": 1205
+    },
+    {
+      "executable": false,
+      "path": "test/assessment/v1/config.json",
+      "sha256": "62ed87ca643967b92aa50faf27fd72d0c218c0110e1f17fc588bb50dbd0902b2",
+      "size": 2238
+    },
+    {
+      "executable": false,
+      "path": "test/assessment/v1/suite.json",
+      "sha256": "1945889c56e11f7d3715d2ccf213eeadef49a9b90ebd6fa5f0a778229b6998d3",
+      "size": 9180
+    },
+    {
+      "executable": false,
+      "path": "test/assessment/v1/unavailable-source-time.json",
+      "sha256": "bdf17482142f6cc714404b2ba82fe1b6271f3fdfb24619f98ee6659a03dd2924",
+      "size": 2143
     },
     {
       "executable": false,
