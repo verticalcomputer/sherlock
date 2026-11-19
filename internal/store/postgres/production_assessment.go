@@ -108,14 +108,7 @@ func (s *ProductionAssessmentStore) Refresh(ctx context.Context) error {
 			err := s.refreshAsset(gpu, asset, dueOnly)
 			stop()
 			if err != nil {
-				code := "STORE_FAILURE"
-				if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "TIME_BUDGET") {
-					code = "TIME_BUDGET"
-				} else if strings.Contains(err.Error(), "AUTHORITY_LOST") {
-					code = "AUTHORITY_LOST"
-				} else if strings.Contains(err.Error(), "CAPACITY") {
-					code = "CAPACITY"
-				}
+				code := assessmentFailureCode(err)
 				_, _ = s.pool.Exec(pass, `UPDATE production_assessment_states SET last_failure_code=$3,last_failure_at=clock_timestamp(),last_attempt_at=clock_timestamp(),failure_count=failure_count+1 WHERE enrollment_id=$1 AND asset=$2`, s.config.Assessment.RunID, asset.EntityKey, code)
 				failures = append(failures, err)
 				if pass.Err() != nil {
@@ -126,12 +119,15 @@ func (s *ProductionAssessmentStore) Refresh(ctx context.Context) error {
 	}
 	return errors.Join(failures...)
 }
-func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) error {
+func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) (result error) {
+	stage, started, outcome := "production.begin", time.Now(), "not_attempted"
+	defer func() { result = assessmentTransactionError(stage, started, result, outcome) }()
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
 	if err != nil {
 		return err
 	}
 	defer rollbackMonitoringTx(tx)
+	stage, started = "production.load", time.Now()
 	c := s.config.Assessment
 	var start, now time.Time
 	var enabledAt *time.Time
@@ -164,6 +160,7 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 		return err
 	}
 	e.CommitClock = assessmentDatabaseClock(now)
+	stage, started = "production.input", time.Now()
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
 	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
@@ -176,12 +173,14 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
 		selected = []string{asset.EntityKey}
 	}
+	stage, started = "production.evaluate", time.Now()
 	if err = e.AdvanceAssets(ctx, now, now, now, facts, nil, selected); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	stage, started = "production.persist", time.Now()
 	for _, d := range e.Decisions {
 		evidence, err := e.ProductionEvidenceContext(ctx, d)
 		if err != nil {
@@ -276,9 +275,12 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	if err != nil {
 		return err
 	}
+	stage, started, outcome = "production.commit", time.Now(), "unknown"
 	return tx.Commit(ctx)
 }
-func (s *ProductionAssessmentStore) Cleanup(ctx context.Context) (int, error) {
+func (s *ProductionAssessmentStore) Cleanup(ctx context.Context) (count int, resultErr error) {
+	started := time.Now()
+	defer func() { resultErr = assessmentTransactionError("production.cleanup", started, resultErr, "unknown") }()
 	if _, err := CleanupProductionNotifications(ctx, s.pool, s.config.Assessment.ClusterID, s.config.Assessment.RunID); err != nil {
 		return 0, err
 	}
@@ -348,13 +350,14 @@ AND NOT EXISTS(SELECT 1 FROM unnest($1::text[]) n(name) WHERE NOT has_table_priv
 `
 
 func beginProductionAssessmentTx(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
+	started := time.Now()
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		return nil, err
+		return nil, assessmentTransactionError("begin", started, err, "not_attempted")
 	}
 	if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout='200ms'; SET LOCAL lock_timeout='50ms'; SET LOCAL search_path=pg_catalog,public,pg_temp`); err != nil {
 		rollbackMonitoringTx(tx)
-		return nil, err
+		return nil, assessmentTransactionError("begin", started, err, "not_attempted")
 	}
 	return tx, nil
 }

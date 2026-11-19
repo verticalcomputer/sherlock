@@ -86,13 +86,22 @@ func runAssessmentRefresh(ctx context.Context, store assessmentRefresher, logger
 			return
 		}
 		bounded, cancel := context.WithTimeout(ctx, a.ShadowRefreshBudget)
+		refreshStarted := time.Now()
 		err := store.Refresh(bounded)
+		refreshElapsedMS := time.Since(refreshStarted).Milliseconds()
+		cleanupElapsedMS := int64(-1)
 		if err == nil && bounded.Err() == nil {
+			cleanupStarted := time.Now()
 			_, err = store.Cleanup(bounded)
+			cleanupElapsedMS = time.Since(cleanupStarted).Milliseconds()
 		}
 		cancel()
 		if err != nil && ctx.Err() == nil {
-			logger.Warn("control.assessment_refresh_failed")
+			fields := append(storepg.AssessmentDiagnosticFields(err), "refresh_elapsed_ms", refreshElapsedMS)
+			if cleanupElapsedMS >= 0 {
+				fields = append(fields, "cleanup_elapsed_ms", cleanupElapsedMS)
+			}
+			logger.Warn("control.assessment_refresh_failed", fields...)
 		}
 		select {
 		case <-ctx.Done():

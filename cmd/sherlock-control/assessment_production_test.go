@@ -84,3 +84,42 @@ func TestProductionCleanupSurvivesRefreshFailureAndTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestProductionAssessmentDiagnosticWarnings(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	stub := assessmentDiagnosticLoopStub{refreshErr: assessmentPrivateDatabaseError(), cleanupErr: assessmentPrivateDatabaseError()}
+	records := make(chan []byte, 4)
+	logger := slog.New(slog.NewJSONHandler(assessmentDiagnosticLogWriter{records}, nil))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runProductionAssessmentLoops(ctx, stub, logger, make(chan time.Time), make(chan time.Time), time.Second, time.Second)
+	}()
+	seen := make(map[string]bool)
+	for range 2 {
+		record := requireAssessmentDiagnosticLog(t, records)
+		message := record["msg"].(string)
+		field := "refresh_elapsed_ms"
+		switch message {
+		case "control.production_assessment_refresh_failed":
+		case "control.production_assessment_cleanup_failed":
+			field = "cleanup_elapsed_ms"
+		default:
+			t.Fatalf("unexpected warning: %+v", record)
+		}
+		if elapsed, ok := record[field].(float64); !ok || elapsed < 0 {
+			t.Fatalf("missing total elapsed duration: %+v", record)
+		}
+		seen[message] = true
+	}
+	if len(seen) != 2 {
+		t.Fatal("refresh and cleanup both need diagnostic warnings")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("loops failed to stop")
+	}
+}

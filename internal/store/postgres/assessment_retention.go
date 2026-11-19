@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // Cleanup removes at most100 rows, counting every table row. The run is the
 // retention unit; a live or unexpired run is never pruned to meet capacity.
-func (s *AssessmentStore) Cleanup(ctx context.Context) (int, error) {
+func (s *AssessmentStore) Cleanup(ctx context.Context) (count int, resultErr error) {
+	started := time.Now()
+	outcome := "not_attempted"
+	defer func() { resultErr = assessmentTransactionError("cleanup", started, resultErr, outcome) }()
 	tx, err := beginAssessmentTx(ctx, s.pool)
 	if err != nil {
 		return 0, err
@@ -70,6 +74,7 @@ func (s *AssessmentStore) Cleanup(ctx context.Context) (int, error) {
 			deleted++
 		}
 	}
+	outcome = "unknown"
 	if err = tx.Commit(ctx); err != nil {
 		return 0, err
 	}
