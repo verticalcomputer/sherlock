@@ -21,13 +21,13 @@ jobs:
       github.repository == 'verticalcomputer/sherlock' &&
       github.event.repository.private == false &&
       github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Check out the exact workflow commit and candidate history
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: useblacksmith/checkout@v1 # v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0

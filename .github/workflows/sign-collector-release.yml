@@ -16,14 +16,14 @@ jobs:
       github.repository == 'verticalcomputer/sherlock' &&
       github.event.repository.private == false &&
       github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 5
     permissions:
       contents: read
       actions: read
     steps:
       - name: Check out the exact workflow commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: useblacksmith/checkout@v1 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -34,7 +34,7 @@ jobs:
 
   sign:
     needs: preflight
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 20
     environment: collector-release-signing
     permissions:
@@ -45,7 +45,7 @@ jobs:
       COLLECTOR_RELEASE_APPROVAL_JSON: ${{ vars.COLLECTOR_RELEASE_APPROVAL_JSON }}
     steps:
       - name: Check out the exact approved workflow commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: useblacksmith/checkout@v1 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
