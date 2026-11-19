@@ -89,6 +89,13 @@ make check
 make eval
 ```
 
+CI runs three PostgreSQL test shards and one lane for other packages on separate
+runners, each with its own disposable PostgreSQL service. Tests within a shard
+remain serial, preserving fixture and timing assumptions. All lanes retain race
+detection and the integration build tag; new PostgreSQL tests are discovered and
+assigned automatically. The scenario test bed runs once in the other-packages
+lane. The required `integration` status succeeds only when every lane succeeds.
+
 `make test-integration-isolated` creates and removes its own temporary PostgreSQL
 container; Docker is required. Never point the integration suite at a shared or
 production database. Network enrollment tests use the synthetic fixture under
