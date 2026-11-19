@@ -199,18 +199,18 @@ directory or relabel its receipt as release approval.
 ## Collector and intake Linux AMD64 candidate
 
 The [preparation workflow](../../.github/workflows/prepare-collector-release.yml)
-builds the collector and its matching control binary from public source commit
-`c5d70148ba742caf8721d47b1fa066f1f026d4fe`. This includes the aged-evidence batching and
-cancellation fix from PR #25. The only change after merged commit
-`fe87e896dd896eb89a9f8ab7b6873d35256ec6c1` in this source snapshot is
-`PUBLIC_SOURCE_MANIFEST.json`; application code is unchanged from that merged
-commit. The proposed package tag is `v0.1.0-rc.5`. Preparation creates no tag.
+builds the collector and matching control binary from public source commit
+`5cec9c2205e26a6f6c4b0e8ba935fceceedfe39f`. This source includes PR #28's bounded
+assessment profile: 250 ms per GPU and 2 seconds per serial refresh. The source
+snapshot adds only the refreshed `PUBLIC_SOURCE_MANIFEST.json` after
+`254f6051589a487677f9b89c3c1fec8c4027218e`. The proposed package tag is
+`v0.1.0-rc.6`. Preparation creates no tag.
 
 The intended rollout replaces only the central upload intake. Both head collectors
-remain on rc.4; the package includes a collector binary for the existing paired
-release format, not as authorization to install it. The 50 ms GPU and 750 ms
-refresh budgets, shadow-only notification scope, schema and collection profiles
-remain unchanged.
+remain on rc.4; inclusion of the collector binary preserves the existing paired
+package format. SQL statement/lock limits, shadow-only notifications, observation
+deadlines, schema, enrollment and collection profiles remain unchanged. Local
+qualification and CI do not establish live acceptance of the revised budgets.
 
 It uses Go 1.26.9 and two
 independent offline build caches. Both builds must match the pins in the
