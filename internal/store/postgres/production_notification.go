@@ -39,6 +39,9 @@ func productionScope(cluster, enrollment, occurrence string) bool {
 	return a.ValidID(cluster, 128) && a.ValidID(enrollment, 128) && a.ValidID(occurrence, 128)
 }
 func validEvidenceURL(raw string) bool {
+	if raw == "" {
+		return true
+	}
 	u, e := url.Parse(raw)
 	return e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Fragment == "" && len(raw) <= 1024 && !strings.ContainsAny(raw, "<>\r\n\t ")
 }
@@ -57,7 +60,10 @@ func boundedNotificationText(s string, n int) string {
 }
 func productionMessage(o ProductionOccurrence, kind string, at time.Time, summary string) (string, error) {
 	prefix := fmt.Sprintf("Sherlock cooling %s\ncluster=%s asset=%s\noccurrence=%s incident=%s\nconcern_since=%s evidence_at=%s\n", kind, slackText(o.ClusterID), slackText(o.Asset), slackText(o.ID), slackText(o.IncidentID), o.OpenedAt.UTC().Format(time.RFC3339), at.UTC().Format(time.RFC3339))
-	suffix := "\nHistory: " + slackText(o.EvidenceURL)
+	suffix := ""
+	if o.EvidenceURL != "" {
+		suffix = "\nHistory: " + slackText(o.EvidenceURL)
+	}
 	room := alertdelivery.MaxMessageBytes - len(prefix) - len(suffix)
 	if room < 128 {
 		return "", errors.New("notification identity exceeds message bound")

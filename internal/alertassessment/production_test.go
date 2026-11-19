@@ -149,7 +149,7 @@ func TestProductionEvidenceRouteScope(t *testing.T) {
 			t.Fatalf("invalid route cluster accepted %q", id)
 		}
 	}
-	for _, origin := range []string{"https://sherlock.example/path", "https://sherlock.example/%2f", "https://sherlock.example/?x=1", "https://sherlock.example?", "https://sherlock.example#"} {
+	for _, origin := range []string{" ", "\t", "/admin/history", "http://sherlock.example", "https://user:secret@sherlock.example", "https://sherlock.example/path", "https://sherlock.example/%2f", "https://sherlock.example/?x=1", "https://sherlock.example?", "https://sherlock.example#"} {
 		c := cfg
 		c.EvidenceBaseURL = origin
 		if _, err := a.NormalizeProductionConfig(t.Context(), c, r); err == nil {
@@ -160,6 +160,34 @@ func TestProductionEvidenceRouteScope(t *testing.T) {
 	cfg.EvidenceBaseURL = "https://sherlock.example/"
 	if _, err := a.NormalizeProductionConfig(t.Context(), cfg, r); err != nil {
 		t.Fatal("valid route rejected", err)
+	}
+}
+
+func TestProductionConfigWithoutEvidenceOrigin(t *testing.T) {
+	cfg, r, _ := productionFixture(t)
+	cfg.EvidenceBaseURL = ""
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, omit := range []bool{false, true} {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if omit {
+			delete(fields, "evidence_base_url")
+		} else {
+			fields["evidence_base_url"] = json.RawMessage(`""`)
+		}
+		input, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := a.ParseProductionConfig(t.Context(), input, r)
+		if err != nil || parsed.EvidenceBaseURL != "" || parsed.NotificationsEnabled != cfg.NotificationsEnabled {
+			t.Fatalf("no-origin configuration omitted=%v: config=%+v err=%v", omit, parsed, err)
+		}
 	}
 }
 

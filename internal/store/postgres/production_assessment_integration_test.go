@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
-func productionStoreFixture(t *testing.T) (*assessmentFixture, *ProductionAssessmentStore, a.ProductionConfig, time.Time) {
+func productionStoreFixture(t *testing.T, evidenceOrigin ...string) (*assessmentFixture, *ProductionAssessmentStore, a.ProductionConfig, time.Time) {
 	t.Helper()
 	f := newAssessmentFixture(t)
 	var now time.Time
@@ -45,7 +46,11 @@ func productionStoreFixture(t *testing.T) (*assessmentFixture, *ProductionAssess
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := a.NormalizeProductionConfig(t.Context(), a.ProductionConfig{Schema: 1, Revision: 1, NotificationsEnabled: true, EvidenceBaseURL: "https://sherlock.example", Assessment: f.config}, r)
+	origin := "https://sherlock.example"
+	if len(evidenceOrigin) > 0 {
+		origin = evidenceOrigin[0]
+	}
+	c, err := a.NormalizeProductionConfig(t.Context(), a.ProductionConfig{Schema: 1, Revision: 1, NotificationsEnabled: true, EvidenceBaseURL: origin, Assessment: f.config}, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +62,34 @@ func productionStoreFixture(t *testing.T) (*assessmentFixture, *ProductionAssess
 		t.Fatal(err)
 	}
 	return f, store, c, now.UTC().Truncate(time.Microsecond)
+}
+
+func TestProductionAssessmentWithoutEvidenceOrigin(t *testing.T) {
+	f, s, c, now := productionStoreFixture(t, "")
+	id, _ := seedProductionDue(t, f, s, c, now)
+	if err := s.refreshAsset(t.Context(), c.Assessment.Assets[0], true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Start(t.Context()); err != nil {
+		t.Fatal("restart with empty origin", err)
+	}
+	var origin, link, message string
+	if err := f.admin.QueryRow(t.Context(), `SELECT e.evidence_base_url,o.evidence_url,q.message FROM production_assessment_enrollments e JOIN production_notification_occurrences o ON o.enrollment_id=e.enrollment_id JOIN gp09_alert_outbox q ON q.assessment_occurrence=o.occurrence_id WHERE e.enrollment_id=$1`, c.Assessment.RunID).Scan(&origin, &link, &message); err != nil {
+		t.Fatal(err)
+	}
+	if origin != "" || link != "" || strings.Contains(message, "History:") || strings.Contains(message, "/admin/") || !strings.Contains(message, id) || !strings.Contains(message, c.Assessment.Assets[0].EntityKey) {
+		t.Fatalf("unexpected no-origin publication: origin=%q link=%q message=%q", origin, link, message)
+	}
+	changed := c
+	changed.Revision++
+	changed.EvidenceBaseURL = "https://sherlock.example"
+	other, err := NewProductionAssessmentStore(t.Context(), f.admin, s.registry, changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Start(t.Context()); err == nil {
+		t.Fatal("existing enrollment silently changed its evidence origin")
+	}
 }
 func productionStoreSamples(t *testing.T, c a.ProductionConfig, at time.Time) []a.Fact {
 	t.Helper()

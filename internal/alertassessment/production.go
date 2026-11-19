@@ -20,7 +20,7 @@ type ProductionConfig struct {
 	Schema               int64  `json:"schema"`
 	Revision             int64  `json:"revision"`
 	NotificationsEnabled bool   `json:"notifications_enabled"`
-	EvidenceBaseURL      string `json:"evidence_base_url"`
+	EvidenceBaseURL      string `json:"evidence_base_url,omitempty"`
 	Assessment           Config `json:"assessment"`
 }
 
@@ -35,11 +35,16 @@ func NormalizeProductionConfig(ctx context.Context, c ProductionConfig, r *Regis
 	if c.Schema != 1 || c.Revision < 1 || !productionPathID(c.Assessment.RunID) || !productionPathID(c.Assessment.ClusterID) {
 		return c, ErrInvalid
 	}
-	u, err := url.Parse(c.EvidenceBaseURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.EscapedPath() != "" && u.EscapedPath() != "/") || len(c.EvidenceBaseURL) > 512 || strings.ContainsAny(c.EvidenceBaseURL, "<>?#\r\n") {
-		return c, fmt.Errorf("invalid production evidence URL")
+	// Slack notifications can carry their own investigation context without a
+	// public evidence origin. A configured origin still has the same restrictions.
+	if c.EvidenceBaseURL != "" {
+		u, err := url.Parse(c.EvidenceBaseURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.EscapedPath() != "" && u.EscapedPath() != "/") || len(c.EvidenceBaseURL) > 512 || strings.ContainsAny(c.EvidenceBaseURL, "<>?#\r\n") {
+			return c, fmt.Errorf("invalid production evidence URL")
+		}
 	}
 	c.Assessment.production = true
+	var err error
 	c.Assessment, err = NormalizeConfig(ctx, c.Assessment, r)
 	if err != nil {
 		return c, err
