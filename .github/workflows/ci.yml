@@ -46,8 +46,13 @@ jobs:
       - run: npm ci --prefix sdk/typescript
       - run: npm --prefix sdk/typescript run smoke
 
-  integration:
+  integration-tests:
+    name: integration-${{ matrix.lane }}
     runs-on: blacksmith-4vcpu-ubuntu-2604
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [postgres-0, postgres-1, postgres-2, other]
     services:
       postgres:
         image: postgres:17-alpine
@@ -72,13 +77,37 @@ jobs:
           go-version: '1.26.9'
       - run: go mod download
       - run: go run ./cmd/sherlock-migrate -dir migrations
-      - run: go test -race -tags=integration ./...
+      - name: Check integration shard coverage
+        run: python3 -m unittest discover -s scripts -p test_integration_shard.py
+      - name: Run integration shard
+        shell: bash
+        run: python3 scripts/run-integration-shard.py "${{ matrix.lane }}" 2>&1 | tee "${{ runner.temp }}/integration-${{ matrix.lane }}.log"
+      - name: Preserve integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-${{ matrix.lane }}
+          path: ${{ runner.temp }}/integration-${{ matrix.lane }}.log
+          if-no-files-found: warn
       - name: Run scenario test bed with fresh worker processes
+        if: matrix.lane == 'other'
         run: make testbed TESTBED_OUTPUT="${{ runner.temp }}/sherlock-testbed.json"
       - name: Preserve scenario test-bed report
-        if: always()
+        if: always() && matrix.lane == 'other'
         uses: actions/upload-artifact@v4
         with:
           name: sherlock-testbed
           path: ${{ runner.temp }}/sherlock-testbed.json
           if-no-files-found: warn
+
+  # Preserve the existing required status. A failed, canceled or skipped lane
+  # must not turn into a successful aggregate check.
+  integration:
+    if: always()
+    needs: integration-tests
+    runs-on: blacksmith-4vcpu-ubuntu-2604
+    steps:
+      - name: Require every integration lane
+        env:
+          RESULT: ${{ needs.integration-tests.result }}
+        run: test "$RESULT" = success
