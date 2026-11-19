@@ -16,12 +16,12 @@ release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 require = release.require
 
-SOURCE = "c5d70148ba742caf8721d47b1fa066f1f026d4fe"
-TREE = "ceca7f3df4fa21f0f3df7e5d3f8190a4e4a5ad58"
-BINARY_SHA = "4bb72e9e01d6ead4dced9aa3eeb56236f131d08caf37d67fe7b1e09f32f431aa"
+SOURCE = "5cec9c2205e26a6f6c4b0e8ba935fceceedfe39f"
+TREE = "ad655b99ccba7f2f91e2261aa0249ff38f79c9eb"
+BINARY_SHA = "84786f7f822534347e6ebded691624c6db71f345e313f18304c68ff369070147"
 BINARY = "sherlock-collector-linux-amd64"
 INTAKE = "sherlock-control-linux-amd64"
-INTAKE_SHA = "06e83bdd4e209c7e41041499c22439b0caf8a8755183db18b4ac2419dd046b88"
+INTAKE_SHA = "846ea7d03d2442e670c527ae6f0452d47a3e8361f46d2e7add748ced8a855fe7"
 ARTIFACT = "sherlock-reviewed-collector-intake-linux-amd64"
 ENVIRONMENT = "collector-release-signing"
 APPROVAL = "COLLECTOR_RELEASE_APPROVAL_JSON"

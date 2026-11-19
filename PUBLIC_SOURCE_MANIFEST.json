@@ -387,8 +387,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/assessment.go",
-      "sha256": "d599654ec39ffa2683120a7d0a26ebee3fae610500058cef15a8ba9a5b4d6546",
-      "size": 3186
+      "sha256": "4bbdf02eacd61fe0e7037a6592e45678a07a75a0d7d69f041163e7bf5a4f38d1",
+      "size": 3187
     },
     {
       "executable": false,
@@ -963,8 +963,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "5d9ac3610f8bcecd7575a94a30fb67a06a1ea51e00806e531b19ec4484d13a03",
-      "size": 14810
+      "sha256": "df4abb9aea7db76900807d4817cc4b1c768ed5bb49fa455028db01c1599e492f",
+      "size": 15132
     },
     {
       "executable": false,
@@ -987,8 +987,8 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "472d01bc44ca13240e16063f5d889e353591690b6f54e055ea9d13199c3f7a95",
-      "size": 17002
+      "sha256": "b503413ac51790d174f94ac0dbde37e3035404f048d3230c4173928b18f921be",
+      "size": 17567
     },
     {
       "executable": false,
@@ -2060,6 +2060,12 @@
     },
     {
       "executable": false,
+      "path": "internal/alertassessment/budget.go",
+      "sha256": "f8c369cdc88255806be4aa409171a3f58a5405fc81bd7c26e164d43d3cd50285",
+      "size": 361
+    },
+    {
+      "executable": false,
       "path": "internal/alertassessment/cooling/README.md",
       "sha256": "2ef84c1c4b414d2c95672872bcf3d837b0d3dea56d952facf631f8438f19e8cd",
       "size": 2224
@@ -2151,14 +2157,14 @@
     {
       "executable": false,
       "path": "internal/alertassessment/replay.go",
-      "sha256": "8f577675c8b8a7b8c7b599f16275f5619d2df28f80ae2468146cab1089a50d99",
-      "size": 135047
+      "sha256": "393d272eb3d85de182d5453924c9760e780f904b9f5e8763bee4249731b48fa9",
+      "size": 135043
     },
     {
       "executable": false,
       "path": "internal/alertassessment/replay_test.go",
-      "sha256": "44a19d0b0e077a9cc999b9b442187640e876974c1fc06d8803faa16cf1abc37d",
-      "size": 74827
+      "sha256": "1e3eb792f7231587a5c00d396faf7e931bd93bf95bb74416f658d7f03a48da07",
+      "size": 76043
     },
     {
       "executable": false,
@@ -4899,14 +4905,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_aged_evidence_integration_test.go",
-      "sha256": "2dfc5b11f6b15b779562cda1e7e0d1545967d9002968dfacbb4d07efec391f02",
-      "size": 4687
+      "sha256": "12650a31bc3c87b8145ab84d65c936ec469584805d80ad508ae6a8861015baf7",
+      "size": 4685
     },
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_capacity_integration_test.go",
-      "sha256": "ac168b55826414d94851e79745cfd0997ad03a76ae3b29d2bc118f2297e58205",
-      "size": 66028
+      "sha256": "25f4311f1d469063d6037db224c06a1ae5f9ee621964255d2b6997136d66ae5a",
+      "size": 66027
     },
     {
       "executable": false,
@@ -4917,8 +4923,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_expiry_window_integration_test.go",
-      "sha256": "d42e2dd18c8d443436ee7b3cbdee9d17aaad2633226388d8a007abefeadcd78d",
-      "size": 15305
+      "sha256": "85c5542a2df387ae82e4a91120fb9562a3e0494cff17dc1df2caa08470b40be0",
+      "size": 15306
     },
     {
       "executable": false,
@@ -4941,8 +4947,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_refresh.go",
-      "sha256": "327a6d27c9885ef73e385721ab02e41ac01965cd52d476884786c52ab7d9fa5b",
-      "size": 18974
+      "sha256": "0eaf88f11cfb822b351b628f4c9a311b76bd2c5e62500b6add43301caf18a855",
+      "size": 18975
     },
     {
       "executable": false,
@@ -7257,8 +7263,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "82386d11e9eb6205e6c084b1ac62fe04a0bf29f9a8faf692b377e981e8a8d8cc",
-      "size": 18761
+      "sha256": "ff05629784144e3b68811987d3cc7f5a4a58bbb4fa3dc61290dd87fd2b9b7ead",
+      "size": 18760
     },
     {
       "executable": false,
@@ -7359,7 +7365,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "01073b05aad704d6e24eda03df4820201a9271dd220bf88ef12c9613a9b4780c",
+      "sha256": "ac249228efa2d3f644e9d47bfe7cd3dbfd19c8065886a498ae88ab3739fae735",
       "size": 12908
     },
     {
