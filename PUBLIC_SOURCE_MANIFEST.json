@@ -9,32 +9,32 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "6712e4ca5c7a502dabdf6da6ed15e1bbd5cd17a2ba18de4d9e52aa776941a411",
-      "size": 3082
+      "sha256": "f32b3a3b7ba70d286ed5a30eef0b56b66194a59c0a488141d45b478a1b4c4404",
+      "size": 4872
     },
     {
       "executable": false,
       "path": ".github/workflows/prepare-collector-release.yml",
-      "sha256": "12f199e653ee1282db1620f695ea1cead0a80d359a6fad4b616627bf6776cf16",
-      "size": 2454
+      "sha256": "79bdb54b4e66a65fc493552ebb2082f2e6182f4c812e83833f329a7f8a2c5b90",
+      "size": 2866
     },
     {
       "executable": false,
       "path": ".github/workflows/prepare-release.yml",
-      "sha256": "30617cd755c48f1f3b380570cfb6a4a668d6a7910957f52bff285f1db319ef56",
-      "size": 2944
+      "sha256": "f1d908c33bf279b636e483759a1e945e8b37c7c9db45e47086e70f70900667e0",
+      "size": 2959
     },
     {
       "executable": false,
       "path": ".github/workflows/release.yml",
-      "sha256": "629df2f5f36fa14b7b9663a35063b7f96fd35ce25a3c2aacb11cbc06a1b144b9",
-      "size": 2983
+      "sha256": "3234b5e8ed930426886c7f5778d6f4b6f39b6bf83c1d98b8e0a733cd092907e4",
+      "size": 2998
     },
     {
       "executable": false,
       "path": ".github/workflows/sign-collector-release.yml",
-      "sha256": "939662bdfb881498d05447fbadce5fcb38a33cbe5495863253cee4994a00ca1b",
-      "size": 3573
+      "sha256": "55e4614366e5aeccab62a22d29ea51a7586f8fc14c7bb64a8eb1b1b454ba844e",
+      "size": 3961
     },
     {
       "executable": false,
@@ -75,8 +75,8 @@
     {
       "executable": false,
       "path": "README.md",
-      "sha256": "4010ea5bf02d121ddd15e6be6931cba1178cf10698ae3f746e577f7540b680eb",
-      "size": 6889
+      "sha256": "79772074182f64c56fa0c9a914123cbacd2b40ebe60d50db1ba3056f31b38b59",
+      "size": 7369
     },
     {
       "executable": false,
@@ -128,6 +128,18 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-admin/assessment.go",
+      "sha256": "b432e334aed8ac9cc17a1ec358ad051ae92501313e11ba409665912f775cb7df",
+      "size": 4511
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-admin/assessment_test.go",
+      "sha256": "b06819e5422763664c031cd8ec918219cd38af2a282698b880a3a17d4d17ad66",
+      "size": 1513
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-admin/human.go",
       "sha256": "a43a0da43555ed096ea91e56d4eca8826b53a7ced9e8c754e31b6585fdbf3adb",
       "size": 5908
@@ -141,8 +153,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-admin/main.go",
-      "sha256": "eb06752e15f9fc1132e268317914cb4939a927420bab10fff947c84765167261",
-      "size": 22421
+      "sha256": "211713adf61cf658fc7a5f8c01d7ba4743578f5f58e0888aeb80dd31d76f4c2d",
+      "size": 23196
     },
     {
       "executable": false,
@@ -213,8 +225,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-alert-worker/main.go",
-      "sha256": "daa8062400f332b2dedb4871df5ad1b2bd6723c0eb861cac1b5b05d34c4708b0",
-      "size": 3094
+      "sha256": "da86510237f650581771d174ae4e3465330dfb052a6b87b395701c41ce151ed3",
+      "size": 3339
     },
     {
       "executable": false,
@@ -249,8 +261,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-api/main.go",
-      "sha256": "e6287b170b685208cd1c8a6b3111efbd670c75351800abe5569276529fa9a31f",
-      "size": 11525
+      "sha256": "27528606b7ea3085fe9de494bfafdb90d08b4f75f417d0ba2d8353cc340add95",
+      "size": 11590
     },
     {
       "executable": false,
@@ -392,6 +404,18 @@
     },
     {
       "executable": false,
+      "path": "cmd/sherlock-control/assessment_production.go",
+      "sha256": "2b10715fc646ad52eafdf5f4ebcf96d1dd247e83870c433e2e23e9b201fcdcb2",
+      "size": 3572
+    },
+    {
+      "executable": false,
+      "path": "cmd/sherlock-control/assessment_production_test.go",
+      "sha256": "4c1d86a924caeaa7ff5152c2e80de9d5f247fd40a80e536fbe243dadee22a37b",
+      "size": 2183
+    },
+    {
+      "executable": false,
       "path": "cmd/sherlock-control/assessment_test.go",
       "sha256": "96ff8e6bcbd2141775df67970686a8ed79ab26c1182f4da40d6aeb8f5901647f",
       "size": 1700
@@ -417,8 +441,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/main.go",
-      "sha256": "b580aef9d0cbfb4dad52fc6dbd1d1c962e8468c8c5bc4697c0637033b4cf9ff9",
-      "size": 9915
+      "sha256": "0fdf2c39d454358d3acd523f0f925bd8cb0acf2311c6b8582c71a223676482f8",
+      "size": 10311
     },
     {
       "executable": false,
@@ -963,14 +987,14 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "df4abb9aea7db76900807d4817cc4b1c768ed5bb49fa455028db01c1599e492f",
-      "size": 15132
+      "sha256": "ccf67da521dc0b2eeef13f3bc6607fcc919063dd83a83c512531d1b8417dd8a2",
+      "size": 26103
     },
     {
       "executable": false,
       "path": "docs/README.md",
-      "sha256": "3477de174268ae4e44d94df7e49aa1fa689b7c61f174e315841b4eea3331be7c",
-      "size": 2886
+      "sha256": "7b131ea58c5751ecc36e53fd6146b08a1ec03b30cfe1c158523bd8fe73e11971",
+      "size": 2895
     },
     {
       "executable": false,
@@ -987,14 +1011,14 @@
     {
       "executable": false,
       "path": "docs/guides/release-review.md",
-      "sha256": "b503413ac51790d174f94ac0dbde37e3035404f048d3230c4173928b18f921be",
-      "size": 17567
+      "sha256": "8f17df8eccbda75acb3042338d59665d8a5d87eaa0d6618fdb037ed48156e029",
+      "size": 17590
     },
     {
       "executable": false,
       "path": "docs/guides/release-signing.md",
-      "sha256": "e358e5f5b4f84ffc4d5c8aa6bf18a54d06ec7edf10ddb39e062f8d3426283c7e",
-      "size": 9378
+      "sha256": "d6391a8c9bcae3d6b85839d75c2fd15997738ead2c6b278b39ec0cba02801e5b",
+      "size": 12161
     },
     {
       "executable": false,
@@ -1029,8 +1053,8 @@
     {
       "executable": false,
       "path": "docs/knowledge.json",
-      "sha256": "fe07746f519b15178c16266921197bd13638072b4e4de58b0e951ba033c1cc8d",
-      "size": 8591
+      "sha256": "3b40ec53c33e09f325600a6d3584a3d31b92f351a738148f601b3ba382cda1de",
+      "size": 8639
     },
     {
       "executable": false,
@@ -1317,8 +1341,8 @@
     {
       "executable": false,
       "path": "internal/adapters/prometheus/cooling_upload.go",
-      "sha256": "a7bc894faa0ccdf5ddb067678f8ba8e18ff63fc3490e333cba44170e6c5d7c38",
-      "size": 3918
+      "sha256": "b367a26f6d1389459df86d92c88e0ee14b6a9d245afd71e0c2fca814bbb6cfcf",
+      "size": 3880
     },
     {
       "executable": false,
@@ -1418,6 +1442,18 @@
     },
     {
       "executable": false,
+      "path": "internal/adminapi/assessment.go",
+      "sha256": "8747ae63f942ae0b59f202109bbf91106fd29f85aa78326401023ca0ccf5634a",
+      "size": 2221
+    },
+    {
+      "executable": false,
+      "path": "internal/adminapi/assessment_test.go",
+      "sha256": "e7de5d9b69e77f13532ef826a5a671df480bdb76c571f01feff413c1d897f8c2",
+      "size": 2315
+    },
+    {
+      "executable": false,
       "path": "internal/adminapi/credential_accesstest.go",
       "sha256": "dd9460ac2c227c4970c6e64ce261e4ba8797982e9809bce6bb7302636e9e7309",
       "size": 12323
@@ -1473,8 +1509,8 @@
     {
       "executable": false,
       "path": "internal/adminapi/human_authorization.go",
-      "sha256": "c9871f6ff2825f3e756ecec5f1aed41176df25511aa0156972d94cb8013c0f0e",
-      "size": 8618
+      "sha256": "af51373ec5bd2b7401f785c00dccfefb3dc7279082377da717e8ebf9c93ccee9",
+      "size": 8832
     },
     {
       "executable": false,
@@ -1497,8 +1533,8 @@
     {
       "executable": false,
       "path": "internal/adminapi/server.go",
-      "sha256": "4c21f72082e862e6c565cace6a203902ac535f1678506e1fe9225a08c60f611c",
-      "size": 64233
+      "sha256": "1a9156b4070dbfe08cdf7389dd2f722c5aea38e3d4a7842b65bb2eb999c39f30",
+      "size": 64544
     },
     {
       "executable": false,
@@ -1514,9 +1550,21 @@
     },
     {
       "executable": false,
+      "path": "internal/adminclient/assessment.go",
+      "sha256": "60f6b173a25926ffa507a7825861fe1089401ae67c5858e8e48767a2af345e1d",
+      "size": 1321
+    },
+    {
+      "executable": false,
+      "path": "internal/adminclient/assessment_test.go",
+      "sha256": "143f19ce2ad53c2c863bbbdfa0a45abd281ed874d19a5c7b503433043ae08d78",
+      "size": 4582
+    },
+    {
+      "executable": false,
       "path": "internal/adminclient/client.go",
-      "sha256": "cd4a8adc49167264d2b2f61e2f035ad4fa1cdb96e3e58fdeb591888142bf9ef5",
-      "size": 64301
+      "sha256": "2924a2fa390045498ae0a9e3f2fbed93e932104533adc1438f8aae84ee629c30",
+      "size": 64684
     },
     {
       "executable": false,
@@ -1682,6 +1730,18 @@
     },
     {
       "executable": false,
+      "path": "internal/adminui/assessment.go",
+      "sha256": "17b8ee11fc54c6da153ca0e9b86bd8d09a0e813664947f5d1ee66fe7e9a39582",
+      "size": 4418
+    },
+    {
+      "executable": false,
+      "path": "internal/adminui/assessment_test.go",
+      "sha256": "5adf11be3e43888b0862286fef5b734c2fb6617b94abd226f53777f5b6312b33",
+      "size": 1206
+    },
+    {
+      "executable": false,
       "path": "internal/adminui/charts.go",
       "sha256": "a7a6c033e0147fdac15800dd4771ce15ec332eb502632aef62f167416e370d20",
       "size": 16986
@@ -1839,8 +1899,8 @@
     {
       "executable": false,
       "path": "internal/adminui/server.go",
-      "sha256": "a43252ba3f0260b43546fec0499f81eeca2ee902431ed0771ece71956929fcdb",
-      "size": 59194
+      "sha256": "0929efd4f90189def7443c89aa8d4d8e39a004973a9b3aabacf5bdb86088ef1a",
+      "size": 59298
     },
     {
       "executable": false,
@@ -2114,6 +2174,12 @@
     },
     {
       "executable": false,
+      "path": "internal/alertassessment/cooling/production.go",
+      "sha256": "6355c5fa81f2fd2d6643791fc22e502c4897f8f5517d8c71895722053603255a",
+      "size": 1074
+    },
+    {
+      "executable": false,
       "path": "internal/alertassessment/host.go",
       "sha256": "437d30cc1022196266f27167fe7f7c8ae9a7585619bdda67257aad6e258d26cf",
       "size": 49652
@@ -2139,14 +2205,26 @@
     {
       "executable": false,
       "path": "internal/alertassessment/policy.go",
-      "sha256": "b94e7de4a966f5344d3845b4a508d3a355b77f2eeca1a4e3b849cd437d0e428c",
-      "size": 11178
+      "sha256": "1c6d610f76977a734d465cbf1fbb44bba3ca2308e92816fca8790958176a58ce",
+      "size": 11537
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/production.go",
+      "sha256": "9cef441ac91ec32c2df6e773ed770cff5e5c6c4f032132a87f292cc4e0e6c2ab",
+      "size": 10041
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/production_test.go",
+      "sha256": "76330275261e7b01449cef9e2a72addcb461243a9e054a21d94c103d7f7e5f6c",
+      "size": 8021
     },
     {
       "executable": false,
       "path": "internal/alertassessment/registry.go",
-      "sha256": "9c86348b85089e306b3d57095f1ec4ffd898a36b4ded5cb5513f93c7da90f5f5",
-      "size": 5128
+      "sha256": "e8f5cf4268525aeb7f5d55f8e9a6df04e60b6639df4c2e8fc749082ae7633732",
+      "size": 5149
     },
     {
       "executable": false,
@@ -2157,8 +2235,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/replay.go",
-      "sha256": "393d272eb3d85de182d5453924c9760e780f904b9f5e8763bee4249731b48fa9",
-      "size": 135043
+      "sha256": "5fc2a1e3c6a707fb562f53b6cfd57a55e46a78a191b5245a839c509ba4c7a2aa",
+      "size": 135943
     },
     {
       "executable": false,
@@ -2195,6 +2273,12 @@
       "path": "internal/alertassessment/upload_test.go",
       "sha256": "2635b37cc782ca4ad20543c8129171f72d96ed466814b5df758a39e6bc2ed894",
       "size": 10225
+    },
+    {
+      "executable": false,
+      "path": "internal/alertdelivery/history.go",
+      "sha256": "36640318997c6ba2dbe928906153aa45b759418c2ed624f14e94a044eb54d6e7",
+      "size": 1936
     },
     {
       "executable": false,
@@ -2715,8 +2799,8 @@
     {
       "executable": false,
       "path": "internal/collectorcontrol/cooling_upload_test.go",
-      "sha256": "794d794ff850ca51cd4a5fb13cb9a59497f2db7cf260482c0b7bbe2792fb5152",
-      "size": 4874
+      "sha256": "2d9201a38d9fae071c4cec3141ce15980c9c590977e3685e7697a586c1c39386",
+      "size": 5269
     },
     {
       "executable": false,
@@ -2955,8 +3039,20 @@
     {
       "executable": false,
       "path": "internal/collectorruntime/cooling_upload.go",
-      "sha256": "60a46a0c573c133f16baee738ee4bc6ff3765449dba5aceca097e443972e16d3",
-      "size": 10116
+      "sha256": "b8406b29631f41748dc7f73b9be517c0c050c25f2213dce1892d5fcb3cb52ff8",
+      "size": 10734
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/cooling_upload_state.go",
+      "sha256": "c5b0f5e93c5e1d9dbb2496add15d9c9ba15afa31c54bac4ba949483e5bdd7898",
+      "size": 3582
+    },
+    {
+      "executable": false,
+      "path": "internal/collectorruntime/cooling_upload_state_test.go",
+      "sha256": "4f5d90410aad95f7937d9d229615869019dccfc40cee622a4377a6f1fd359427",
+      "size": 2647
     },
     {
       "executable": false,
@@ -3272,6 +3368,18 @@
     },
     {
       "executable": false,
+      "path": "internal/config/assessment_production.go",
+      "sha256": "ff2f9a2027a3d7b46100b1f359f32284f7fffa8c22bdc056382d67d1225eaec0",
+      "size": 2079
+    },
+    {
+      "executable": false,
+      "path": "internal/config/assessment_production_test.go",
+      "sha256": "5c6014796d229f83abe90271825448a0adc3a2a523180c992625a12f90c22636",
+      "size": 2678
+    },
+    {
+      "executable": false,
       "path": "internal/config/assessment_test.go",
       "sha256": "4dc91a8944b7997b7f32449b4c9ad0273a108018a35cb142b04c1e02a666b054",
       "size": 2105
@@ -3345,8 +3453,8 @@
     {
       "executable": false,
       "path": "internal/config/cooling_upload_test.go",
-      "sha256": "6678ddb0f80416d9128118e6c71d86d0f81bfb2aa40e37301649a1905334165d",
-      "size": 2564
+      "sha256": "b66cc20b95700a13668b2b2dcd415f882297159a2ce330ee03ba2866d127f693",
+      "size": 3400
     },
     {
       "executable": false,
@@ -3753,14 +3861,14 @@
     {
       "executable": false,
       "path": "internal/domain/cooling_upload.go",
-      "sha256": "f8ef677194cad39412aaeae9bef5cac741d090ab75ec5a956a9a706c9257c766",
-      "size": 7300
+      "sha256": "c15e361d2accd4f50905a403edf5d97e70d77edc66760512cb320d4fe9b7e12b",
+      "size": 8537
     },
     {
       "executable": false,
       "path": "internal/domain/cooling_upload_test.go",
-      "sha256": "52c116e3aad230817818ff3db39b1f56c9ebafbc333a4360eb1c4cc490f93750",
-      "size": 5718
+      "sha256": "db1c6df6626b0e5d98a1d4dc6f80128696213269eef90871afbcb64306b6792e",
+      "size": 8145
     },
     {
       "executable": false,
@@ -4929,8 +5037,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_input.go",
-      "sha256": "176243bc09006203c6716da8b9e4cd4a018735d9c23bd459078abae324a9a284",
-      "size": 27453
+      "sha256": "4a5a2ab4b34cdbf2cc8a68cbe70f653a1551ab63209ca95aa2bf62034e5193e2",
+      "size": 28685
     },
     {
       "executable": false,
@@ -5043,8 +5151,20 @@
     {
       "executable": false,
       "path": "internal/store/postgres/cooling_upload.go",
-      "sha256": "a5b8872dc0f5c42c9fe54eccec7da88a01832f7982564b30f3b1e67d3b426f3e",
-      "size": 11020
+      "sha256": "4368d22b5746c2505042837f69712afe58bd38f85079a51c3a45500a4482b31c",
+      "size": 12894
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/cooling_upload_continuous.go",
+      "sha256": "a52b5214f34b2a70a5870b063417e57342a4cc4ce030df52b41f6b295862d7a1",
+      "size": 2497
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/cooling_upload_continuous_integration_test.go",
+      "sha256": "0a006708daecebc80fb20731434633524ede3fa96f05c48af6d73446af433caf",
+      "size": 7669
     },
     {
       "executable": false,
@@ -5159,6 +5279,12 @@
       "path": "internal/store/postgres/gp06e_gpu_process_integration_test.go",
       "sha256": "c44ab87819f7f111fa90095778e3e22f5c7bba80e058b16443e5ce424fad8d50",
       "size": 10523
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/incident_transition.go",
+      "sha256": "32af5a715f4eda62d022b2505fd0996812c3110aeb0d9b9d6068b154f2c73e15",
+      "size": 2326
     },
     {
       "executable": false,
@@ -5409,8 +5535,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/monitoring_publish.go",
-      "sha256": "acf82c79c99cf88630d9edc326b959727e7f0f028b00a91c4d66701706994353",
-      "size": 8401
+      "sha256": "ebe829e1faae17c5a52223f688a827d232568c4186c404fe9df9f512a64cc357",
+      "size": 6992
     },
     {
       "executable": false,
@@ -5445,8 +5571,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/network_alert_outbox.go",
-      "sha256": "acdc70cbe57bab9c8a6a81e11caf2cce4391108e14b8169121f1066afa1adf2d",
-      "size": 8138
+      "sha256": "bb026b608b43b4894d3b6f02047e284d8f345233de7dae86c666614685c492e8",
+      "size": 10430
     },
     {
       "executable": false,
@@ -5465,6 +5591,66 @@
       "path": "internal/store/postgres/network_monitor_integration_test.go",
       "sha256": "fdd87a3f37b126bbdf6da48b1f714daf0922c37181d64da1df1487b42a09a421",
       "size": 5087
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment.go",
+      "sha256": "338aab7a680fb7ed0ab982a393e7147c5340c0fd462d034ad3a810019637bb2a",
+      "size": 17710
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment_input.go",
+      "sha256": "204b5f4abae42759b02f6a52e5a72120bb8a0701ca6f046dfbe3841af7bf7f6a",
+      "size": 9764
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment_integration_test.go",
+      "sha256": "e643356b3c37b8fcb41ee51d0fe5cf726a50eeae22e8af260a6ff46cc34ed71c",
+      "size": 15402
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment_performance_integration_test.go",
+      "sha256": "34ab5224f379171afecfacb046826875f8171473dcebb7ea1e9850b6ce8bccf1",
+      "size": 3962
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment_status.go",
+      "sha256": "3565594536f1b5428bcd9f6b53db04e5994876c4d329be65ed5f01642327dfab",
+      "size": 2671
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_assessment_test.go",
+      "sha256": "06d3698f88e04e4e7eb9f8cf06d87d183674974a24d2c1d800011380c76624a7",
+      "size": 3354
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_notification.go",
+      "sha256": "7ace216aaf2adc5c6a1ed6b7bed949b8c4726e25488795576ca2da513fdcf2fc",
+      "size": 18867
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_notification_delivery.go",
+      "sha256": "7a3efd9d3ff3094fee9cf4afef34ee21f66aba1b40655fabc43566e8c7325ca3",
+      "size": 14818
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_notification_integration_test.go",
+      "sha256": "1f43a319d11478187b091c37cf3d7eee247c216cec38e84101a3f2d699c75dd8",
+      "size": 24348
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_notification_test.go",
+      "sha256": "c0900d1ec3fb5272d65dfab104aed3f29b9bbeb4c5b6919804505ffa42ccc7d1",
+      "size": 924
     },
     {
       "executable": false,
@@ -7172,6 +7358,42 @@
     },
     {
       "executable": false,
+      "path": "migrations/000084_continuous_cooling_upload.down.sql",
+      "sha256": "54308ae43acbade51fee8384dc26503aefc5146c75493564c059df7f5e3510d4",
+      "size": 2721
+    },
+    {
+      "executable": false,
+      "path": "migrations/000084_continuous_cooling_upload.up.sql",
+      "sha256": "5f4348d5d1dc6cce3cf3ee02f391d957c7f6cc62709843c07955c0228a2e4713",
+      "size": 3270
+    },
+    {
+      "executable": false,
+      "path": "migrations/000085_production_assessment.down.sql",
+      "sha256": "d60736804d391bbfff68b6b3bc27992e41626b08dbbe386c71629c9a2f762b08",
+      "size": 416
+    },
+    {
+      "executable": false,
+      "path": "migrations/000085_production_assessment.up.sql",
+      "sha256": "aae1ce9befe191e3bebd2f9750ffb4858f65f3deffe9d28de1d5a5c3d454eee4",
+      "size": 4185
+    },
+    {
+      "executable": false,
+      "path": "migrations/000086_production_notifications.down.sql",
+      "sha256": "d1a4268bee27e207e91c3c48b89cd74b80ff874fbe202a8e316cb906b2448f04",
+      "size": 1218
+    },
+    {
+      "executable": false,
+      "path": "migrations/000086_production_notifications.up.sql",
+      "sha256": "ec455a207fb069aee40bb85a0d9b637b3de744daa2984595b5a0579d4fb34800",
+      "size": 5363
+    },
+    {
+      "executable": false,
       "path": "next.md",
       "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
       "size": 7098
@@ -7209,8 +7431,8 @@
     {
       "executable": false,
       "path": "scripts/cooling-upload-grants.sql",
-      "sha256": "bd5dec9ec330d42e13653a2b310396fb90b9ae6ca47561122486b4200517c04c",
-      "size": 814
+      "sha256": "08930d6285de475c4cc919f5ab0447bfef18a36c4c3e807bc0a7500e591ca2ae",
+      "size": 1039
     },
     {
       "executable": false,
@@ -7263,8 +7485,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "ff05629784144e3b68811987d3cc7f5a4a58bbb4fa3dc61290dd87fd2b9b7ead",
-      "size": 18760
+      "sha256": "20c2d4f5bcd3e4da3802c9182ed66500a6930c9a9ba429add3d89cca4a1fe6f1",
+      "size": 20039
     },
     {
       "executable": false,
@@ -7279,10 +7501,22 @@
       "size": 9554
     },
     {
+      "executable": false,
+      "path": "scripts/production-assessment-grants.sql",
+      "sha256": "46905ba1d4f647ee4845d82e3dbf42d4f109cd15538db1c6accd958371f6ae48",
+      "size": 1871
+    },
+    {
       "executable": true,
       "path": "scripts/restore-postgres-drill.sh",
       "sha256": "b002f799b071c9f941d2ab942af3074eac2f6bbb480fd3649c8b3e6c7fd6bd9b",
       "size": 2029
+    },
+    {
+      "executable": false,
+      "path": "scripts/run-integration-shard.py",
+      "sha256": "e596b86e60b6f39cd836e5a4bec6b5f2a246679b51a8b1f6edc0725e4bdc6598",
+      "size": 2065
     },
     {
       "executable": true,
@@ -7323,8 +7557,8 @@
     {
       "executable": false,
       "path": "scripts/test_collector_release.py",
-      "sha256": "4f603e71259bed4e265040b44fe275b6d9966a9e01a0334450a61a43b8883294",
-      "size": 17311
+      "sha256": "922cdd02eecb3190c3915bbc3c69c85b5c899e78071d9c981f256b3f1a03a267",
+      "size": 23794
     },
     {
       "executable": false,
@@ -7337,6 +7571,12 @@
       "path": "scripts/test_grafana_xid_recent.py",
       "sha256": "013de65bd177307aa040e384b3fe33b91242df0072923e54017c09d5eacb7a1c",
       "size": 1723
+    },
+    {
+      "executable": false,
+      "path": "scripts/test_integration_shard.py",
+      "sha256": "2fa790a7652b65bc6c50e39e319fb6e59ddc4c810bc9096aee100cd4bccd6f96",
+      "size": 2224
     },
     {
       "executable": false,
@@ -7365,8 +7605,8 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "ac249228efa2d3f644e9d47bfe7cd3dbfd19c8065886a498ae88ab3739fae735",
-      "size": 12908
+      "sha256": "a12656abd8e79dd29166a8423dd0b05ebb935082a6da56daa4863c285a2884e9",
+      "size": 16149
     },
     {
       "executable": false,

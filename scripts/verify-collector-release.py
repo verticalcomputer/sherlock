@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the collector and intake package and its separate GitHub signing identity."""
+"""Validate exact collector/production packages and their GitHub signing identity."""
 import argparse
 import hashlib
 import importlib.util
@@ -16,23 +16,72 @@ release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 require = release.require
 
-SOURCE = "5cec9c2205e26a6f6c4b0e8ba935fceceedfe39f"
-TREE = "ad655b99ccba7f2f91e2261aa0249ff38f79c9eb"
-BINARY_SHA = "84786f7f822534347e6ebded691624c6db71f345e313f18304c68ff369070147"
+# Exact reviewed source and hashes from two independent clean Linux-target builds.
+SOURCE = "efdc4d901670bf597bd143b6822ff6dc00df8fe6"
+TREE = "da85d8d52efd0cf7400049d10dc35bb5f5174a54"
+BINARY_SHA = "76e44b11850dca9be361f62aba3aca86371d2978ca252ea3c263273f72f3fc78"
+INTAKE_SHA = "bc7b9b3bbdf287a364db0d6fca9c5b03b831f853c75d7a52521b6181752c2604"
+# Every executable is pinned independently; approval must cover all seven.
+ALERT_WORKER_SHA = "e83f9ac02099af7e3ace1fb567b003d16fe084c97db040cbd5730bf68434e72e"
+ADMIN_SHA = "b4272d54dc4e17d4a8c4ebd3e2cf11f74eb356db36cf4797f6656e69f8cd5d2d"
+API_SHA = "efd95a87ecc6f7b573ccf9df6568c09c2cc4591b88c50c37cf5a28e19708133c"
+ADMIN_UI_SHA = "da292dfa0a299379b83af1473ca615b0632b868c78d30c85f509a09cd00cd1cb"
+MIGRATE_SHA = "98acdbaec86cbeb0faa257224a6fd633dbf69140f7db473251516b70e3df8fd0"
 BINARY = "sherlock-collector-linux-amd64"
 INTAKE = "sherlock-control-linux-amd64"
-INTAKE_SHA = "846ea7d03d2442e670c527ae6f0452d47a3e8361f46d2e7add748ced8a855fe7"
-ARTIFACT = "sherlock-reviewed-collector-intake-linux-amd64"
+COMMANDS = {
+    BINARY: "./cmd/sherlock-collector",
+    INTAKE: "./cmd/sherlock-control",
+    "sherlock-alert-worker-linux-amd64": "./cmd/sherlock-alert-worker",
+    "sherlock-admin-linux-amd64": "./cmd/sherlock-admin",
+    "sherlock-api-linux-amd64": "./cmd/sherlock-api",
+    "sherlock-admin-ui-linux-amd64": "./cmd/sherlock-admin-ui",
+    "sherlock-migrate-linux-amd64": "./cmd/sherlock-migrate",
+}
+SCHEMA = 2
+PACKAGE_STATE = "UNSIGNED_COLLECTOR_PRODUCTION_REVIEW_ONLY"
+ARTIFACT = "sherlock-reviewed-collector-production-linux-amd64"
 ENVIRONMENT = "collector-release-signing"
 APPROVAL = "COLLECTOR_RELEASE_APPROVAL_JSON"
 PREPARE = ".github/workflows/prepare-collector-release.yml"
 SIGN = ".github/workflows/sign-collector-release.yml"
 MAIN = "refs/heads/main"
-FILES = {BINARY: 128 << 20, INTAKE: 128 << 20, "source.tar.gz": 64 << 20, "source-files.json": 4 << 20,
-         "sbom.spdx.json": 4 << 20, release.PROVENANCE: 1 << 20}
+COMMON_FILES = {"source.tar.gz": 64 << 20, "source-files.json": 4 << 20,
+                "sbom.spdx.json": 4 << 20, release.PROVENANCE: 1 << 20}
+FILES = {**dict.fromkeys(COMMANDS, 128 << 20), **COMMON_FILES}
 DIGESTS = {"checksums_sha256": "SHA256SUMS", "provenance_sha256": release.PROVENANCE,
            "source_manifest_sha256": "source-files.json", "binary_sha256": BINARY,
-           "intake_sha256": INTAKE}
+           "intake_sha256": INTAKE, "alert_worker_sha256": "sherlock-alert-worker-linux-amd64",
+           "admin_sha256": "sherlock-admin-linux-amd64", "api_sha256": "sherlock-api-linux-amd64",
+           "admin_ui_sha256": "sherlock-admin-ui-linux-amd64", "migrate_sha256": "sherlock-migrate-linux-amd64"}
+
+# Existing rc.6 packages retain their exact old allowlist. They are verifiable,
+# never eligible for signing under the expanded schema2 workflow.
+LEGACY_SOURCE = "5cec9c2205e26a6f6c4b0e8ba935fceceedfe39f"
+LEGACY_TREE = "ad655b99ccba7f2f91e2261aa0249ff38f79c9eb"
+LEGACY_PINS = {
+    BINARY: "84786f7f822534347e6ebded691624c6db71f345e313f18304c68ff369070147",
+    INTAKE: "846ea7d03d2442e670c527ae6f0452d47a3e8361f46d2e7add748ced8a855fe7",
+}
+LEGACY_FILES = {**dict.fromkeys(LEGACY_PINS, 128 << 20), **COMMON_FILES}
+LEGACY_DIGESTS = {key: DIGESTS[key] for key in (
+    "checksums_sha256", "provenance_sha256", "source_manifest_sha256", "binary_sha256", "intake_sha256")}
+
+
+def binary_pins():
+    return {BINARY: BINARY_SHA, INTAKE: INTAKE_SHA,
+            "sherlock-alert-worker-linux-amd64": ALERT_WORKER_SHA,
+            "sherlock-admin-linux-amd64": ADMIN_SHA, "sherlock-api-linux-amd64": API_SHA,
+            "sherlock-admin-ui-linux-amd64": ADMIN_UI_SHA, "sherlock-migrate-linux-amd64": MIGRATE_SHA}
+
+
+def package_spec(policy, *, allow_legacy=False):
+    version = policy.get("schema_version")
+    require(type(version) is int, "collector_exact_approval_required")
+    if version == SCHEMA:
+        return SOURCE, TREE, FILES, DIGESTS, binary_pins()
+    require(allow_legacy and version == 1, "collector_exact_approval_required")
+    return LEGACY_SOURCE, LEGACY_TREE, LEGACY_FILES, LEGACY_DIGESTS, LEGACY_PINS
 
 
 def valid(pattern, value):
@@ -53,18 +102,22 @@ def workflow_context(environment, event, workflow):
     return commit
 
 
-def validate_policy(policy, commit, *, approved):
+def validate_policy(policy, commit, *, approved, allow_legacy=False):
+    # Compatibility is read-only and never accepts a schema1 signing approval.
+    require(not allow_legacy or approved is False, "collector_legacy_verification_only")
+    source, _, _, digests, pins = package_spec(policy, allow_legacy=allow_legacy)
     require(set(policy) == {"schema_version", "approved", "repository", "release_tag", "source_commit",
-                            "workflow_commit", "artifact_id", *DIGESTS}
-            and type(policy["schema_version"]) is int and policy["schema_version"] == 1
+                            "workflow_commit", "artifact_id", *digests}
             and policy["approved"] is approved and policy["repository"] == release.REPOSITORY,
             "collector_exact_approval_required")
-    require(policy["source_commit"] == SOURCE and policy["workflow_commit"] == commit
+    require(policy["source_commit"] == source and policy["workflow_commit"] == commit
             and valid(release.COMMIT, commit) and valid(release.TAG, policy["release_tag"])
             and type(policy["artifact_id"]) is int and policy["artifact_id"] > 0,
             "collector_approval_identity_mismatch")
-    require(all(valid(release.HEX, policy[key]) for key in DIGESTS)
-            and policy["binary_sha256"] == BINARY_SHA and policy["intake_sha256"] == INTAKE_SHA, "collector_approval_digest_mismatch")
+    require(all(valid(release.HEX, policy[key]) for key in digests)
+            and all(valid(release.HEX, sha) for sha in pins.values())
+            and all(policy[key] == pins[name] for key, name in digests.items() if name in pins),
+            "collector_approval_digest_mismatch")
 
 
 def api(path):
@@ -135,7 +188,8 @@ def digest(directory, name):
 
 
 def payload(directory, policy, *, signed=False):
-    expected = set(FILES) | {"SHA256SUMS"} | (release.BUNDLES if signed else set())
+    source, tree, files, digests, pins = package_spec(policy, allow_legacy=signed)
+    expected = set(files) | {"SHA256SUMS"} | (release.BUNDLES if signed else set())
     require(directory.is_dir() and not directory.is_symlink()
             and {path.name for path in directory.iterdir()} == expected, "collector_unexpected_files")
     checksums = release.read_regular(directory / "SHA256SUMS", 16384)
@@ -145,25 +199,32 @@ def payload(directory, policy, *, signed=False):
         match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
         require(match is not None, "collector_bad_checksum_row")
         sha, name = match.groups()
-        require(name in FILES and name not in sums, "collector_bad_checksum_membership")
+        require(name in files and name not in sums, "collector_bad_checksum_membership")
         sums[name] = sha
-    require(set(sums) == set(FILES), "collector_bad_checksum_membership")
-    require(all(digest(directory, name) == sha for name, sha in sums.items()), "collector_payload_tampered")
-    require(all(sums[name] == policy[key] for key, name in DIGESTS.items() if name != "SHA256SUMS")
-            and sums[BINARY] == BINARY_SHA and sums[INTAKE] == INTAKE_SHA, "collector_payload_unapproved")
+    require(set(sums) == set(files), "collector_bad_checksum_membership")
+    require(all(release.digest_file(directory / name, files[name]) == sha for name, sha in sums.items()), "collector_payload_tampered")
+    require(all(sums[name] == policy[key] for key, name in digests.items() if name != "SHA256SUMS")
+            and all(sums[name] == sha for name, sha in pins.items()), "collector_payload_unapproved")
     provenance = release.object_json(release.read_regular(directory / release.PROVENANCE, FILES[release.PROVENANCE]))
-    require(type(provenance.get("schema_version")) is int and provenance["schema_version"] == 1
-            and provenance.get("package_state") == "UNSIGNED_COLLECTOR_REVIEW_ONLY"
+    version = policy["schema_version"]
+    require(type(provenance.get("schema_version")) is int and provenance["schema_version"] == version
+            and provenance.get("package_state") == (PACKAGE_STATE if version == SCHEMA else "UNSIGNED_COLLECTOR_REVIEW_ONLY")
             and provenance.get("release_approved") is False and provenance.get("signed") is False
             and provenance.get("repository") == release.REPOSITORY
-            and provenance.get("source_commit") == SOURCE and provenance.get("source_tree") == TREE
+            and provenance.get("source_commit") == source and provenance.get("source_tree") == tree
             and provenance.get("target") == "linux/amd64" and provenance.get("byte_identical") is True
-            and provenance.get("two_independent_clean_builds") == [BINARY_SHA, BINARY_SHA]
-            and provenance.get("intake_independent_clean_builds") == [INTAKE_SHA, INTAKE_SHA]
             and provenance.get("source_files_sha256") == sums["source-files.json"]
             and provenance.get("release_tag") == policy["release_tag"]
             and provenance.get("workflow_commit") == policy["workflow_commit"],
             "collector_wrong_provenance")
+    if version == SCHEMA:
+        require(provenance.get("independent_clean_builds") == {name: [sha, sha] for name, sha in pins.items()}
+                and provenance.get("commands") == COMMANDS,
+                "collector_wrong_provenance")
+    else:
+        require(provenance.get("two_independent_clean_builds") == [pins[BINARY], pins[BINARY]]
+                and provenance.get("intake_independent_clean_builds") == [pins[INTAKE], pins[INTAKE]],
+                "collector_wrong_provenance")
 
 
 def signatures(directory, commit):
@@ -217,7 +278,7 @@ def main():
     if args.operation == "verify":
         require(args.review_record is not None, "collector_trusted_review_record_required")
         policy = read_policy(args.review_record)
-        validate_policy(policy, policy.get("workflow_commit"), approved=False)
+        validate_policy(policy, policy.get("workflow_commit"), approved=False, allow_legacy=True)
         signatures(directory, policy["workflow_commit"])
         payload(directory, policy, signed=True)
     else:

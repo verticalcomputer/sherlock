@@ -162,3 +162,48 @@ hosted run must prove OIDC issuance, exact verifier rejection for wrong
 identity/issuer and changed manifest/binary, tag/environment protection and
 trusted client distribution. No GitHub Release is created by this workflow.
 Signing grants no node enrollment, telemetry-signing, repair or update authority.
+
+
+## Collector and production notification package
+
+The existing manual `prepare-collector-release.yml` and
+`sign-collector-release.yml` workflows now use schema 2 for the bounded
+collector/production package. The unsigned artifact is
+`sherlock-reviewed-collector-production-linux-amd64`; the signed result is
+`sherlock-signed-collector-production-linux-amd64`. The existing protected
+`collector-release-signing` environment and `COLLECTOR_RELEASE_APPROVAL_JSON`
+remain the approval boundary, with no administrator bypass and a main-only branch
+policy. This package is separate from the node/gateway release described above.
+
+The exact seven executables are collector, control, alert-worker, admin, API,
+admin UI and migrate. Preparation builds each twice from the same pinned source
+in independent offline module/build caches, includes each compilation closure and
+its dependencies in the source manifest/SBOM, and checks every binary against its
+reviewed SHA-256. The source archive also includes bounded, explicitly selected
+migration SQL and the production/upload grant scripts. No service configuration,
+webhook or credential is included; preparation never runs the server, worker or
+migration commands.
+
+Schema 2 approval binds ten digests: the checksum manifest, provenance, source
+manifest, and all seven executable hashes. It also binds the source commit,
+workflow commit, release tag and exact artifact ID. The signing workflow checks
+artifact origin and tag identity before signing only the two existing manifests;
+client verification pins the signing workflow SHA and validates the exact file
+allowlist and every binary hash. A missing binary, extra file, old-schema approval
+or incomplete independent-build map is rejected.
+
+The current verifier retains verification-only compatibility with the previously
+issued rc.6 schema-1 collector/intake package and its exact old source/tree/binary
+pins. That schema can never authorize the additional production executables or
+be used for a new signing operation. Existing older release-specific verifiers
+remain necessary for other historical releases.
+
+For the next candidate, freeze and commit the public source inventory first.
+Then record its source/tree and seven reproducible executable hashes in the
+workflow verifier; the workflow/pin commit is intentionally distinct from the
+source commit. The builder's programmatic `verify_pins=False` option is only for
+local unsigned hash discovery before those pins exist. Hosted preparation always
+requires the pins, and both policy validation and signing reject unset or changed
+hashes. Local discovery output is not an approved or deployable artifact. Review
+the exact hosted output before any protected environment approval; do not rebuild
+or substitute bytes after approval.

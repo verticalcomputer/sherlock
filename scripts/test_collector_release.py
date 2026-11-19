@@ -40,7 +40,7 @@ class CollectorReleaseTests(unittest.TestCase):
             "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "synthetic",
         }
         self.provenance = {
-            "schema_version": 1, "package_state": "UNSIGNED_COLLECTOR_REVIEW_ONLY",
+            "schema_version": collector.SCHEMA, "package_state": collector.PACKAGE_STATE,
             "release_approved": False, "signed": False, "repository": release.REPOSITORY,
             "source_commit": collector.SOURCE, "source_tree": collector.TREE, "target": "linux/amd64",
             "byte_identical": True, "release_tag": self.tag, "workflow_commit": self.workflow,
@@ -49,11 +49,12 @@ class CollectorReleaseTests(unittest.TestCase):
             (self.directory / name).write_bytes(f"synthetic {name}".encode())
         self.binary_sha = collector.digest(self.directory, collector.BINARY)
         self.intake_sha = collector.digest(self.directory, collector.INTAKE)
-        self.provenance["intake_independent_clean_builds"] = [self.intake_sha, self.intake_sha]
-        self.provenance["two_independent_clean_builds"] = [self.binary_sha, self.binary_sha]
+        self.hashes = {name: collector.digest(self.directory, name) for name in collector.COMMANDS}
+        self.provenance["independent_clean_builds"] = {name: [sha, sha] for name, sha in self.hashes.items()}
+        self.provenance["commands"] = collector.COMMANDS
         self.provenance["source_files_sha256"] = collector.digest(self.directory, "source-files.json")
         for module in (collector, prepare.collector):
-            for name, sha in (("BINARY_SHA", self.binary_sha), ("INTAKE_SHA", self.intake_sha)):
+            for name, sha in zip(("BINARY_SHA", "INTAKE_SHA", "ALERT_WORKER_SHA", "ADMIN_SHA", "API_SHA", "ADMIN_UI_SHA", "MIGRATE_SHA"), self.hashes.values()):
                 pin = patch.object(module, name, sha)
                 pin.start()
                 self.addCleanup(pin.stop)
@@ -63,7 +64,7 @@ class CollectorReleaseTests(unittest.TestCase):
         (self.directory / release.PROVENANCE).write_text(json.dumps(self.provenance if provenance is None else provenance))
         (self.directory / "SHA256SUMS").write_text("".join(
             f"{collector.digest(self.directory, name)}  {name}\n" for name in sorted(collector.FILES)))
-        self.policy = {"schema_version": 1, "approved": True, "repository": release.REPOSITORY,
+        self.policy = {"schema_version": collector.SCHEMA, "approved": True, "repository": release.REPOSITORY,
                        "release_tag": self.tag, "source_commit": collector.SOURCE,
                        "workflow_commit": self.workflow, "artifact_id": 123,
                        **{key: collector.digest(self.directory, name) for key, name in collector.DIGESTS.items()}}
@@ -145,25 +146,27 @@ class CollectorReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "collector_payload_unapproved"):
             collector.payload(self.directory, self.policy)
 
-    def test_sbom_describes_both_binaries_with_their_own_dependencies(self):
-        binaries = {collector.BINARY: b"collector", collector.INTAKE: b"intake"}
-        module = {"path": "example.test/intake", "version": "v1.0.0", "archive_sha256": "0" * 64, "h1": "h1:fixture"}
-        prepare.write_sbom(self.root, [module], binaries, {
-            collector.BINARY: set(), collector.INTAKE: {(module["path"], module["version"])},
-        })
+    def test_sbom_describes_all_binaries_with_their_own_dependencies(self):
+        binaries = {name: name.encode() for name in collector.COMMANDS}
+        module = {"path": "example.test/api", "version": "v1.0.0", "archive_sha256": "0" * 64, "h1": "h1:fixture"}
+        api = "sherlock-api-linux-amd64"
+        dependencies = {name: set() for name in binaries}
+        dependencies[api] = {(module["path"], module["version"])}
+        prepare.write_sbom(self.root, [module], binaries, dependencies)
         sbom = json.loads((self.root / "sbom.spdx.json").read_text())
         relations = {(r["spdxElementId"], r["relationshipType"], r["relatedSpdxElement"])
                      for r in sbom["relationships"]}
-        self.assertEqual(relations, {
-            ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Collector"),
-            ("SPDXRef-DOCUMENT", "DESCRIBES", "SPDXRef-Intake"),
-            ("SPDXRef-Collector", "DEPENDS_ON", "SPDXRef-GoStdlib"),
-            ("SPDXRef-Intake", "DEPENDS_ON", "SPDXRef-GoStdlib"),
-            ("SPDXRef-Intake", "DEPENDS_ON", "SPDXRef-GoModule-0"),
-        })
         by_name = {entry["name"]: entry for entry in sbom["packages"]}
+        expected = set()
         for name, data in binaries.items():
-            self.assertEqual(by_name[name]["checksums"][0]["checksumValue"], hashlib.sha256(data).hexdigest())
+            entry = by_name[name]
+            self.assertEqual(entry["checksums"][0]["checksumValue"], hashlib.sha256(data).hexdigest())
+            expected.add(("SPDXRef-DOCUMENT", "DESCRIBES", entry["SPDXID"]))
+            expected.add((entry["SPDXID"], "DEPENDS_ON", "SPDXRef-GoStdlib"))
+        expected.add((by_name[api]["SPDXID"], "DEPENDS_ON", "SPDXRef-GoModule-0"))
+        self.assertEqual(relations, expected)
+        with self.assertRaisesRegex(prepare.release.ReleaseError, "collector_sbom_binary_inventory_mismatch"):
+            prepare.write_sbom(self.root, [module], {collector.BINARY: b"only collector"}, dependencies)
 
     def test_intake_must_match_pinned_binary_and_approval(self):
         with self.assertRaisesRegex(release.ReleaseError, "collector_approval_digest_mismatch"):
@@ -194,8 +197,8 @@ class CollectorReleaseTests(unittest.TestCase):
     def test_provenance_rejects_rebound_source_tag_and_builds(self):
         for field, wrong in (("source_tree", "b" * 40), ("source_commit", self.workflow), ("release_tag", "v9.0.0"),
                              ("workflow_commit", collector.SOURCE), ("signed", True), ("release_approved", True),
-                             ("two_independent_clean_builds", [self.binary_sha]),
-                             ("intake_independent_clean_builds", [self.intake_sha]), ("target", "linux/arm64")):
+                             ("independent_clean_builds", {collector.BINARY: [self.binary_sha]}),
+                             ("commands", {collector.BINARY: "./cmd/sherlock-collector"}), ("target", "linux/arm64")):
             self.refresh(dict(self.provenance, **{field: wrong}))
             with self.subTest(field=field), self.assertRaisesRegex(release.ReleaseError, "collector_wrong_provenance"):
                 collector.payload(self.directory, self.policy)
@@ -249,6 +252,99 @@ class CollectorReleaseTests(unittest.TestCase):
                 collector.main()
             cosign.assert_not_called()
 
+    def test_every_binary_requires_its_own_exact_pin_and_payload(self):
+        for key, name in collector.DIGESTS.items():
+            if name not in collector.COMMANDS:
+                continue
+            with self.subTest(binary=name):
+                with self.assertRaisesRegex(release.ReleaseError, "collector_approval_digest_mismatch"):
+                    collector.validate_policy(dict(self.policy, **{key: "0" * 64}), self.workflow, approved=True)
+                path = self.directory / name
+                original = path.read_bytes()
+                path.write_bytes(b"unreviewed substitute")
+                self.refresh()
+                with self.assertRaisesRegex(release.ReleaseError, "collector_payload_unapproved"):
+                    collector.payload(self.directory, self.policy)
+                path.write_bytes(original)
+                self.refresh()
+        with patch.object(collector, "API_SHA", ""):
+            with self.assertRaisesRegex(release.ReleaseError, "collector_approval_digest_mismatch"):
+                collector.validate_policy(self.policy, self.workflow, approved=True)
+
+    def test_schema1_remains_exact_and_verification_only(self):
+        legacy = self.root / "legacy"
+        legacy.mkdir()
+        for name in collector.LEGACY_FILES:
+            (legacy / name).write_bytes(("legacy " + name).encode())
+        pins = {name: collector.digest(legacy, name) for name in collector.LEGACY_PINS}
+        provenance = {
+            "schema_version": 1, "package_state": "UNSIGNED_COLLECTOR_REVIEW_ONLY",
+            "release_approved": False, "signed": False, "repository": release.REPOSITORY,
+            "source_commit": collector.LEGACY_SOURCE, "source_tree": collector.LEGACY_TREE,
+            "target": "linux/amd64", "byte_identical": True, "release_tag": self.tag,
+            "workflow_commit": self.workflow, "source_files_sha256": collector.digest(legacy, "source-files.json"),
+            "two_independent_clean_builds": [pins[collector.BINARY]] * 2,
+            "intake_independent_clean_builds": [pins[collector.INTAKE]] * 2,
+        }
+        (legacy / release.PROVENANCE).write_text(json.dumps(provenance))
+        (legacy / "SHA256SUMS").write_text("".join(
+            f"{collector.digest(legacy, name)}  {name}\n" for name in sorted(collector.LEGACY_FILES)))
+        policy = {"schema_version": 1, "approved": False, "repository": release.REPOSITORY,
+                  "release_tag": self.tag, "source_commit": collector.LEGACY_SOURCE,
+                  "workflow_commit": self.workflow, "artifact_id": 123,
+                  **{key: collector.digest(legacy, name) for key, name in collector.LEGACY_DIGESTS.items()}}
+        for name in release.BUNDLES:
+            (legacy / name).write_text("synthetic old signature")
+        with patch.dict(collector.LEGACY_PINS, pins, clear=True):
+            collector.validate_policy(policy, self.workflow, approved=False, allow_legacy=True)
+            collector.payload(legacy, policy, signed=True)
+            record = self.root / "legacy-review.json"
+            record.write_text(json.dumps(policy))
+            with patch("sys.argv", ["verify", "verify", "--directory", str(legacy), "--review-record", str(record)]), \
+                    patch.object(release, "cosign") as cosign:
+                collector.main()
+                self.assertEqual(cosign.call_count, 2)
+                for call in cosign.call_args_list:
+                    self.assertIn(self.workflow, call.args[0])
+            with self.assertRaisesRegex(release.ReleaseError, "collector_exact_approval_required"):
+                collector.validate_policy(dict(policy, approved=True), self.workflow, approved=True)
+            with self.assertRaisesRegex(release.ReleaseError, "collector_legacy_verification_only"):
+                collector.validate_policy(dict(policy, approved=True), self.workflow, approved=True, allow_legacy=True)
+            (legacy / "sherlock-api-linux-amd64").write_text("cannot extend old approval")
+            with self.assertRaisesRegex(release.ReleaseError, "collector_unexpected_files"):
+                collector.payload(legacy, policy, signed=True)
+
+    def test_schema2_does_not_accept_old_provenance_or_partial_build_map(self):
+        for provenance in (
+            dict(self.provenance, schema_version=1),
+            dict(self.provenance, package_state="UNSIGNED_COLLECTOR_REVIEW_ONLY"),
+            dict(self.provenance, independent_clean_builds={name: value for name, value in self.provenance["independent_clean_builds"].items() if name != "sherlock-admin-linux-amd64"}),
+        ):
+            self.refresh(provenance)
+            with self.assertRaisesRegex(release.ReleaseError, "collector_wrong_provenance"):
+                collector.payload(self.directory, self.policy)
+
+    def test_migration_and_grant_source_inventory_is_bounded_and_explicit(self):
+        source = self.root / "source"
+        (source / "migrations").mkdir(parents=True)
+        (source / "scripts").mkdir()
+        names = {"migrations/000084_continuous_cooling_upload.up.sql", "migrations/000084_continuous_cooling_upload.down.sql",
+                 "scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql"}
+        for name in names:
+            (source / name).write_text("-- synthetic reviewed SQL")
+        (source / "scripts/private.env").write_text("must not ship")
+        self.assertEqual(prepare.deployment_source_files(source), names)
+        bad = source / "migrations/private.sql"
+        bad.touch()
+        with self.assertRaisesRegex(prepare.release.ReleaseError, "collector_invalid_migration_inventory"):
+            prepare.deployment_source_files(source)
+        bad.unlink()
+        grant = source / "scripts/production-assessment-grants.sql"
+        grant.unlink()
+        grant.symlink_to(source / "scripts/private.env")
+        with self.assertRaisesRegex(prepare.release.ReleaseError, "collector_unsafe_deployment_source"):
+            prepare.deployment_source_files(source)
+
     def test_workflows_are_manual_and_isolate_signing_permission(self):
         repo = SCRIPTS.parent
         preparation = (repo / collector.PREPARE).read_text()
@@ -260,8 +356,9 @@ class CollectorReleaseTests(unittest.TestCase):
             self.assertNotIn("contents: write", workflow)
             self.assertNotIn("gh release", workflow)
             self.assertNotIn("sherlock-gateway-linux-amd64", workflow)
-            self.assertIn(f"/{collector.BINARY}", workflow)
-            self.assertIn(f"/{collector.INTAKE}", workflow)
+            for name in collector.COMMANDS:
+                self.assertIn(f"/{name}", workflow)
+            self.assertNotIn("collector-intake-linux-amd64", workflow)
         self.assertNotIn("id-token: write", preparation)
         preflight, protected = signing.split("\n  sign:", 1)
         self.assertNotIn("id-token: write", preflight)
