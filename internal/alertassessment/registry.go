@@ -92,11 +92,11 @@ func validateDescriptor(d Descriptor) error {
 	if !ValidID(d.Category, 128) || d.Contract != 1 || d.Implementation < 1 || d.PolicySchema < 1 || d.TrackerSchema < 1 || d.CandidateSchema < 1 || d.DetailsSchema < 1 {
 		return ErrInvalid
 	}
-	if Set(d.Modes, 2) != nil || len(d.Modes) == 0 || Set(d.Reasons, 32) != nil {
+	if Set(d.Modes, 3) != nil || len(d.Modes) == 0 || Set(d.Reasons, 32) != nil {
 		return ErrInvalid
 	}
 	for _, m := range d.Modes {
-		if m != "replay" && m != "shadow" {
+		if m != "replay" && m != "shadow" && m != "production" {
 			return ErrInvalid
 		}
 	}

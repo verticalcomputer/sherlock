@@ -102,6 +102,10 @@ func main() {
 	}
 	defer pool.Close()
 	store, err := storepg.NewAlertOutboxStore(pool)
+	cluster, enrollment := os.Getenv("SHERLOCK_ALERT_ASSESSMENT_CLUSTER"), os.Getenv("SHERLOCK_ALERT_ASSESSMENT_ENROLLMENT")
+	if cluster != "" || enrollment != "" {
+		store, err = storepg.NewAssessmentAlertOutboxStore(pool, cluster, enrollment)
+	}
 	if err != nil {
 		log.Fatal("GP-09 outbox is unavailable")
 	}

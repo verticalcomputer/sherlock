@@ -96,6 +96,9 @@ func reviewedHumanRoute(method string, rest []string) (humanRouteGrant, bool) {
 			return humanRouteGrant{capability: auth.CapabilityConfigurationWrite, privilege: auth.PrivilegeCredentialManage}, true
 		}
 	}
+	if len(rest) == 3 && method == http.MethodGet && rest[0] == "assessment" && validClusterIDPath(rest[1]) && validClusterIDPath(rest[2]) {
+		return humanRouteGrant{capability: auth.CapabilityIncidentsRead}, true
+	}
 	if len(rest) == 3 {
 		switch {
 		case method == http.MethodPost && rest[0] == "credential-access-tests" && validClusterIDPath(rest[1]) && rest[2] == "cancel":

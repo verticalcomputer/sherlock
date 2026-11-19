@@ -70,3 +70,20 @@ func TestLoadCoolingUploadProfileBindsExactProtectedBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadContinuousCoolingProfile(t *testing.T) {
+	raw := strings.Replace(testCoolingProfileJSON, `"version":2`, `"version":3,"state":"ENABLED"`, 1)
+	raw = strings.Replace(raw, `,"ends_at":"2026-11-18T09:00:00Z"`, "", 1)
+	path := filepath.Join(t.TempDir(), "continuous.json")
+	t.Setenv("SHERLOCK_PROMETHEUS_COOLING_PROFILE_FILE", path)
+	for _, state := range []string{"ENABLED", "DISABLED"} {
+		body := strings.Replace(raw, `"state":"ENABLED"`, `"state":"`+state+`"`, 1)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		profile, hash, err := LoadCoolingUploadProfile()
+		if err != nil || profile.Version != 3 || profile.State != state || !profile.EndsAt.IsZero() || hash != domain.ChecksumSHA256([]byte(body)).String() {
+			t.Fatalf("profile=%+v hash=%s err=%v", profile, hash, err)
+		}
+	}
+}

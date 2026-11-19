@@ -19,7 +19,7 @@ import (
 func (c *Client) CoolingInstant(ctx context.Context, profile domain.CoolingUploadProfile, query domain.QueryKind, slot time.Time) (QueryResult, error) {
 	field, ok := domain.CoolingUploadField(query)
 	if err := profile.Validate(); err != nil || !ok || !slot.Equal(slot.Truncate(domain.CoolingUploadInterval)) ||
-		slot.Before(profile.StartsAt) || !slot.Before(profile.EndsAt) {
+		!profile.ActiveAt(slot) {
 		return QueryResult{}, &Error{Code: domain.FailureInvalidArgument, Message: "invalid cooling upload query or scope"}
 	}
 	groups := make(map[domain.StableNodeID][]string, domain.CoolingUploadMaxNodes)

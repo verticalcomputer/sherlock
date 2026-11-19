@@ -1,6 +1,6 @@
-# Experimental alert assessment
+# Alert assessment operations
 
-Assessment v1 runs offline replay or isolated live shadow in `sherlock-control`. It is disabled by default and available in full control or `prometheus-upload` mode. Upload mode starts the assessment worker without starting full-control network monitoring, work dispatch or identity enrollment. It produces local investigation intents and comparison reports. Existing monitoring remains responsible for production incidents and notifications. No assessment decision sends a hardware-team message or suppresses an existing alert.
+Assessment v1 runs offline replay or isolated live shadow in `sherlock-control`. It is disabled by default and available in full control or `prometheus-upload` mode. Upload mode starts the assessment worker without starting full-control network monitoring, work dispatch or identity enrollment. It produces local investigation intents and comparison reports. Existing monitoring remains responsible for production incidents and notifications. No shadow assessment decision sends a hardware-team message or suppresses an existing alert. The separately enrolled production path below can publish cooling notifications; it remains disabled until explicitly configured.
 
 ## Configuration and enrollment
 
@@ -50,7 +50,7 @@ can retry within the 15-minute retention window.
 Migration 83 adds immutable profile authority and authenticated report receipts.
 Provision the intake's explicit profile/receipt privileges with
 [`scripts/cooling-upload-grants.sql`](../scripts/cooling-upload-grants.sql),
-using `psql -v upload_role=EXISTING_INTAKE_ROLE -f scripts/cooling-upload-grants.sql`.
+using `psql -v upload_role=EXISTING_INTAKE_ROLE -f scripts/cooling-upload-grants.sql` after migration 84 (the current script includes V3 authority columns).
 Keep that role separate from the assessment login. Apply the optional
 [`scripts/assessment-upload-grants.sql`](../scripts/assessment-upload-grants.sql)
 with `psql -v assessment_role=DEDICATED_ASSESSMENT_LOGIN -f scripts/assessment-upload-grants.sql`
@@ -148,3 +148,159 @@ Closed evidence is retained for seven days. Restarting with the matching configu
 Repository acceptance requires the package/CLI race checks, reproducible replay/archive exercises, `make check`, the disposable PostgreSQL 17 integration suite, independent review and successful maximum-profile resource/contention evidence. Record exact test scope and results in the pull request and CI. An optimized resource run must not be substituted with a race-instrumented timing claim or a workload that never reaches evaluation.
 
 A live 24-hour shadow run, real hardware labels, delivery, production enablement and any suppression decision require separate enrollment, credentials, authorization and acceptance evidence. This implementation does not authorize them.
+
+## Production cooling notifications
+
+Production uses the same category evaluator with a distinct continuous lifecycle,
+not a promoted shadow run. Migrations 84–86 add schema only; they enroll no
+assets, enable no notifications and send nothing. The first rollout remains
+three GPUs across two nodes. Wider enrollment requires separate qualification.
+Existing urgent thermal handling remains independently owned and must be verified
+before replacing an externally managed warning rule.
+
+### Continuous collection
+
+V3 uses the same signed HTTP transport and 15-second temperature/power queries.
+Its profile has `version: 3`, `state: "ENABLED"` or `"DISABLED"`, a strictly
+increasing revision and an aligned `starts_at`. Its `ends_at` is zero; V2 retains
+its original finite window and does not accept the V3 state field. Node/GPU,
+collector, source and inventory identities remain explicit. The upper bounds
+remain eight GPUs/two nodes, eight-second source timeout, 15-minute spool age,
+122 pending reports and four retry uploads per five-second retry cycle.
+
+Install the exact protected profile bytes on intake and the pilot collector,
+using the existing profile-file setting. These are explicit operator operations,
+not actions taken by the assessment host. The collector persists its highest
+applied revision/hash in its private spool before sampling. A stale file, changed
+bytes at the same revision, or V2 downgrade cannot undo an applied V3 state.
+Keep that checkpoint during rollback. A profile family promoted to V3 cannot
+register V2 again, even if a delayed V2 revision has a larger number.
+
+Registering a successor revokes old receipt authority immediately. Pending old
+reports are rejected, never relabeled; already admitted history remains usable
+with its original provenance. Disabling centrally does not establish that a
+ disconnected collector stopped. Apply the newer DISABLED file to the head and
+verify its local persisted state/log separately. There is no remote stop deadline
+or central applied-state acknowledgment in this file-based control protocol.
+
+### Production host configuration
+
+Run `sherlock-control assessment-production` as its own explicitly configured
+process. This command starts only assessment: no listeners, collection dispatch,
+Slurm loops, diagnosis or workload execution. Do not start full control merely
+to enable cooling notifications. Leave `SHERLOCK_ASSESSMENT_MODE` empty or
+`disabled` in this process; concurrent shadow capacity requires separate review.
+
+Required environment:
+
+- `SHERLOCK_PRODUCTION_ASSESSMENT_DATABASE_URL`: a dedicated production role.
+- `SHERLOCK_PRODUCTION_ASSESSMENT_CONFIG_FILE`: a private regular JSON file,
+  not a symlink, at most 64 KiB.
+
+Provision the group privileges with
+[`scripts/production-assessment-grants.sql`](../scripts/production-assessment-grants.sql)
+on the explicitly selected database. Provision its login and CONNECT grant
+separately. Never reuse a superuser, upload, shadow writer or workload-control
+login. Startup checks reachable role capabilities and rejects privileges beyond
+its table allow-list. PUBLIC or inherited CREATE/TEMP/system privileges can make
+that check fail; review them and preserve other authorized services' grants
+before changing privileges. Do not grant broad table access to bypass preflight.
+
+The outer config is `{schema:1, revision:1, notifications_enabled:false,
+evidence_base_url:"https://YOUR_AUTHENTICATED_SHERLOCK_ORIGIN", assessment:{...}}`.
+Use the existing shadow assessment shape inside `assessment`, with:
+
+- A unique stable `run_id` used as the production enrollment ID.
+- `implementation:2`, `run_duration_seconds:0`, `budgets_ms:[120000]`.
+- The same typed cooling policy and exact canonical assets/inventory.
+- Upload bindings naming the continuous profile family, initial revision/hash,
+  collector and sorted node scope. Only compatible admitted successor revisions
+  are accepted; scope changes cannot expand the enrolled GPUs.
+
+Keep the assessment configuration immutable for that enrollment. Changes to
+notification enablement require a larger outer revision; a stale configuration
+cannot undo an operator disable. In-flight candidates retain their deadlines and
+old occurrences retain their identities. Initial deployment must keep
+`notifications_enabled:false` until the separate activation gates below pass.
+The 120-second observation ceiling permits early decisions; it is not a guarantee
+that an unreachable Slack receiver accepts a message in two minutes.
+Execution limits remain 250 ms/GPU, two seconds per serial refresh, two connections,
+200 ms SQL statements and 50 ms locks. Retention has an independent 250 ms
+opportunity at startup and once per minute, sharing the same two-connection pool;
+refresh failures cannot prevent this maintenance loop. Neither collection nor deadline retention
+is a human acknowledgment or a cooling recovery.
+
+### Slack delivery and operator controls
+
+Use the existing `sherlock-alert-worker`, webhook file and sender. To claim the
+new producer, explicitly set both `SHERLOCK_ALERT_ASSESSMENT_CLUSTER` and
+`SHERLOCK_ALERT_ASSESSMENT_ENROLLMENT`; leaving either partially configured is
+an error. An unscoped legacy worker does not claim production assessment intents.
+The scoped worker must use the authorized database and existing protected file
+`/etc/sherlock/alert-secrets/slack-webhook.url`. Do not put the URL in config JSON,
+logs or this document.
+
+Only validated, post-activation production concerns create new initial notices.
+Shadow arms and historical shadow previews cannot send. Worsening and measured
+recovery retain occurrence context. Delayed non-urgent history becomes one
+bounded D2 catch-up, including an episode that recovered before first delivery.
+Original events, evidence, intents, attempts and supersession are retained.
+Slack/network receipt loss can still cause a duplicate remote message; stable
+incident and occurrence IDs make that uncertainty visible.
+
+Use the existing local operator command with dedicated database credentials:
+
+```text
+sherlock-admin assessment status --cluster CLUSTER --enrollment ENROLLMENT
+sherlock-admin assessment history --cluster CLUSTER --enrollment ENROLLMENT --occurrence OCCURRENCE
+sherlock-admin assessment acknowledge --cluster CLUSTER --enrollment ENROLLMENT --occurrence OCCURRENCE --expected-version VERSION --actor LOCAL_OPERATOR
+sherlock-admin assessment maintenance --cluster CLUSTER --enrollment ENROLLMENT --occurrence OCCURRENCE --expected-version VERSION --actor LOCAL_OPERATOR --seconds 3600 --reason "hardware investigation"
+sherlock-admin assessment disable-notifications --cluster CLUSTER --enrollment ENROLLMENT --expected-version ENROLLMENT_REVISION --actor LOCAL_OPERATOR
+```
+
+Actor is local attribution, not a verified remote principal. Expected versions
+protect against stale changes. Acknowledgment records who saw the concern; it
+never mutes delivery. Maintenance holds only the named existing occurrence for
+1–86,400 seconds; zero clears it. Collection/evaluation continue and urgent
+handling bypasses the hold. A leased message may still arrive. Clearing or
+shortening an existing hold remains possible after physical recovery, but adding
+or extending one after closure is rejected. Expiry releases D2 catch-up even if
+no further samples arrive. A recurrence does not inherit acknowledgment or hold.
+
+Disabling notification authority fences unclaimed intents and preserves their
+DISABLED disposition. Already leased sends may finish. Re-enable is a larger
+explicit config revision, never automatic replay of the previous queue. Keep
+collector and assessment lifecycle controls separate. Stopping the process is
+not proof that the source stopped or the physical condition recovered.
+
+### Evidence, retention and activation gates
+
+History links resolve on the existing admin UI at
+`/admin/clusters/CLUSTER/assessment/ENROLLMENT/OCCURRENCE`. Both UI and API must
+have verified human-session/cluster-membership enforcement enabled. The new
+route refuses compatibility-only authorization. A member of another cluster
+cannot inspect the history. The page includes events, proof, delivery and
+operator audit with bounded pagination. CLI `--after` and `--after-audit` provide
+the same event/audit continuation without dropping older history.
+
+Closed occurrence evidence is retained for 90 days. Pending, leased, failed or
+ambiguous delivery prevents automatic history cleanup. Active evaluation reads
+only its rolling 15-minute evidence plus referenced proof, not 90 days of history.
+Capacity failures remain visible in `assessment status`; do not respond by
+silently discarding history or increasing execution limits.
+
+Before live enablement, verify the named source's fresh 15-second receipts,
+24 hours without unhandled execution-budget failures, existing urgent authority,
+exact original-warning routing handoff and hardware-team evidence access. Review
+at least 20 concern/transient episodes with zero missed actionable cases and at
+most one unnecessary investigation request, recording the limited sample size.
+Measure decision, publication and receiver delay separately. A separately
+authorized test message is necessary to prove the actual webhook destination.
+Repository fixtures establish none of these live facts.
+
+For rollback, disable new publication and fence pending intents first; account
+for leased messages. Preserve the production database and V3 local checkpoints.
+Migrations refuse destructive downgrade when retained production authority or
+history exists. Keep a compatible reader/retention process instead of dropping
+records to make an older binary start. Changes to collectors, routing and services
+require separate deployment authorization and must not affect running workloads.
