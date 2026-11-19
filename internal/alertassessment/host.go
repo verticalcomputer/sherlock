@@ -433,39 +433,41 @@ func references(b any) []string {
 	}
 }
 
-type sampleCacheKey struct{}
+type factBodyCacheKey struct{}
 
-type cachedSample struct {
+type cachedFactBody struct {
 	category string
 	fact     Fact
-	body     *Sample
+	body     any
 	verified bool
 }
 
-func (s cachedSample) matches(category string, f Fact) bool {
-	return s.category == category && s.fact.Run == f.Run && s.fact.Asset == f.Asset &&
+func (s cachedFactBody) matches(category string, f Fact) bool {
+	return s.category == category && s.fact.Run == f.Run && s.fact.Asset == f.Asset && s.fact.Kind == f.Kind &&
 		s.fact.AvailableAt == f.AvailableAt && bytes.Equal(s.fact.Body, f.Body)
 }
 
-// sampleCache is bounded and lasts for one GPU call group. Host selectors
-// share their parses. A verified entry has also passed fact body and identity
-// validation, for the given bytes and envelope only.
-type sampleCache struct {
+// factBodyCache is bounded and lasts for one GPU call group. Host selectors
+// share sample parses; verified entries also share typed body/identity checks.
+// Every hit requires the exact category, envelope and bytes. Graph edges and
+// temporal eligibility are always revalidated against the current request.
+// Cached bodies are private, read-only host values, never category arguments.
+type factBodyCache struct {
 	mu    sync.Mutex
-	items map[string]cachedSample
+	items map[string]cachedFactBody
 	bytes int
 }
 
 func withFactValidationCache(ctx context.Context) context.Context {
-	return context.WithValue(ctx, sampleCacheKey{}, &sampleCache{items: make(map[string]cachedSample)})
+	return context.WithValue(ctx, factBodyCacheKey{}, &factBodyCache{items: make(map[string]cachedFactBody)})
 }
 
-func checkedSamples(ctx context.Context) *sampleCache {
-	cache, _ := ctx.Value(sampleCacheKey{}).(*sampleCache)
+func checkedSamples(ctx context.Context) *factBodyCache {
+	cache, _ := ctx.Value(factBodyCacheKey{}).(*factBodyCache)
 	return cache
 }
 
-func (c *sampleCache) lookup(category string, f Fact) *Sample {
+func (c *factBodyCache) lookup(category string, f Fact) *Sample {
 	s, verified := c.find(category, f)
 	if !verified {
 		return nil
@@ -473,8 +475,17 @@ func (c *sampleCache) lookup(category string, f Fact) *Sample {
 	return s
 }
 
-func (c *sampleCache) find(category string, f Fact) (*Sample, bool) {
-	if c == nil || f.Kind != "SAMPLE" {
+func (c *factBodyCache) find(category string, f Fact) (*Sample, bool) {
+	if f.Kind != "SAMPLE" {
+		return nil, false
+	}
+	body, verified := c.findBody(category, f)
+	sample, _ := body.(*Sample)
+	return sample, verified
+}
+
+func (c *factBodyCache) findBody(category string, f Fact) (any, bool) {
+	if c == nil {
 		return nil, false
 	}
 	c.mu.Lock()
@@ -488,7 +499,7 @@ func (c *sampleCache) find(category string, f Fact) (*Sample, bool) {
 
 // decodeForSelection supplies a read-only parse to host callers that select
 // facts before graph validation. Category callbacks use DecodeSample instead.
-func (c *sampleCache) decodeForSelection(category string, f Fact) (*Sample, error) {
+func (c *factBodyCache) decodeForSelection(category string, f Fact) (*Sample, error) {
 	if s, _ := c.find(category, f); s != nil {
 		return s, nil
 	}
@@ -500,7 +511,7 @@ func (c *sampleCache) decodeForSelection(category string, f Fact) (*Sample, erro
 	return s, nil
 }
 
-func (c *sampleCache) remember(category string, f Fact, b *Sample, verified bool) {
+func (c *factBodyCache) remember(category string, f Fact, b any, verified bool) {
 	if c == nil {
 		return
 	}
@@ -513,11 +524,18 @@ func (c *sampleCache) remember(category string, f Fact, b *Sample, verified bool
 		}
 		return
 	}
-	if len(c.items) == maxPoints || len(f.Body) > maxFactBytes || len(f.Body) > MaxInputBytes-c.bytes {
+	limit := maxFactBytes
+	switch f.Kind {
+	case "FEATURE":
+		limit = maxFeatureBytes
+	case "TRACKER_CONTEXT":
+		limit = maxTrackerContextBytes
+	}
+	if len(c.items) == maxPoints || len(f.Body) > limit || len(f.Body) > MaxInputBytes-c.bytes {
 		return
 	}
 	f.Body = slices.Clone(f.Body)
-	c.items[f.ID] = cachedSample{category: category, fact: f, body: b, verified: verified}
+	c.items[f.ID] = cachedFactBody{category: category, fact: f, body: b, verified: verified}
 	c.bytes += len(f.Body)
 }
 
@@ -541,7 +559,7 @@ type factGraph struct {
 	index    map[string]Fact
 	bodies   map[string]any
 	times    map[string]time.Time
-	samples  *sampleCache
+	samples  *factBodyCache
 }
 
 func newFactGraph(category string, index map[string]Fact) *factGraph {
@@ -556,11 +574,12 @@ func (g *factGraph) body(id string) (any, error) {
 	if !ok || f.ID != id {
 		return nil, ErrInvalid
 	}
-	parsed, verified := g.samples.find(g.category, f)
+	cached, verified := g.samples.findBody(g.category, f)
 	if verified {
-		g.bodies[id] = parsed
-		return parsed, nil
+		g.bodies[id] = cached
+		return cached, nil
 	}
+	parsed, _ := cached.(*Sample)
 	b, err := factBody(g.category, f, parsed)
 	if err != nil {
 		return nil, err
@@ -570,9 +589,7 @@ func (g *factGraph) body(id string) (any, error) {
 		return nil, ErrInvalid
 	}
 	g.bodies[id] = b
-	if s, ok := b.(*Sample); ok {
-		g.samples.remember(g.category, f, s, true)
-	}
+	g.samples.remember(g.category, f, b, true)
 	return b, nil
 }
 
@@ -741,7 +758,7 @@ func Eligibility(f Fact, index map[string]Fact) (time.Time, error) {
 	return eligibility(f, index, "", nil)
 }
 
-func eligibility(f Fact, index map[string]Fact, category string, samples *sampleCache) (time.Time, error) {
+func eligibility(f Fact, index map[string]Fact, category string, samples *factBodyCache) (time.Time, error) {
 	at := f.AvailableAt
 	var refs []string
 	switch f.Kind {
@@ -1113,7 +1130,7 @@ func boundedRequestBytes(r Request) bool {
 	return true
 }
 
-func validateRequest(r Request, d Descriptor, hash string, samples *sampleCache) (*factGraph, error) {
+func validateRequest(r Request, d Descriptor, hash string, samples *factBodyCache) (*factGraph, error) {
 	if r.Contract != d.Contract || r.Implementation != d.Implementation || r.Category != d.Category || r.DescriptorHash != hash || !ValidHash(hash) || !ValidHash(r.ConfigHash) ||
 		!ValidID(r.Run, 128) || !validAsset(r.Asset) || !durableTime(r.LogicalAt) || !durableTime(r.AvailabilityCutoff) || !durableTime(r.ExecutedAt) ||
 		!durableTime(r.DiscoveryFloor) || r.AvailabilityCutoff.After(r.LogicalAt) || r.ExecutedAt.Before(r.LogicalAt) || r.ExpectedRevision < 1 || r.Sequence < 0 ||

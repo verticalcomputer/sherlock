@@ -204,7 +204,7 @@ func assessmentDiagnosticStage(stage string) string {
 	case "begin", "load", "input", "evaluate", "persist", "commit", "rollback", "cleanup",
 		"refresh.begin", "refresh.load", "refresh.input", "refresh.evaluate", "refresh.persist", "refresh.commit",
 		"failure_flush.begin", "failure_flush.read", "failure_flush.write", "failure_flush.commit", "failure_flush.resolve",
-		"production.begin", "production.load", "production.input", "production.evaluate", "production.persist", "production.commit", "production.cleanup":
+		"production.begin", "production.load", "production.input", "production.evaluate", "production.persist", "production.commit", "production.cleanup", "production.claim_attempt", "production.failure_account":
 		return stage
 	default:
 		return "unknown"

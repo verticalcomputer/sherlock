@@ -32,7 +32,7 @@ func loadProductionUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, ass
 	if err != nil {
 		return p, fmt.Errorf("%w: %v", ErrMonitoringAuthority, err)
 	}
-	if a.DecodeStrict(body, &p, 16<<10) != nil || p.Validate() != nil || !productionProfileScope(p, c, asset, b) {
+	if a.DecodeStrict(body, &p, 64<<10) != nil || p.Validate() != nil || !productionProfileScope(p, c, asset, b) {
 		return p, ErrMonitoringAuthority
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))`, fmt.Sprintf("prometheus-cooling-profile:%s:%d", p.ProfileID, p.Revision)); err != nil {
@@ -67,26 +67,52 @@ func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.A
 	return slices.Equal(slices.Compact(nodes), b.ScopeNodes) && slices.Contains(p.Assets, domain.CoolingUploadAsset{NodeID: domain.StableNodeID(asset.NodeID), GPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID)})
 }
 
+// Look up each receipt's run by its unique ID before applying scope predicates.
+// The lateral boundary prevents a low-cardinality source-time estimate from
+// rescanning the source's run history for every receipt.
+// The bounded selection transmits each consecutive equal metric-field document and each
+// profile revision once. Adjacency uses exact JSONB equality; parsing
+// still validates the whole document, including conflicting duplicate fields.
+// No cache survives this call or replaces each receipt's temporal validation.
 // Receipt admission already serialized against revocation. Retain that proof
 // when a compatible revision is replaced; do not reject historical good samples
 // merely because their old profile has since been revoked.
 func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
-	rows, err := tx.Query(ctx, `SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,r.metric_fields,p.profile,p.profile_hash,p.revision,i.revision_id,i.source_at
+	rows, err := tx.Query(ctx, `WITH selected AS MATERIALIZED (
+ SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,
+ CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields ELSE NULL END AS metric_fields,
+ p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at
  FROM prometheus_cooling_upload_receipts u JOIN prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
- JOIN collection_runs r ON r.run_id=u.run_id AND r.cluster_id=p.cluster_id AND r.source_id=p.source_id
+ JOIN LATERAL (SELECT * FROM collection_runs WHERE run_id=u.run_id OFFSET 0) r
+ ON r.cluster_id=p.cluster_id AND r.source_id=p.source_id
  LEFT JOIN LATERAL (SELECT revision_id,source_at FROM goodput_inventory_revisions WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=r.scheduled_for AND observed_at<=r.completed_at ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1)i ON true
  WHERE p.cluster_id=$1 AND p.source_id=$2 AND r.query_kind=$3 AND r.range_start IS NULL AND r.job_id IS NULL
  AND r.idempotency_key='prometheus-cooling-report-v2-'||u.payload_hash
  AND u.received_at BETWEEN $4 AND $5 AND r.completed_at<=$5 AND p.profile_id=$6 AND p.revision>=$7 AND p.collector_id=$8 AND p.inventory_revision=$9
  AND p.protocol_version=3 AND p.collection_state='ENABLED' AND p.registered_at<r.scheduled_for AND r.scheduled_for>=p.starts_at
  AND (p.revoked_at IS NULL OR u.received_at<=p.revoked_at)
- ORDER BY u.received_at DESC,r.run_id DESC LIMIT 257`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
+ ORDER BY u.received_at DESC,r.run_id DESC LIMIT 257
+), grouped AS (
+ SELECT *,lag(metric_fields) OVER(ORDER BY received_at DESC,run_id DESC) AS previous_fields,
+ row_number() OVER(ORDER BY received_at DESC,run_id DESC) AS receipt_ordinal,
+ row_number() OVER(PARTITION BY profile_hash,revision ORDER BY received_at DESC,run_id DESC) AS profile_ordinal
+ FROM selected
+)
+SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,
+ CASE WHEN receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields THEN metric_fields END,
+ receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields AS fields_changed,
+ CASE WHEN profile_ordinal=1 THEN
+  (SELECT p.profile FROM prometheus_cooling_upload_profiles p
+   WHERE p.profile_id=grouped.profile_id AND p.revision=grouped.revision AND p.profile_hash=grouped.profile_hash)
+ END,profile_hash,revision,revision_id,source_at
+ FROM grouped ORDER BY received_at DESC,run_id DESC`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	defer rows.Close()
 	attempts := map[string]assessmentAttempt{}
 	cache := productionProfileCache{}
+	supported := false
 	ids := []string{}
 	identity := domain.GPUObservationIdentity{EntityKey: asset.EntityKey, NodeID: domain.StableNodeID(asset.NodeID), PhysicalGPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID), Canonical: true}
 	for rows.Next() {
@@ -95,19 +121,33 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
 		}
 		var id, hash string
 		var revision int64
+		var fieldsChanged bool
 		var slot, completed, received time.Time
 		var status domain.ResultStatus
 		var complete bool
 		var fieldsBody, profileBody []byte
 		var inventory *string
 		var inventoryAt *time.Time
-		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &fieldsBody, &profileBody, &hash, &revision, &inventory, &inventoryAt); err != nil {
+		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &fieldsBody, &fieldsChanged, &profileBody, &hash, &revision, &inventory, &inventoryAt); err != nil {
 			return nil, nil, false, err
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, nil, false, err
 		}
-		profile, err := cache.decode(profileBody, hash, revision)
+		if fieldsChanged {
+			var fields []domain.DCGMFieldEvidence
+			supported = len(fieldsBody) <= 64<<10 && json.Unmarshal(fieldsBody, &fields) == nil && monitoringFieldState(fields, identity, b.Metric) == "SUPPORTED"
+		}
+		var profile domain.CoolingUploadProfile
+		if len(profileBody) > 0 {
+			profile, err = cache.decode(profileBody, hash, revision)
+		} else {
+			cached, found := cache[productionProfileKey{hash, revision}]
+			if !found {
+				continue
+			}
+			profile, err = cached.profile, nil
+		}
 		if err != nil || !productionProfileScope(profile, c, asset, b) {
 			continue
 		}
@@ -115,8 +155,6 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
 		if string(task.RunID) != id || !slot.Equal(slot.Truncate(domain.CoolingUploadInterval)) || completed.Before(slot) || completed.After(task.Deadline) || received.After(at) {
 			continue
 		}
-		var fields []domain.DCGMFieldEvidence
-		supported := len(fieldsBody) <= 16384 && json.Unmarshal(fieldsBody, &fields) == nil && monitoringFieldState(fields, identity, b.Metric) == "SUPPORTED"
 		p := a.Provenance{Mode: "upload", CollectionRunID: id, Operation: b.Operation, ScheduleRevision: profile.Revision, InventoryRevision: profile.InventoryRevision, CollectorID: string(profile.CollectorID), UploadProfileID: profile.ProfileID, UploadProfileHash: hash}
 		ids = append(ids, id)
 		attempts[id] = assessmentAttempt{completed: completed.UTC(), scheduled: slot.UTC(), provenance: p, usable: status == domain.ResultSucceeded && complete && supported && inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)}
@@ -131,7 +169,7 @@ func validateProductionBaseline(ctx context.Context, tx pgx.Tx, c a.Config, asse
 		return fmt.Errorf("production baseline authority: %w", err)
 	}
 	var p domain.CoolingUploadProfile
-	if a.DecodeStrict(body, &p, 16<<10) != nil || p.Validate() != nil || !productionProfileScope(p, c, asset, b) {
+	if a.DecodeStrict(body, &p, 64<<10) != nil || p.Validate() != nil || !productionProfileScope(p, c, asset, b) {
 		return ErrMonitoringAuthority
 	}
 	return nil
@@ -151,7 +189,7 @@ type productionProfileCache map[productionProfileKey]productionCachedProfile
 
 func (cache productionProfileCache) decode(body []byte, hash string, revision int64) (domain.CoolingUploadProfile, error) {
 	var profile domain.CoolingUploadProfile
-	if len(body) == 0 || len(body) > 16<<10 || !a.ValidHash(hash) || revision < 1 {
+	if len(body) == 0 || len(body) > 64<<10 || !a.ValidHash(hash) || revision < 1 {
 		return profile, a.ErrInvalid
 	}
 	key := productionProfileKey{hash, revision}
@@ -166,7 +204,7 @@ func (cache productionProfileCache) decode(body []byte, hash string, revision in
 	if len(cache) >= 256 {
 		return profile, ErrAssessmentCapacity
 	}
-	if a.DecodeStrict(body, &profile, 16<<10) != nil || profile.Validate() != nil || profile.Revision != revision {
+	if a.DecodeStrict(body, &profile, 64<<10) != nil || profile.Validate() != nil || profile.Revision != revision {
 		return profile, a.ErrInvalid
 	}
 	stored := profile

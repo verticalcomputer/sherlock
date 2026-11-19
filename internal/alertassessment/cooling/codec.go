@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
@@ -41,6 +42,39 @@ func decodePayload[T any](p a.Payload, kind string, limit int) (T, error) {
 		return v, a.ErrInvalid
 	}
 	return v, nil
+}
+
+// Policy contains only scalar values. Cache exactly one immutable, fully
+// validated decode; return it by value. This avoids repeating strict parsing at
+// each retained history boundary without caching authority, state or decisions.
+// Identity includes the complete envelope and copied bytes, not just a digest.
+type decodedPolicy struct {
+	payload a.Payload
+	policy  Policy
+}
+
+var lastDecodedPolicy atomic.Pointer[decodedPolicy]
+
+func decodePolicy(ctx context.Context, payload a.Payload) (Policy, error) {
+	if err := ctx.Err(); err != nil {
+		return Policy{}, err
+	}
+	if cached := lastDecodedPolicy.Load(); cached != nil && payload.Category == cached.payload.Category && payload.Kind == cached.payload.Kind && payload.Schema == cached.payload.Schema && payload.Hash == cached.payload.Hash && bytes.Equal(payload.Body, cached.payload.Body) {
+		return cached.policy, nil
+	}
+	p, err := decodePayload[Policy](payload, "policy", stateLimit)
+	if err != nil {
+		return p, err
+	}
+	if err = p.Validate(); err != nil {
+		return p, err
+	}
+	if err = ctx.Err(); err != nil {
+		return Policy{}, err
+	}
+	payload.Body = bytes.Clone(payload.Body)
+	lastDecodedPolicy.Store(&decodedPolicy{payload: payload, policy: p})
+	return p, nil
 }
 
 func validTime(at time.Time) bool {
@@ -166,10 +200,10 @@ func validateDetails(d Details) error {
 	return nil
 }
 
-func decode(r a.Request) (Policy, TrackerState, State, error) {
+func decode(ctx context.Context, r a.Request) (Policy, TrackerState, State, error) {
 	t := initial()
 	var s State
-	p, err := decodePayload[Policy](r.Policy, "policy", stateLimit)
+	p, err := decodePolicy(ctx, r.Policy)
 	if err != nil {
 		return p, t, s, err
 	}

@@ -25,6 +25,13 @@ func (s *CollectionStore) RegisterCoolingUploadProfile(ctx context.Context, prof
 	if err != nil {
 		return err
 	}
+	maxBytes := 8192
+	if profile.Version == domain.CoolingUploadProductionVersion {
+		maxBytes = domain.CoolingUploadProductionProfileMaxBytes
+	}
+	if len(encoded) > maxBytes {
+		return fmt.Errorf("cooling upload profile exceeds storage bound")
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err

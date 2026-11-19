@@ -24,16 +24,43 @@ type CoolingUploadStore interface {
 // NewCoolingUploadHandler mounts only the opt-in scheduled cooling report path.
 func NewCoolingUploadHandler(identity IdentityAuthenticator, auth RequestAuthenticator, store CoolingUploadStore,
 	clock Clock, profile domain.CoolingUploadProfile, hash string) (http.Handler, error) {
+	return NewSharedCoolingUploadHandler(identity, auth, store, clock, []CoolingUploadEnrollment{{Profile: profile, Hash: hash}})
+}
+
+// CoolingUploadEnrollment is operator-selected authority; request bytes cannot
+// choose an enrollment before the caller has been authenticated.
+type CoolingUploadEnrollment struct {
+	Profile domain.CoolingUploadProfile
+	Hash    string
+}
+
+func NewSharedCoolingUploadHandler(identity IdentityAuthenticator, auth RequestAuthenticator, store CoolingUploadStore,
+	clock Clock, enrollments []CoolingUploadEnrollment) (http.Handler, error) {
 	if identity == nil || auth == nil || store == nil || clock == nil {
 		return nil, fmt.Errorf("cooling upload requires identity, authentication, storage and clock")
 	}
-	if err := profile.Validate(); err != nil {
-		return nil, err
+	if len(enrollments) < 1 || len(enrollments) > domain.CoolingUploadMaxProfiles {
+		return nil, fmt.Errorf("invalid cooling enrollment count")
 	}
-	if digest, err := domain.ParseSHA256(hash); err != nil || digest.String() != hash {
-		return nil, fmt.Errorf("invalid cooling upload profile hash")
+	approved := make(map[domain.CollectorID]CoolingUploadEnrollment, len(enrollments))
+	clusters, sources, ids := map[domain.ClusterID]bool{}, map[domain.SourceID]bool{}, map[string]bool{}
+	for _, e := range enrollments {
+		if err := e.Profile.Validate(); err != nil {
+			return nil, err
+		}
+		if digest, err := domain.ParseSHA256(e.Hash); err != nil || digest.String() != e.Hash {
+			return nil, fmt.Errorf("invalid cooling upload profile hash")
+		}
+		if _, found := approved[e.Profile.CollectorID]; found || clusters[e.Profile.ClusterID] || sources[e.Profile.SourceID] || ids[e.Profile.ProfileID] {
+			return nil, fmt.Errorf("duplicate cooling enrollment authority")
+		}
+		e.Profile.Assets = slices.Clone(e.Profile.Assets)
+		approved[e.Profile.CollectorID] = e
+		clusters[e.Profile.ClusterID] = true
+		sources[e.Profile.SourceID] = true
+		ids[e.Profile.ProfileID] = true
 	}
-	profile.Assets = slices.Clone(profile.Assets)
+
 	t := &Transport{authenticator: identity, requestAuth: auth, mux: http.NewServeMux()}
 	t.mux.HandleFunc("POST "+domain.CoolingUploadPath, func(w http.ResponseWriter, r *http.Request) {
 		correlation, ok := validateProtocolVersion(w, r, domain.CoolingUploadVersion)
@@ -49,10 +76,12 @@ func NewCoolingUploadHandler(identity IdentityAuthenticator, auth RequestAuthent
 		if !ok {
 			return
 		}
-		if caller.CollectorID != profile.CollectorID || caller.ClusterID != profile.ClusterID {
+		enrollment, found := approved[caller.CollectorID]
+		if !found || caller.ClusterID != enrollment.Profile.ClusterID {
 			writeProblem(w, http.StatusForbidden, "FORBIDDEN", "collector is outside the cooling upload scope", correlation)
 			return
 		}
+		profile, hash := enrollment.Profile, enrollment.Hash
 		var report domain.CoolingUploadReport
 		encoded, err := io.ReadAll(r.Body)
 		var limit *http.MaxBytesError

@@ -14,14 +14,18 @@ const (
 	CoolingUploadRunPrefix = "prometheus-cooling-v2-"
 	CoolingUploadVersion   = 2
 	// V3 versions profile/report authority, not the existing authenticated V2 transport.
-	CoolingUploadProductionVersion = 3
-	CoolingUploadInterval          = 15 * time.Second
-	CoolingUploadRetention         = 15 * time.Minute
-	CoolingUploadSourceTimeout     = 8 * time.Second
-	CoolingUploadMaxWindow         = 24 * time.Hour
-	CoolingUploadMaxAssets         = 8
-	CoolingUploadMaxNodes          = 2
-	CoolingUploadMaxBytes          = 1 << 20
+	CoolingUploadProductionVersion         = 3
+	CoolingUploadInterval                  = 15 * time.Second
+	CoolingUploadRetention                 = 15 * time.Minute
+	CoolingUploadSourceTimeout             = 8 * time.Second
+	CoolingUploadMaxWindow                 = 24 * time.Hour
+	CoolingUploadMaxAssets                 = 8
+	CoolingUploadMaxNodes                  = 2
+	CoolingUploadMaxBytes                  = 1 << 20
+	CoolingUploadProductionMaxAssets       = 128
+	CoolingUploadProductionMaxNodes        = 16
+	CoolingUploadProductionProfileMaxBytes = 64 << 10
+	CoolingUploadMaxProfiles               = 2
 )
 
 type CoolingUploadAsset struct {
@@ -65,10 +69,14 @@ func (p CoolingUploadProfile) Validate() error {
 			return fmt.Errorf("invalid continuous cooling upload state")
 		}
 	}
-	if len(p.Assets) == 0 || len(p.Assets) > CoolingUploadMaxAssets || !slices.IsSortedFunc(p.Assets, compareCoolingUploadAssets) {
+	maxAssets, maxNodes := CoolingUploadMaxAssets, CoolingUploadMaxNodes
+	if p.Version == CoolingUploadProductionVersion {
+		maxAssets, maxNodes = CoolingUploadProductionMaxAssets, CoolingUploadProductionMaxNodes
+	}
+	if len(p.Assets) == 0 || len(p.Assets) > maxAssets || !slices.IsSortedFunc(p.Assets, compareCoolingUploadAssets) {
 		return fmt.Errorf("invalid cooling upload profile asset bounds or order")
 	}
-	nodes := make(map[StableNodeID]bool, CoolingUploadMaxNodes)
+	nodes := make(map[StableNodeID]bool, maxNodes)
 	gpus := make(map[PhysicalGPUUUID]bool, len(p.Assets))
 	for _, asset := range p.Assets {
 		if !validDCGMIdentityToken(string(asset.NodeID)) || !validDCGMIdentityToken(string(asset.GPUUUID)) ||
@@ -77,7 +85,7 @@ func (p CoolingUploadProfile) Validate() error {
 		}
 		nodes[asset.NodeID], gpus[asset.GPUUUID] = true, true
 	}
-	if len(nodes) > CoolingUploadMaxNodes {
+	if len(nodes) > maxNodes {
 		return fmt.Errorf("cooling upload profile exceeds its node limit")
 	}
 	return nil

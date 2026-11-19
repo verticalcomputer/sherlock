@@ -153,10 +153,13 @@ A live 24-hour shadow run, real hardware labels, delivery, production enablement
 
 Production uses the same category evaluator with a distinct continuous lifecycle,
 not a promoted shadow run. Migrations 84–86 add schema only; they enroll no
-assets, enable no notifications and send nothing. The first rollout remains
-three GPUs across two nodes. Wider enrollment requires separate qualification.
-Existing urgent thermal handling remains independently owned and must be verified
-before replacing an externally managed warning rule.
+assets, enable no notifications and send nothing. Migrations 87–88 add explicit
+fleet profile capacity and durable scheduling fairness; they also activate nothing.
+Production supports at most 128 GPUs across 16 nodes per cluster enrollment.
+Finite shadow runs retain their eight-GPU/two-node bounds. Existing urgent thermal
+handling remains independently owned. Parallel live notification enrollment must
+leave the existing warning and urgent routes active; replacing either route needs
+separate outcome qualification.
 
 ### Production release package
 
@@ -180,12 +183,21 @@ V3 uses the same signed HTTP transport and 15-second temperature/power queries.
 Its profile has `version: 3`, `state: "ENABLED"` or `"DISABLED"`, a strictly
 increasing revision and an aligned `starts_at`. Its `ends_at` is zero; V2 retains
 its original finite window and does not accept the V3 state field. Node/GPU,
-collector, source and inventory identities remain explicit. The upper bounds
-remain eight GPUs/two nodes, eight-second source timeout, 15-minute spool age,
-122 pending reports and four retry uploads per five-second retry cycle.
+collector, source and inventory identities remain explicit. V3 admits at most
+128 GPUs/16 nodes; V2 remains limited to eight GPUs/two nodes. The eight-second
+absolute source timeout, 1 MiB collection/report limit, 15-minute spool age,
+122 pending reports and four retry uploads per five-second retry cycle remain
+unchanged. V3 uses four bounded label-alias queries per metric, independent of
+node count; exact node/UUID pairs are still checked before accepting samples.
 
 Install the exact protected profile bytes on intake and the pilot collector,
-using the existing profile-file setting. These are explicit operator operations,
+using the existing profile-file setting. A shared intake can instead use
+`SHERLOCK_PROMETHEUS_COOLING_PROFILE_FILES`, a JSON array of one or two absolute
+private profile-file paths. It is mutually exclusive with the singleton setting
+and is not accepted by a collector. Each profile must match an authorized intake
+binding; the authenticated collector and cluster select its profile. V3 files
+are bounded to 64 KiB. Each head collector still receives only its own profile.
+These are explicit operator operations,
 not actions taken by the assessment host. The collector persists its highest
 applied revision/hash in its private spool before sampling. A stale file, changed
 bytes at the same revision, or V2 downgrade cannot undo an applied V3 state.
@@ -246,11 +258,19 @@ old occurrences retain their identities. Initial deployment must keep
 `notifications_enabled:false` until the separate activation gates below pass.
 The 120-second observation ceiling permits early decisions; it is not a guarantee
 that an unreachable Slack receiver accepts a message in two minutes.
-Execution limits remain 250 ms/GPU, two seconds per serial refresh, two connections,
+Use a separate explicitly scoped evaluator and Slack worker per cluster rather
+than one process per GPU. Execution limits remain 250 ms/GPU, two seconds per
+serial refresh and two connections per evaluator,
 200 ms SQL statements and 50 ms locks. Retention has an independent 250 ms
 opportunity at startup and once per minute, sharing the same two-connection pool;
 refresh failures cannot prevent this maintenance loop. Neither collection nor deadline retention
-is a human acknowledgment or a cooling recovery.
+is a human acknowledgment or a cooling recovery. Fleet refreshes service bounded
+slices. Due work runs first, with an acquisition opportunity reserved so a failed
+deadline cannot indefinitely block new evidence. Durable attempt ordering resumes
+fairly after restart. A GPU skipped because the slice is full is not reported as
+an execution failure. Check actual full-fleet sweep time and overdue backlog:
+the two-second refresh budget does not promise that every GPU finishes in one
+refresh, and an overloaded or unavailable evaluator can commit a decision late.
 
 ### Slack delivery and operator controls
 
@@ -311,16 +331,24 @@ only its rolling 15-minute evidence plus referenced proof, not 90 days of histor
 Capacity failures remain visible in `assessment status`; do not respond by
 silently discarding history or increasing execution limits.
 
-Before live enablement, verify the named source's fresh 15-second receipts,
-24 hours without unhandled execution-budget failures, existing urgent authority,
-exact original-warning routing handoff and the context forwarded to the hardware
-team. When a history URL is configured, verify their evidence access too; otherwise
+Before parallel live enablement, reconcile every enrolled GPU UUID against fresh
+source observations, verify both metrics' original-timestamp 15-second receipts,
+measure full-fleet refresh coverage and deadline lateness under the chosen resource
+caps, and verify the independent legacy/urgent routes remain active. Use the
+existing webhook and explicitly scoped workers. Sherlock messages already start
+with `Sherlock cooling`, distinguishing them from legacy GPU alerts. Do not
+equate an absent Sherlock notice with a verified transient or successful delivery;
+check evaluation and outbox state. When a history URL is configured, verify their evidence access too; otherwise
 internal operators retain responsibility for retrieving Sherlock's stored proof. Review
 at least 20 concern/transient episodes with zero missed actionable cases and at
 most one unnecessary investigation request, recording the limited sample size.
 Measure decision, publication and receiver delay separately. A separately
 authorized test message is necessary to prove the actual webhook destination.
-Repository fixtures establish none of these live facts.
+Repository fixtures establish none of these live facts. The episode review and
+24 hours without unhandled execution-budget failures qualify any later warning
+handoff; a separately authorized parallel rollout can collect that evidence while
+both alerting paths remain enabled. It does not establish detection accuracy or
+authorize suppressing the old rule.
 
 For rollback, disable new publication and fence pending intents first; account
 for leased messages. Preserve the production database and V3 local checkpoints.

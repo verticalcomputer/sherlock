@@ -89,7 +89,8 @@ jobs:
         shell: bash
         run: |
           go test -tags=integration ./internal/store/postgres -list '^TestProductionAssessmentAgedBacklogBudget$' | grep -Fx 'TestProductionAssessmentAgedBacklogBudget'
-          go test -count=1 -tags=integration ./internal/store/postgres -run '^TestProductionAssessmentAgedBacklogBudget$' -v
+          go test -tags=integration ./internal/store/postgres -list '^TestProductionAssessmentFleetAgedBacklogBudget$' | grep -Fx 'TestProductionAssessmentFleetAgedBacklogBudget'
+          go test -count=1 -tags=integration ./internal/store/postgres -run '^TestProductionAssessment(AgedBacklogBudget|FleetAgedBacklogBudget)$' -v
       - name: Preserve integration results
         if: always()
         uses: actions/upload-artifact@v4

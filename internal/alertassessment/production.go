@@ -72,6 +72,39 @@ func NewProductionEngine(ctx context.Context, c ProductionConfig, start time.Tim
 	return e, nil
 }
 
+// NewProductionAssetEngine preserves the full enrollment's validated policy,
+// binding scope and config hash while allocating only the selected asset's
+// working engine. This matches NewProductionEngine followed by RestoreProduction,
+// without allocating and discarding all other trackers on every GPU pass.
+func NewProductionAssetEngine(ctx context.Context, c ProductionConfig, start time.Time, r *Registry, asset string) (*Engine, error) {
+	c, err := NormalizeProductionConfig(ctx, c, r)
+	if err != nil {
+		return nil, err
+	}
+	index := slices.IndexFunc(c.Assessment.Assets, func(x Asset) bool { return x.EntityKey == asset })
+	start = clock(start)
+	if index < 0 || start.IsZero() {
+		return nil, ErrInvalid
+	}
+	_, descriptor, descriptorHash, err := r.LookupVersion(c.Assessment.Category, c.Assessment.Implementation)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := c.Assessment.PolicyPayload(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	configHash, err := c.Assessment.Hash()
+	if err != nil {
+		return nil, err
+	}
+	c.Assessment.Assets = []Asset{c.Assessment.Assets[index]}
+	e := newEngine(c.Assessment, start, r, descriptor, descriptorHash, configHash, policy)
+	e.AdmissionEndAt = time.Time{}
+	e.Shadow = true
+	return e, ctx.Err()
+}
+
 type ProductionSnapshot struct {
 	Schema      int64        `json:"schema"`
 	Enrollment  *Enrollment  `json:"enrollment"`

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,29 +96,77 @@ func (s *ProductionAssessmentStore) Start(ctx context.Context) error {
 func (s *ProductionAssessmentStore) Refresh(ctx context.Context) error {
 	pass, cancel := context.WithTimeout(ctx, a.ShadowRefreshBudget)
 	defer cancel()
-	// First persist all retained due work. Slow/unavailable acquisition cannot
-	// roll back a deadline disposition that does not need new source reads.
+	// Deadline work leads each slice, with independent durable acquisition
+	// fairness. A full fleet may need several slices; untouched rows are not
+	// timeout failures and their original candidate deadlines never move.
 	var failures []error
-	assets, err := s.refreshOrder(pass)
+	due, acquisition, err := s.refreshQueues(pass)
 	if err != nil {
 		return err
 	}
-	for _, dueOnly := range []bool{true, false} {
-		for _, asset := range assets {
-			gpu, stop := context.WithTimeout(pass, a.ShadowGPUBudget)
-			err := s.refreshAsset(gpu, asset, dueOnly)
-			stop()
-			if err != nil {
-				code := assessmentFailureCode(err)
-				_, _ = s.pool.Exec(pass, `UPDATE production_assessment_states SET last_failure_code=$3,last_failure_at=clock_timestamp(),last_attempt_at=clock_timestamp(),failure_count=failure_count+1 WHERE enrollment_id=$1 AND asset=$2`, s.config.Assessment.RunID, asset.EntityKey, code)
-				failures = append(failures, err)
-				if pass.Err() != nil {
-					return errors.Join(failures...)
-				}
+	deadline, _ := pass.Deadline()
+	dueEnd := deadline
+	if len(acquisition) > 0 {
+		dueEnd = dueEnd.Add(-a.ShadowRefreshBudget / 2)
+	}
+	failures = append(failures, s.refreshLane(pass, due, true, dueEnd)...)
+	failures = append(failures, s.refreshLane(pass, acquisition, false, deadline)...)
+	if pass.Err() != nil {
+		failures = append(failures, pass.Err())
+	}
+	return errors.Join(failures...)
+}
+
+const productionAttemptAccountingBudget = 50 * time.Millisecond
+
+func (s *ProductionAssessmentStore) refreshLane(ctx context.Context, queue []productionRefreshEntry, dueOnly bool, until time.Time) []error {
+	var failures []error
+	for _, entry := range queue {
+		// Never give an asset an already exhausted slice. Reserve bounded
+		// bookkeeping separately while counting claim/pool wait in its GPU budget.
+		if ctx.Err() != nil || time.Until(until) < a.ShadowGPUBudget+productionAttemptAccountingBudget {
+			break
+		}
+		gpu, stop := context.WithTimeout(ctx, a.ShadowGPUBudget)
+		claimed, err := s.claimRefreshAttempt(gpu, entry, dueOnly)
+		if err == nil && claimed {
+			err = s.refreshAsset(gpu, entry.asset, dueOnly)
+		}
+		stop()
+		if err != nil {
+			failures = append(failures, err)
+			account, cancel := context.WithTimeout(ctx, productionAttemptAccountingBudget)
+			started := time.Now()
+			_, recordErr := s.pool.Exec(account, `UPDATE production_assessment_states SET last_failure_code=$3,last_failure_at=clock_timestamp(),last_attempt_at=clock_timestamp(),failure_count=failure_count+1 WHERE enrollment_id=$1 AND asset=$2`, s.config.Assessment.RunID, entry.asset.EntityKey, assessmentFailureCode(err))
+			cancel()
+			if recordErr != nil {
+				failures = append(failures, assessmentTransactionError("production.failure_account", started, recordErr, "unknown"))
 			}
 		}
 	}
-	return errors.Join(failures...)
+	return failures
+}
+
+func (s *ProductionAssessmentStore) claimRefreshAttempt(ctx context.Context, entry productionRefreshEntry, dueOnly bool) (bool, error) {
+	started := time.Now()
+	tx, err := beginProductionAssessmentTx(ctx, s.pool)
+	if err != nil {
+		return false, err
+	}
+	defer rollbackMonitoringTx(tx)
+	column, expected := "last_acquire_attempt_at", entry.acquireAttempt
+	if dueOnly {
+		column, expected = "last_due_attempt_at", entry.dueAttempt
+	}
+	// The fixed column is selected by the host, never by configuration. The
+	// compare-and-set also prevents two worker instances using a stale queue
+	// snapshot from claiming the same lane attempt.
+	tag, err := tx.Exec(ctx, `UPDATE production_assessment_states SET `+column+`=clock_timestamp() WHERE enrollment_id=$1 AND asset=$2 AND `+column+` IS NOT DISTINCT FROM $3::timestamptz`, s.config.Assessment.RunID, entry.asset.EntityKey, expected)
+	if err != nil {
+		return false, assessmentTransactionError("production.claim_attempt", started, err, "not_attempted")
+	}
+	err = tx.Commit(ctx)
+	return tag.RowsAffected() == 1, assessmentTransactionError("production.claim_attempt", started, err, "unknown")
 }
 func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) (result error) {
 	stage, started, outcome := "production.begin", time.Now(), "not_attempted"
@@ -152,7 +201,10 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	if dueOnly && (due == nil || due.After(now)) {
 		return nil
 	}
-	e, err := a.NewProductionEngine(ctx, s.config, start.UTC(), s.registry)
+	// The stored enrollment/profile authority remains the original full config.
+	// Engine state belongs to one asset; avoid constructing 128 trackers merely
+	// to discard 127 of them in RestoreProduction.
+	e, err := a.NewProductionAssetEngine(ctx, s.config, start.UTC(), s.registry, asset.EntityKey)
 	if err != nil {
 		return err
 	}
@@ -379,35 +431,73 @@ func productionNotificationEligible(enabled bool, enabledAt *time.Time, entered,
 	return !entered.IsZero() && !entered.Before(*enabledAt)
 }
 
-func (s *ProductionAssessmentStore) refreshOrder(ctx context.Context) ([]a.Asset, error) {
-	rows, err := s.pool.Query(ctx, `SELECT asset FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY CASE WHEN next_due_at<=clock_timestamp() THEN 0 ELSE 1 END,next_due_at NULLS LAST,last_attempt_at NULLS FIRST,asset LIMIT 9`, s.config.Assessment.RunID)
+type productionRefreshEntry struct {
+	asset                           a.Asset
+	due, dueAttempt, acquireAttempt *time.Time
+}
+
+func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]productionRefreshEntry, []productionRefreshEntry, error) {
+	bounded, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,clock_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset LIMIT 129`, s.config.Assessment.RunID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
-	out := []a.Asset{}
+	assets := make(map[string]a.Asset, len(s.config.Assessment.Assets))
+	for _, asset := range s.config.Assessment.Assets {
+		assets[asset.EntityKey] = asset
+	}
+	due, acquisition := []productionRefreshEntry{}, []productionRefreshEntry{}
 	for rows.Next() {
 		var key string
-		if err = rows.Scan(&key); err != nil {
-			return nil, err
+		var now time.Time
+		var entry productionRefreshEntry
+		if err := rows.Scan(&key, &entry.due, &entry.dueAttempt, &entry.acquireAttempt, &now); err != nil {
+			return nil, nil, err
 		}
-		found := false
-		for _, asset := range s.config.Assessment.Assets {
-			if key == asset.EntityKey {
-				out = append(out, asset)
-				found = true
-				break
-			}
+		asset, found := assets[key]
+		if !found || len(acquisition) >= a.MaxProductionGPUs {
+			return nil, nil, a.ErrInvalid
 		}
-		if !found || len(out) > 8 {
-			return nil, a.ErrInvalid
+		entry.asset = asset
+		acquisition = append(acquisition, entry)
+		if entry.due != nil && !entry.due.After(now) {
+			due = append(due, entry)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if len(out) != len(s.config.Assessment.Assets) {
-		return nil, a.ErrInvalid
+	if len(acquisition) != len(assets) {
+		return nil, nil, a.ErrInvalid
 	}
-	return out, nil
+	compareTime := func(x, y *time.Time) int {
+		if x == nil {
+			if y == nil {
+				return 0
+			}
+			return -1
+		}
+		if y == nil {
+			return 1
+		}
+		return x.Compare(*y)
+	}
+	slices.SortFunc(due, func(x, y productionRefreshEntry) int {
+		if order := compareTime(x.dueAttempt, y.dueAttempt); order != 0 {
+			return order
+		}
+		if order := compareTime(x.due, y.due); order != 0 {
+			return order
+		}
+		return strings.Compare(x.asset.EntityKey, y.asset.EntityKey)
+	})
+	slices.SortFunc(acquisition, func(x, y productionRefreshEntry) int {
+		if order := compareTime(x.acquireAttempt, y.acquireAttempt); order != 0 {
+			return order
+		}
+		return strings.Compare(x.asset.EntityKey, y.asset.EntityKey)
+	})
+	return due, acquisition, nil
 }
