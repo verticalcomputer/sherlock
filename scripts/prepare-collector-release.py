@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the pinned unsigned collector and intake package for exact GitHub review."""
+"""Prepare pinned unsigned collector/production binaries for exact GitHub review."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -9,6 +9,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -25,7 +26,7 @@ SPEC.loader.exec_module(collector)
 release = collector.release
 require = release.require
 REVISION, TREE = collector.SOURCE, collector.TREE
-COMMANDS = {collector.BINARY: "./cmd/sherlock-collector", collector.INTAKE: "./cmd/sherlock-control"}
+COMMANDS = collector.COMMANDS
 GO_VERSION = "go1.26.9"
 REPOSITORY = release.REPOSITORY
 MODULE = "github.com/" + REPOSITORY
@@ -59,7 +60,29 @@ def archive(path, members):
             require(tar.extractfile(entry).read() == data, "collector_archive_bytes_mismatch")
 
 
-def build(repo, output, proxy, workflow_commit, tag):
+def deployment_source_files(source):
+    # The migrate command reads SQL from disk. Ship its reviewed inputs alongside
+    # the command closure; executable packages contain no deployment credentials.
+    migrations = sorted((source / "migrations").iterdir())
+    files = {path.relative_to(source).as_posix() for path in migrations
+             if path.name.endswith(".sql")}
+    require(0 < len(files) <= 1024 and all(re.fullmatch(
+        r"migrations/[0-9]{6}_[a-z0-9_]+\.(?:up|down)\.sql", name) for name in files),
+        "collector_invalid_migration_inventory")
+    grants = {"scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql"}
+    for name in files | grants:
+        require((source / name).is_file() and not (source / name).is_symlink()
+                and (source / name).stat().st_size <= 8 << 20,
+                "collector_unsafe_deployment_source")
+    require(sum((source / name).stat().st_size for name in files | grants) <= 16 << 20,
+            "collector_deployment_source_too_large")
+    return files | grants
+
+
+def build(repo, output, proxy, workflow_commit, tag, *, verify_pins=True):
+    # Programmatic local discovery may set verify_pins=False to obtain candidate
+    # hashes before pinning. Hosted preparation always uses the default. Neither
+    # path signs, approves, publishes or installs the resulting unsigned bytes.
     require(run(["git", "--no-replace-objects", "rev-parse", REVISION + "^{tree}"], repo).decode().strip() == TREE, "collector_source_tree_mismatch")
     git_archive = run(["git", "--no-replace-objects", "archive", "--format=tar", REVISION], repo)
     go = Path(shutil.which("go")).resolve()
@@ -143,7 +166,7 @@ def build(repo, output, proxy, workflow_commit, tag):
 
         legal_names = ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
         source_members = {}
-        for name in sorted(local_files | {"go.mod", "go.sum", *legal_names}):
+        for name in sorted(local_files | deployment_source_files(source) | {"go.mod", "go.sum", *legal_names}):
             path = source / name
             source_members[name] = (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
         source_members.update(licenses)
@@ -188,9 +211,9 @@ def build(repo, output, proxy, workflow_commit, tag):
         with ThreadPoolExecutor(max_workers=2) as executor:
             builds = list(executor.map(build, (1, 2)))
         require(builds[0] == builds[1], "collector_nonreproducible")
-        require({name: digest(data) for name, data in builds[0].items()}
-                == {collector.BINARY: collector.BINARY_SHA, collector.INTAKE: collector.INTAKE_SHA},
-                "collector_binary_differs_from_reviewed_candidate")
+        if verify_pins:
+            require({name: digest(data) for name, data in builds[0].items()} == collector.binary_pins(),
+                    "collector_binary_differs_from_reviewed_candidate")
         require(all(digest(path.read_bytes()) == tool_hashes[name] for name, path in tool_paths.items()), "collector_toolchain_drift")
         output = helper.new_private_directory(output)
         write_json(output / "source-files.json", {"source_commit": REVISION, "source_tree": TREE, "files": source_manifest})
@@ -205,17 +228,16 @@ def build(repo, output, proxy, workflow_commit, tag):
         archive(output / "source.tar.gz", source_members)
         write_sbom(output, dependencies, builds[0], command_modules)
         write_json(output / "provenance.unsigned.json", {
-            "schema_version": 1, "repository": REPOSITORY, "source_commit": REVISION, "source_tree": TREE,
-            "workflow_ref_verified": collector.MAIN, "github_ci_run": "44468371434",
-            "github_ci_commit": "254f6051589a487677f9b89c3c1fec8c4027218e",
-            "package_state": "UNSIGNED_COLLECTOR_REVIEW_ONLY", "signed": False, "release_approved": False,
+            "schema_version": collector.SCHEMA, "repository": REPOSITORY, "source_commit": REVISION, "source_tree": TREE,
+            "workflow_ref_verified": collector.MAIN,
+            "package_state": collector.PACKAGE_STATE, "signed": False, "release_approved": False,
             "release_tag": tag, "workflow_commit": workflow_commit, "target": "linux/amd64",
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "build_flags": flags, "go_version": GO_VERSION,
             "build_environment": {k: env[k] for k in ("GOENV", "GOTOOLCHAIN", "GOWORK", "GOOS", "GOARCH", "GOAMD64", "CGO_ENABLED")},
             "module_verification": "Pinned go.sum hashes, Go module zip/go.mod h1 checks, and go mod verify in both caches; GOPROXY=off for both builds.",
-            "two_independent_clean_builds": [digest(row[collector.BINARY]) for row in builds],
-            "intake_independent_clean_builds": [digest(row[collector.INTAKE]) for row in builds],
+            "independent_clean_builds": {name: [digest(row[name]) for row in builds] for name in COMMANDS},
+            "commands": COMMANDS,
             "build_tool_sha256": tool_hashes,
             "byte_identical": True, "public_source_manifest_sha256": digest(public_manifest_data),
             "source_files_sha256": digest((output / "source-files.json").read_bytes()),
@@ -223,11 +245,13 @@ def build(repo, output, proxy, workflow_commit, tag):
 
         (output / "SHA256SUMS").write_text("".join(
             f"{collector.digest(output, name)}  {name}\n" for name in sorted(collector.FILES)))
-        print("Prepared unsigned collector and intake candidates.")
+        print("Prepared unsigned collector and production candidates.")
 
 
 def write_sbom(output, modules, binaries, command_modules):
-    binary_ids = {collector.BINARY: "SPDXRef-Collector", collector.INTAKE: "SPDXRef-Intake"}
+    require(set(binaries) == set(COMMANDS) and set(command_modules) == set(COMMANDS),
+            "collector_sbom_binary_inventory_mismatch")
+    binary_ids = {name: "SPDXRef-" + name.removesuffix("-linux-amd64") for name in COMMANDS}
     def package(identifier, name, version, sha=None):
         item = {"SPDXID": identifier, "name": name, "versionInfo": version,
                 "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
@@ -251,7 +275,7 @@ def write_sbom(output, modules, binaries, command_modules):
         packages.append(item)
     write_json(output / "sbom.spdx.json", {
         "spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT",
-        "name": "Sherlock Linux AMD64 collector and intake candidates",
+        "name": "Sherlock Linux AMD64 collector and production candidates",
         "documentNamespace": "urn:uuid:" + str(uuid.uuid4()),
         "creationInfo": {"created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                          "creators": ["Tool: Sherlock collector release preparation"]},
@@ -267,7 +291,7 @@ def write_sbom(output, modules, binaries, command_modules):
 
 
 def record(directory, commit, tag, artifact_id):
-    result = {"schema_version": 1, "approved": False, "repository": REPOSITORY,
+    result = {"schema_version": collector.SCHEMA, "approved": False, "repository": REPOSITORY,
               "release_tag": tag, "source_commit": REVISION, "workflow_commit": commit,
               "artifact_id": artifact_id,
               **{key: collector.digest(directory, name) for key, name in collector.DIGESTS.items()}}
@@ -299,7 +323,7 @@ def main():
                 "invalid_collector_artifact_id")
         result = record(args.directory.absolute(), commit, tag, int(artifact_id))
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
-            stream.write("## Collector release review\n\n"
+            stream.write("## Collector and production release review\n\n"
                          "Unsigned candidate. Review the exact artifact before environment approval. "
                          "The source and signing workflow commits are separate.\n\n"
                          "```json\n" + json.dumps(result, indent=2, sort_keys=True) + "\n```\n")

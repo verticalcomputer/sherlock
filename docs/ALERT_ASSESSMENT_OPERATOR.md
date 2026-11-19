@@ -158,6 +158,22 @@ three GPUs across two nodes. Wider enrollment requires separate qualification.
 Existing urgent thermal handling remains independently owned and must be verified
 before replacing an externally managed warning rule.
 
+### Production release package
+
+Use the schema-2 collector/production package prepared and verified by the
+existing collector release workflows. Its exact executable allowlist is
+`sherlock-collector`, `sherlock-control`, `sherlock-alert-worker`, `sherlock-admin`,
+`sherlock-api`, `sherlock-admin-ui` and `sherlock-migrate`, all for Linux/amd64.
+The source archive includes the reviewed migration SQL and the production/upload
+role-grant scripts. Verify all ten exact review digests and both signature bundles
+before installation; the older collector/intake package does not contain the
+production delivery or evidence UI binaries. See [release signing](guides/release-signing.md).
+
+The package contains no webhook, database credentials, enrollment configuration
+or service activation. Provision the existing protected Slack URL locally and
+start only the explicitly selected commands. Shipping these executables does not
+authorize full control, workload operations or notification activation.
+
 ### Continuous collection
 
 V3 uses the same signed HTTP transport and 15-second temperature/power queries.
