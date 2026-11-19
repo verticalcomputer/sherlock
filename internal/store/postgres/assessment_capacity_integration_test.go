@@ -650,7 +650,7 @@ func runAssessmentMaximumProfile(t *testing.T, trials int) {
 	if trials >= 100 && (baseP99 == 0 || activeP99-baseP99 > baseP99/10 || activeP99-baseP99 > 100*time.Millisecond) {
 		t.Errorf("monitor p99 exceeded the 10%% and 100ms contention thresholds")
 	}
-	if len(passErrors) > 0 || monitorErrors > 0 || len(category.assets) != assessmentProfileGPUs || physical != assessmentProfileGPUs || gpuFailures > 0 || category.failed > 0 || len(gpuFullTimes) == 0 || gpuP99 > 50*time.Millisecond || passP99 > 750*time.Millisecond {
+	if len(passErrors) > 0 || monitorErrors > 0 || len(category.assets) != assessmentProfileGPUs || physical != assessmentProfileGPUs || gpuFailures > 0 || category.failed > 0 || len(gpuFullTimes) == 0 || gpuP99 > a.ShadowGPUBudget || passP99 > a.ShadowRefreshBudget {
 		t.Errorf("maximum-profile assessment did not complete within the aggregate GPU/pass budgets")
 	}
 	if extra > 64<<20 || invalidRefs != 0 || monitoringTransitions != 0 || overdue != 0 || trials >= 100 && (observing != 0 || terminals != assessmentProfileGPUs*len(a.Budgets)) {

@@ -18,7 +18,7 @@ func (s *AssessmentStore) Refresh(ctx context.Context) error {
 		return nil
 	}
 	started := time.Now() // Monotonic elapsed duration only; never a durable clock.
-	pass, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+	pass, cancel := context.WithTimeout(ctx, a.ShadowRefreshBudget)
 	defer cancel()
 	// Flush a previously rolled-back attempt before a closing transaction can
 	// make this run immutable. With no pending failure this performs no I/O.

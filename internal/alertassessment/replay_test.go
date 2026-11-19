@@ -1859,8 +1859,8 @@ func TestAssessmentRequestResolverUsesGPUDeadline(t *testing.T) {
 	e.LookupBundle = func(ctx context.Context, _ string) (a.Bundle, bool) {
 		calls++
 		deadline, ok := ctx.Deadline()
-		if !ok || time.Until(deadline) > 50*time.Millisecond {
-			t.Fatal("request lookup did not receive the 50 ms GPU deadline")
+		if !ok || time.Until(deadline) > a.ShadowGPUBudget {
+			t.Fatal("request lookup did not receive the GPU deadline")
 		}
 		<-ctx.Done()
 		return a.Bundle{}, false
@@ -1881,5 +1881,44 @@ func TestAssessmentRequestResolverUsesGPUDeadline(t *testing.T) {
 		if c.Phase == "QUARANTINED" {
 			t.Fatal("request timeout quarantined an admitted arm")
 		}
+	}
+}
+
+func TestAssessmentRequestResolverAllowsExtendedGPUWork(t *testing.T) {
+	s, reg := fixture(t)
+	e, err := a.NewEngine(t.Context(), s.Config, s.StartAt, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := s.StartAt.Add(30*time.Second + 125*time.Microsecond)
+	if err := e.Advance(t.Context(), entry, entry, entry, assessmentWarmFacts(s, entry), nil); err != nil {
+		t.Fatal(err)
+	}
+	bundles := e.Bundles
+	e.Bundles = map[string]a.Bundle{}
+	e.Shadow = true
+	calls := 0
+	e.LookupBundle = func(ctx context.Context, id string) (a.Bundle, bool) {
+		calls++
+		if calls == 1 {
+			// A resolver that needs more than the previous 50 ms allowance must
+			// finish under the revised budget, without losing its frozen input.
+			timer := time.NewTimer(75 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				t.Fatal("resolver canceled before completing extended work")
+			}
+		}
+		b, ok := bundles[id]
+		return b, ok
+	}
+	wake := entry.Add(time.Second)
+	if err := e.Advance(t.Context(), wake, wake, wake, []a.Fact{assessmentSampleAt(t, s, wake, 75)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls == 0 || len(e.Failures) != 0 {
+		t.Fatalf("lookup calls=%d failures=%+v", calls, e.Failures)
 	}
 }

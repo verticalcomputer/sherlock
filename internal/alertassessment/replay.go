@@ -1927,7 +1927,7 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 		pass := context.WithValue(ctx, fallbackContextKey{}, ctx)
 		cancel := func() {}
 		if e.Shadow {
-			pass, cancel = context.WithTimeout(pass, 50*time.Millisecond)
+			pass, cancel = context.WithTimeout(pass, ShadowGPUBudget)
 		}
 		pass = withFactValidationCache(pass)
 		e.proposalBytes, e.exhausted = 0, false

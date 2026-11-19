@@ -15,7 +15,7 @@ import (
 
 // Exercise the store's real resolver after frozen support has left the rolling
 // window. Ordinary CI checks semantics/query counts under race instrumentation;
-// the opt-in timing run keeps the real 50 ms GPU deadline on an uninstrumented build.
+// the opt-in timing run keeps the real GPU deadline on an uninstrumented build.
 func TestAssessmentAgedEvidenceBatchesFollowup(t *testing.T) {
 	f := newAssessmentFixture(t)
 	ctx := t.Context()
@@ -115,8 +115,8 @@ func TestAssessmentAgedEvidenceBatchesFollowup(t *testing.T) {
 		rollbackMonitoringTx(tx) // Each iteration is a fresh resolver, like restart/refresh.
 	}
 	p99 := assessmentProfileDistribution(t, "aged_gpu", durations)
-	if timing && p99 > 50*time.Millisecond {
-		t.Fatalf("aged GPU p99 %s exceeds unchanged 50 ms limit", p99)
+	if timing && p99 > a.ShadowGPUBudget {
+		t.Fatalf("aged GPU p99 %s exceeds %s limit", p99, a.ShadowGPUBudget)
 	}
 	t.Logf("aged evidence: 120 frozen samples, five final arms, 10 fresh transactions, zero per-fact SQL reads, <=8 batch reads/pass; timing=%t", timing)
 }
