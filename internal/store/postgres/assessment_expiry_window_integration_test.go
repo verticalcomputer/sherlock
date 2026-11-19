@@ -249,7 +249,7 @@ func TestAssessmentRefreshReloadsNewlyDueRetainedWindows(t *testing.T) {
 		return bundle
 	}()
 
-	pass, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+	pass, cancel := context.WithTimeout(ctx, a.ShadowRefreshBudget)
 	defer cancel()
 	tx, err := beginAssessmentTx(pass, store.pool)
 	if err != nil {
