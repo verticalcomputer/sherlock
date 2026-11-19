@@ -40,6 +40,7 @@ type AssessmentStore struct {
 	observeGPU        func(asset string, elapsed time.Duration)
 	failureMu         sync.Mutex
 	pendingFailure    *assessmentPendingFailure
+	queuedFailure     *assessmentPendingFailure
 }
 
 func NewAssessmentStore(ctx context.Context, pool *pgxpool.Pool, registry *a.Registry, c a.Config, buildID string) (*AssessmentStore, error) {
@@ -268,13 +269,14 @@ AND NOT EXISTS (
 `
 
 func beginAssessmentTx(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
+	started := time.Now()
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
-		return nil, err
+		return nil, assessmentTransactionError("begin", started, err, "not_attempted")
 	}
 	if _, err = tx.Exec(ctx, `SET LOCAL statement_timeout='200ms'; SET LOCAL lock_timeout='50ms'; SET LOCAL search_path = pg_catalog, public, pg_temp`); err != nil {
 		rollbackMonitoringTx(tx)
-		return nil, err
+		return nil, assessmentTransactionError("begin", started, err, "not_attempted")
 	}
 	return tx, nil
 }

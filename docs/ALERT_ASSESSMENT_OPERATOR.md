@@ -320,3 +320,32 @@ Migrations refuse destructive downgrade when retained production authority or
 history exists. Keep a compatible reader/retention process instead of dropping
 records to make an older binary start. Changes to collectors, routing and services
 require separate deployment authorization and must not affect running workloads.
+
+### Refresh failure accounting and transaction diagnostics
+
+Refresh/cleanup warnings retain the existing safe component codes and add
+`refresh_elapsed_ms` or `cleanup_elapsed_ms`, plus bounded
+`transaction_diagnostics`: stage, phase elapsed milliseconds, SQLSTATE when
+available, error class, and commit outcome. These fields exclude SQL text,
+parameters, connection strings, and PostgreSQL messages/detail/hint/context.
+Elapsed `-1` means the error lacked an instrumented phase clock. A statement
+cancellation (`57014`), serialization conflict (`40001`), or lock timeout
+(`55P03`) identifies the database failure class; it does not prove the original
+resource bottleneck. Use stage and elapsed time to narrow the next investigation.
+
+Shadow failure summaries keep one pending aggregate and at most one coalesced
+successor. If COMMIT returns an error, the attempted aggregate is frozen and its
+PostgreSQL top-level transaction ID is checked before any replay. Confirmed
+commit retires it without adding counts, coverage, or overflow again; confirmed
+abort permits retry. In-progress or unavailable outcome pauses refresh writes
+until a later bounded check resolves it. The normal successful flush performs no
+extra outcome query. This uses PostgreSQL `pg_xact_status`, not a new table or
+migration. Existing 250 ms GPU, 2-second refresh, 200 ms statement, and 50 ms lock
+limits remain unchanged.
+
+Pending uncommitted summaries remain process-local; a process exit can lose
+those pending attempts, as before. Already committed rows survive restart.
+Unavailable or aged-out transaction status is never treated as rollback; an
+operator must investigate persistent `failure_flush.resolve` warnings rather
+than infer exact counts. This change does not rewrite historical failure counts
+or establish the cause of prior refresh stalls.

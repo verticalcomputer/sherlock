@@ -75,10 +75,12 @@ func runProductionAssessmentLoops(ctx context.Context, store assessmentRefresher
 		defer close(done)
 		for ctx.Err() == nil {
 			bounded, cancel := context.WithTimeout(ctx, refreshBudget)
+			started := time.Now()
 			err := store.Refresh(bounded)
 			cancel()
 			if err != nil && ctx.Err() == nil {
-				logger.Warn("control.production_assessment_refresh_failed")
+				fields := append(storepg.AssessmentDiagnosticFields(err), "refresh_elapsed_ms", time.Since(started).Milliseconds())
+				logger.Warn("control.production_assessment_refresh_failed", fields...)
 			}
 			select {
 			case <-ctx.Done():
@@ -90,10 +92,12 @@ func runProductionAssessmentLoops(ctx context.Context, store assessmentRefresher
 	defer func() { <-done }()
 	for ctx.Err() == nil {
 		bounded, cancel := context.WithTimeout(ctx, cleanupBudget)
+		started := time.Now()
 		_, err := store.Cleanup(bounded)
 		cancel()
 		if err != nil && ctx.Err() == nil {
-			logger.Warn("control.production_assessment_cleanup_failed")
+			fields := append(storepg.AssessmentDiagnosticFields(err), "cleanup_elapsed_ms", time.Since(started).Milliseconds())
+			logger.Warn("control.production_assessment_cleanup_failed", fields...)
 		}
 		select {
 		case <-ctx.Done():
