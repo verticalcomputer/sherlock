@@ -23,7 +23,7 @@ jobs:
       actions: read
     steps:
       - name: Check out the exact workflow commit
-        uses: useblacksmith/checkout@v1 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -45,7 +45,7 @@ jobs:
       COLLECTOR_RELEASE_APPROVAL_JSON: ${{ vars.COLLECTOR_RELEASE_APPROVAL_JSON }}
     steps:
       - name: Check out the exact approved workflow commit
-        uses: useblacksmith/checkout@v1 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
