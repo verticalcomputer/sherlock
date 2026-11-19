@@ -85,7 +85,7 @@ func runAssessmentRefresh(ctx context.Context, store assessmentRefresher, logger
 		if ctx.Err() != nil {
 			return
 		}
-		bounded, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+		bounded, cancel := context.WithTimeout(ctx, a.ShadowRefreshBudget)
 		err := store.Refresh(bounded)
 		if err == nil && bounded.Err() == nil {
 			_, err = store.Cleanup(bounded)
