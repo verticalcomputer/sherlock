@@ -16,7 +16,7 @@ jobs:
       github.repository == 'verticalcomputer/sherlock' &&
       github.event.repository.private == false &&
       github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 5
     permissions:
       contents: read
@@ -34,7 +34,7 @@ jobs:
 
   sign:
     needs: preflight
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 20
     environment: collector-release-signing
     permissions:

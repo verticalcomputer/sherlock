@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.9'
@@ -47,7 +47,7 @@ jobs:
       - run: npm --prefix sdk/typescript run smoke
 
   integration:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     services:
       postgres:
         image: postgres:17-alpine
@@ -66,7 +66,7 @@ jobs:
       SHERLOCK_DATABASE_URL: postgres://sherlock:sherlock@localhost:5432/sherlock?sslmode=disable
       SHERLOCK_TEST_DATABASE_URL: postgres://sherlock:sherlock@localhost:5432/sherlock?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.9'

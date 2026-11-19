@@ -18,7 +18,7 @@ jobs:
       github.repository == 'verticalcomputer/sherlock' &&
       github.event.repository.private == false &&
       github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 20
     environment: release-signing
     permissions:
