@@ -205,16 +205,25 @@ LEFT JOIN LATERAL (
  ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1
 ) i ON true ORDER BY r.received_at DESC,r.run_id DESC`
 
-const assessmentObservationSQL = `
+const assessmentObservationSelectSQL = `
 SELECT observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,
        CASE WHEN octet_length(labels::text)<=16384 THEN labels END,value,unit,observed_at,collected_at,
        CASE WHEN metric_semantics IS NULL THEN 'null'::jsonb
             WHEN octet_length(metric_semantics::text)<=16384 THEN metric_semantics END,
-       coalesce(source_reference=$9,false)
+       coalesce(source_reference=$6,false)
 FROM observations WHERE cluster_id=$1 AND source_id=$2 AND run_id=ANY($3::text[])
- AND (metric=$4 OR $4='DCGM_FI_DEV_ROW_REMAP_FAILURE' AND metric='DCGM_FI_DEV_ROW_REMAP_FAILED')
- AND (entity_key=$5 OR entity_key=$6 OR labels @> $7::jsonb OR labels @> $8::jsonb)
-ORDER BY observed_at DESC,observation_id DESC LIMIT 257`
+ AND (metric=$4 OR $4='DCGM_FI_DEV_ROW_REMAP_FAILURE' AND metric='DCGM_FI_DEV_ROW_REMAP_FAILED')`
+
+const assessmentObservationOrderSQL = ` ORDER BY observed_at DESC,observation_id DESC LIMIT 257`
+
+const assessmentObservationSQL = assessmentObservationSelectSQL + `
+ AND (entity_key=$5 OR entity_key=$7 OR labels @> $8::jsonb OR labels @> $9::jsonb)` + assessmentObservationOrderSQL
+
+// Production upload admission already requires the canonical entity key, and
+// the row validator below enforces it again. Select it using the entity index
+// instead of scanning every fleet member's labels through the legacy predicate.
+const productionUploadObservationSQL = assessmentObservationSelectSQL + `
+ AND entity_key=$5` + assessmentObservationOrderSQL
 
 type assessmentAttempt struct {
 	completed  time.Time
@@ -331,7 +340,14 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 	uuid, _ := json.Marshal([]domain.Label{{Name: "UUID", Value: asset.GPUUUID}})
 	lowerUUID, _ := json.Marshal([]domain.Label{{Name: "uuid", Value: asset.GPUUUID}})
 	sourceContract := domain.DCGMSourceReference(query)
-	rows, err := tx.Query(ctx, assessmentObservationSQL, c.ClusterID, c.SourceID, ids, b.Metric, asset.EntityKey, legacyKey, uuid, lowerUUID, sourceContract)
+	statement := assessmentObservationSQL
+	args := []any{c.ClusterID, c.SourceID, ids, b.Metric, asset.EntityKey, sourceContract}
+	if c.Production() && b.UploadProfileID != "" {
+		statement = productionUploadObservationSQL
+	} else {
+		args = append(args, legacyKey, uuid, lowerUUID)
+	}
+	rows, err := tx.Query(ctx, statement, args...)
 	if err != nil {
 		return nil, false, err
 	}

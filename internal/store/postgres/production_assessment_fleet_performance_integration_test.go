@@ -65,7 +65,7 @@ func TestProductionAssessmentFleetAgedBacklogBudget(t *testing.T) {
 						elapsed := time.Since(began)
 						gpuTimes = append(gpuTimes, elapsed)
 						if err != nil || !claimed || elapsed > a.ShadowGPUBudget {
-							t.Fatalf("%d-GPU aged individual pass %s,claimed%v: %v", n, elapsed, claimed, err)
+							t.Fatalf("%d-GPU aged individual pass %s,claimed%v: %v diagnostics=%v", n, elapsed, claimed, err, AssessmentDiagnosticFields(err))
 						}
 					}
 					assessmentProfileDistribution(t, fmt.Sprintf("fleet_gpu_aged_%t", fixture.aged), gpuTimes)
@@ -88,7 +88,7 @@ func TestProductionAssessmentFleetAgedBacklogBudget(t *testing.T) {
 					elapsed := time.Since(began)
 					passes = append(passes, elapsed)
 					if err != nil || elapsed > a.ShadowRefreshBudget {
-						t.Fatalf("fleet refresh %s: %v", elapsed, err)
+						t.Fatalf("fleet refresh %s: %v diagnostics=%v", elapsed, err, AssessmentDiagnosticFields(err))
 					}
 					if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM production_assessment_states WHERE last_acquire_attempt_at IS NULL OR last_acquire_attempt_at<$1`, cycleStart).Scan(&remaining); err != nil {
 						t.Fatal(err)
@@ -96,6 +96,7 @@ func TestProductionAssessmentFleetAgedBacklogBudget(t *testing.T) {
 				}
 				// The data source's existing 15s cadence remains the healthy fleet sweep gate.
 				if remaining != 0 || time.Since(cycle) > 15*time.Second {
+					assessmentProfileDistribution(t, fmt.Sprintf("fleet_refresh_aged_%t", fixture.aged), passes)
 					t.Fatalf("fleet cycle remaining%d elapsed%s", remaining, time.Since(cycle))
 				}
 				var failures int

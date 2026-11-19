@@ -67,6 +67,9 @@ func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.A
 	return slices.Equal(slices.Compact(nodes), b.ScopeNodes) && slices.Contains(p.Assets, domain.CoolingUploadAsset{NodeID: domain.StableNodeID(asset.NodeID), GPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID)})
 }
 
+// Look up each receipt's run by its unique ID before applying scope predicates.
+// The lateral boundary prevents a low-cardinality source-time estimate from
+// rescanning the source's run history for every receipt.
 // The bounded selection transmits each consecutive equal metric-field document and each
 // profile revision once. Adjacency uses exact JSONB equality; parsing
 // still validates the whole document, including conflicting duplicate fields.
@@ -78,9 +81,10 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
 	rows, err := tx.Query(ctx, `WITH selected AS MATERIALIZED (
  SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,
  CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields ELSE NULL END AS metric_fields,
- p.profile,p.profile_hash,p.revision,i.revision_id,i.source_at
+ p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at
  FROM prometheus_cooling_upload_receipts u JOIN prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
- JOIN collection_runs r ON r.run_id=u.run_id AND r.cluster_id=p.cluster_id AND r.source_id=p.source_id
+ JOIN LATERAL (SELECT * FROM collection_runs WHERE run_id=u.run_id OFFSET 0) r
+ ON r.cluster_id=p.cluster_id AND r.source_id=p.source_id
  LEFT JOIN LATERAL (SELECT revision_id,source_at FROM goodput_inventory_revisions WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=r.scheduled_for AND observed_at<=r.completed_at ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1)i ON true
  WHERE p.cluster_id=$1 AND p.source_id=$2 AND r.query_kind=$3 AND r.range_start IS NULL AND r.job_id IS NULL
  AND r.idempotency_key='prometheus-cooling-report-v2-'||u.payload_hash
@@ -97,7 +101,10 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
 SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,
  CASE WHEN receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields THEN metric_fields END,
  receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields AS fields_changed,
- CASE WHEN profile_ordinal=1 THEN profile END,profile_hash,revision,revision_id,source_at
+ CASE WHEN profile_ordinal=1 THEN
+  (SELECT p.profile FROM prometheus_cooling_upload_profiles p
+   WHERE p.profile_id=grouped.profile_id AND p.revision=grouped.revision AND p.profile_hash=grouped.profile_hash)
+ END,profile_hash,revision,revision_id,source_at
  FROM grouped ORDER BY received_at DESC,run_id DESC`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
 	if err != nil {
 		return nil, nil, false, err

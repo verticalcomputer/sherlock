@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -422,7 +423,7 @@ func TestAssessmentSampleCacheRequiresExactImmutableFact(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := withFactValidationCache(context.Background())
-	cache, _ := ctx.Value(sampleCacheKey{}).(*sampleCache)
+	cache, _ := ctx.Value(factBodyCacheKey{}).(*factBodyCache)
 	validate := func(category string, f Fact) error {
 		g := newFactGraph(category, map[string]Fact{f.ID: f})
 		g.samples = cache
@@ -780,5 +781,108 @@ func TestAssessmentRequestStopsCancelledConflictScan(t *testing.T) {
 	_, err = e.request(ctx, &Enrollment{Asset: testAsset, DiscoveryFloor: testTime}, at, at, "FOLLOW_UP", &Candidate{Entry: Entry{BundleID: bundle.ID}, EnteredAt: testTime})
 	if err != context.Canceled || reads != 1 {
 		t.Fatalf("cancelled conflict scan err=%v reads=%d", err, reads)
+	}
+}
+
+func TestAssessmentDerivedBodyCacheRechecksEnvelopeAndClosure(t *testing.T) {
+	raw := testSample(t, testTime, testTime, 51)
+	feature, err := NewFact("test", "run", testAsset, "FEATURE", testTime, Feature{
+		FeatureKind: "temperature_endpoint", SourceAt: testTime, Value: 51, Unit: "celsius", Support: []string{raw.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen := feature
+	frozen.Body = slices.Clone(feature.Body)
+	ctx := withFactValidationCache(t.Context())
+	cache := checkedSamples(ctx)
+	index := indexFacts([]Fact{raw, feature})
+	if _, err := validateFact(ctx, "test", feature, index); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cache.findBody("test", feature); !ok {
+		t.Fatal("derived body was not retained")
+	}
+	for _, tc := range []struct {
+		name     string
+		change   func(*Fact)
+		category string
+	}{
+		{"category", func(*Fact) {}, "other"},
+		{"run", func(f *Fact) { f.Run = "other" }, "test"},
+		{"asset", func(f *Fact) { f.Asset = "cluster/GPU/other/GPU-1/" }, "test"},
+		{"kind", func(f *Fact) { f.Kind = "COVERAGE" }, "test"},
+		{"availability", func(f *Fact) { f.AvailableAt = testTime.Add(-time.Second) }, "test"},
+		{"bytes", func(f *Fact) { f.Body[0] = '[' }, "test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			changed := frozen
+			changed.Body = slices.Clone(frozen.Body)
+			tc.change(&changed)
+			if _, hit := cache.findBody(tc.category, changed); hit {
+				t.Fatal("reused a different fact")
+			}
+			if _, err := validateFact(ctx, tc.category, changed, indexFacts([]Fact{raw, changed})); err == nil {
+				t.Fatal("accepted changed evidence")
+			}
+		})
+	}
+	// A cached valid derived body is not a proof that its references are still
+	// present, unchanged, in-scope or available in this request's graph.
+	for _, tc := range []struct {
+		name   string
+		change func(map[string]Fact)
+	}{
+		{"missing", func(m map[string]Fact) { delete(m, raw.ID) }},
+		{"changed", func(m map[string]Fact) {
+			x := m[raw.ID]
+			x.Body = bytes.ReplaceAll(x.Body, []byte(`"value":51`), []byte(`"value":52`))
+			m[raw.ID] = x
+		}},
+		{"cross-asset", func(m map[string]Fact) { x := m[raw.ID]; x.Asset = "cluster/GPU/other/GPU-1/"; m[raw.ID] = x }},
+		{"late", func(m map[string]Fact) { x := m[raw.ID]; x.AvailableAt = testTime.Add(time.Second); m[raw.ID] = x }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := indexFacts([]Fact{raw, frozen})
+			tc.change(m)
+			if _, err := validateFact(ctx, "test", frozen, m); err == nil {
+				t.Fatal("cached body bypassed graph validation")
+			}
+		})
+	}
+	feature.Body[0] = '['
+	if _, hit := cache.findBody("test", frozen); !hit {
+		t.Fatal("caller mutated retained bytes")
+	}
+	if _, err := validateFact(ctx, "test", frozen, indexFacts([]Fact{raw, frozen})); err != nil {
+		t.Fatal(err)
+	}
+	if _, hit := checkedSamples(withFactValidationCache(t.Context())).findBody("test", frozen); hit {
+		t.Fatal("cache survived GPU call group")
+	}
+}
+
+func TestAssessmentFactBodyCacheRemainsBounded(t *testing.T) {
+	f := testSample(t, testTime, testTime, 51)
+	for _, tc := range []struct {
+		name         string
+		count, bytes int
+	}{
+		{"count", maxPoints, 0}, {"bytes", 0, MaxInputBytes},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := withFactValidationCache(t.Context())
+			cache := checkedSamples(ctx)
+			for i := 0; i < tc.count; i++ {
+				cache.items[fmt.Sprint(i)] = cachedFactBody{}
+			}
+			cache.bytes = tc.bytes
+			if _, err := validateFact(ctx, "test", f, indexFacts([]Fact{f})); err != nil {
+				t.Fatal("cache capacity changed validation", err)
+			}
+			if len(cache.items) != tc.count || cache.bytes != tc.bytes {
+				t.Fatal("cache exceeded bound")
+			}
+		})
 	}
 }

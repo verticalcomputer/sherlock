@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -359,5 +360,73 @@ func TestProductionFleetReceiptProfileRevisionsRemainScoped(t *testing.T) {
 		if !ok || !got.usable || got.provenance.ScheduleRevision != revision {
 			t.Fatalf("profile-specific proof lost: revision%d %+v", revision, got)
 		}
+	}
+}
+
+// The indexed production selector must agree with the legacy selector plus its
+// existing upload validation, including malformed and mismatched identities.
+func TestProductionFleetSampleSelectionPreservesValidation(t *testing.T) {
+	f, s, c, profile, hash, now := productionFleetFixture(t, 8)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	writer, _ := NewCollectionStore(f.admin)
+	query := domain.CoolingUploadQueries()[0]
+	slot := now.Truncate(domain.CoolingUploadInterval)
+	report := assessmentUploadReport(profile, hash, query, slot)
+	report.Version = 3
+	if _, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil {
+		t.Fatal(err)
+	}
+	var at time.Time
+	if err := f.admin.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	asset := c.Assessment.Assets[0]
+	field, _ := domain.CoolingUploadField(query)
+	var binding a.Binding
+	for _, b := range c.Assessment.Bindings {
+		if b.Metric == field.Name {
+			binding = b
+		}
+	}
+	for _, tc := range []struct {
+		name, change  string
+		want          int
+		wantTruncated bool
+	}{
+		{"canonical", "", 1, false},
+		{"wrong canonical entity with matching UUID labels", `entity_key=entity_key||'other'`, 0, false},
+		{"legacy entity with matching UUID labels", `entity_key='node/fixture-comp000/gpu/GPU-00000000-0000-0000-0000-000000000000'`, 0, false},
+		{"malformed labels", `labels='[{"name":7}]'::jsonb`, 0, true},
+		{"wrong source contract", `source_reference='other'`, 0, false},
+		{"future source sample", `observed_at=observed_at+interval '1 second'`, 0, false},
+		{"expired source slot", `observed_at=observed_at-interval '15 seconds'`, 0, false},
+		{"wrong unit", `unit='watts'`, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, err := s.pool.Begin(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(t.Context())
+			if tc.change != "" {
+				if _, err := tx.Exec(t.Context(), `UPDATE observations SET `+tc.change+` WHERE entity_key=$1`, asset.EntityKey); err != nil {
+					t.Fatal(err)
+				}
+			}
+			attempts, ids, truncated, err := loadProductionUploadAttempts(t.Context(), tx, c.Assessment, asset, binding, query, at.Add(-15*time.Minute), at)
+			if err != nil || truncated || len(ids) != 1 {
+				t.Fatalf("attempts %d truncated%t: %v", len(ids), truncated, err)
+			}
+			got, truncated, err := loadAssessmentSamples(t.Context(), tx, c.Assessment, asset, binding, query, at.Add(-15*time.Minute), at, attempts, ids, nil)
+			if err != nil || truncated != tc.wantTruncated || len(got) != tc.want {
+				t.Fatalf("production samples %d truncated%t: %v", len(got), truncated, err)
+			}
+			legacy, truncated, err := loadAssessmentSamples(t.Context(), tx, f.config, asset, binding, query, at.Add(-15*time.Minute), at, attempts, ids, nil)
+			if err != nil || truncated != tc.wantTruncated || !reflect.DeepEqual(got, legacy) {
+				t.Fatalf("selector validation differs: production%v legacy%v truncated%t: %v", got, legacy, truncated, err)
+			}
+		})
 	}
 }

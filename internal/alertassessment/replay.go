@@ -2395,7 +2395,7 @@ func rawBoundary(f Fact) time.Time {
 	return rawBoundaryWithSamples(f, "", nil)
 }
 
-func rawBoundaryWithSamples(f Fact, category string, samples *sampleCache) time.Time {
+func rawBoundaryWithSamples(f Fact, category string, samples *factBodyCache) time.Time {
 	var t time.Time
 	switch f.Kind {
 	case "SAMPLE":
