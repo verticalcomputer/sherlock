@@ -16,17 +16,17 @@ release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 require = release.require
 
-# Parent release preparation pins these to the reviewed source and native hashes.
-SOURCE = "5cec9c2205e26a6f6c4b0e8ba935fceceedfe39f"
-TREE = "ad655b99ccba7f2f91e2261aa0249ff38f79c9eb"
-BINARY_SHA = "84786f7f822534347e6ebded691624c6db71f345e313f18304c68ff369070147"
-INTAKE_SHA = "846ea7d03d2442e670c527ae6f0452d47a3e8361f46d2e7add748ced8a855fe7"
-# Empty pins deliberately prohibit preparation/signing until exact builds are reviewed.
-ALERT_WORKER_SHA = ""
-ADMIN_SHA = ""
-API_SHA = ""
-ADMIN_UI_SHA = ""
-MIGRATE_SHA = ""
+# Exact reviewed source and hashes from two independent clean Linux-target builds.
+SOURCE = "efdc4d901670bf597bd143b6822ff6dc00df8fe6"
+TREE = "da85d8d52efd0cf7400049d10dc35bb5f5174a54"
+BINARY_SHA = "76e44b11850dca9be361f62aba3aca86371d2978ca252ea3c263273f72f3fc78"
+INTAKE_SHA = "bc7b9b3bbdf287a364db0d6fca9c5b03b831f853c75d7a52521b6181752c2604"
+# Every executable is pinned independently; approval must cover all seven.
+ALERT_WORKER_SHA = "e83f9ac02099af7e3ace1fb567b003d16fe084c97db040cbd5730bf68434e72e"
+ADMIN_SHA = "b4272d54dc4e17d4a8c4ebd3e2cf11f74eb356db36cf4797f6656e69f8cd5d2d"
+API_SHA = "efd95a87ecc6f7b573ccf9df6568c09c2cc4591b88c50c37cf5a28e19708133c"
+ADMIN_UI_SHA = "da292dfa0a299379b83af1473ca615b0632b868c78d30c85f509a09cd00cd1cb"
+MIGRATE_SHA = "98acdbaec86cbeb0faa257224a6fd633dbf69140f7db473251516b70e3df8fd0"
 BINARY = "sherlock-collector-linux-amd64"
 INTAKE = "sherlock-control-linux-amd64"
 COMMANDS = {
