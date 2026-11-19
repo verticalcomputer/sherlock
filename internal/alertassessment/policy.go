@@ -9,6 +9,11 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
+const (
+	MaxProductionGPUs  = 128
+	MaxProductionNodes = 16
+)
+
 type Asset struct {
 	EntityKey string `json:"entity_key"`
 	NodeID    string `json:"node_id"`
@@ -219,7 +224,11 @@ func (c Config) validateCommon(d *Descriptor) error {
 	}
 
 	l := c.Limits
-	if l.GPUCount < 1 || l.GPUCount > 8 || l.NodeCount < 1 || l.NodeCount > 2 || l.PhysicalCandidates < 1 || l.PhysicalCandidates > 256 || l.FactCount < 1 || l.FactCount > 200000 || l.PayloadBytes < 8<<20 || l.PayloadBytes > 512<<20 {
+	maxGPUs, maxNodes := int64(8), int64(2)
+	if c.production {
+		maxGPUs, maxNodes = MaxProductionGPUs, MaxProductionNodes
+	}
+	if l.GPUCount < 1 || l.GPUCount > maxGPUs || l.NodeCount < 1 || l.NodeCount > maxNodes || l.PhysicalCandidates < 1 || l.PhysicalCandidates > 256 || l.FactCount < 1 || l.FactCount > 200000 || l.PayloadBytes < 8<<20 || l.PayloadBytes > 512<<20 {
 		return ErrInvalid
 	}
 	if len(c.Assets) < 1 || int64(len(c.Assets)) > l.GPUCount || c.Bindings == nil || len(c.Bindings) > 3 {
@@ -238,7 +247,7 @@ func (c Config) validateCommon(d *Descriptor) error {
 		return ErrInvalid
 	}
 	for i, b := range c.Bindings {
-		if !ValidID(b.Metric, 128) || d != nil && !slices.ContainsFunc(d.Metrics, func(m Metric) bool { return m.Metric == b.Metric }) || !ValidID(b.Operation, 128) || b.ScheduleRevision < 1 || Set(b.ScopeNodes, 2) != nil || i > 0 && c.Bindings[i-1].Metric >= b.Metric {
+		if !ValidID(b.Metric, 128) || d != nil && !slices.ContainsFunc(d.Metrics, func(m Metric) bool { return m.Metric == b.Metric }) || !ValidID(b.Operation, 128) || b.ScheduleRevision < 1 || Set(b.ScopeNodes, int(maxNodes)) != nil || i > 0 && c.Bindings[i-1].Metric >= b.Metric {
 			return ErrInvalid
 		}
 		first := c.Bindings[0]

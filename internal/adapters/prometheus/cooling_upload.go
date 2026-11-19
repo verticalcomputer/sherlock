@@ -22,55 +22,100 @@ func (c *Client) CoolingInstant(ctx context.Context, profile domain.CoolingUploa
 		!profile.ActiveAt(slot) {
 		return QueryResult{}, &Error{Code: domain.FailureInvalidArgument, Message: "invalid cooling upload query or scope"}
 	}
-	groups := make(map[domain.StableNodeID][]string, domain.CoolingUploadMaxNodes)
-	var nodes []domain.StableNodeID
+	// One absolute deadline covers all selectors; it is not reset per HTTP call.
+	ctx, cancel := context.WithDeadline(ctx, slot.Add(domain.CoolingUploadSourceTimeout))
+	defer cancel()
+	allowed := make(map[domain.CoolingUploadAsset]bool, len(profile.Assets))
 	for _, asset := range profile.Assets {
-		if _, found := groups[asset.NodeID]; !found {
-			nodes = append(nodes, asset.NodeID)
-		}
-		groups[asset.NodeID] = append(groups[asset.NodeID], regexp.QuoteMeta(string(asset.GPUUUID)))
+		allowed[asset] = true
 	}
-
 	var result QueryResult
 	endpoint := c.baseURL.ResolveReference(&url.URL{Path: "/api/v1/query"})
 	params := endpoint.Query()
 	params.Set("time", formatTimestamp(slot))
-	for _, node := range nodes {
-		gpus := strconv.Quote(strings.Join(groups[node], "|"))
-		// Lower-case spellings have an absent upper-case alias. These selectors
-		// are disjoint even when an exporter supplies both label spellings.
+	for _, selector := range coolingSelectors(profile, field.Name) {
+		params.Set("query", selector)
+		endpoint.RawQuery = params.Encode()
+		bounded := *c
+		bounded.maxBytes -= result.BytesRead
+		body, bytesRead, err := bounded.get(ctx, endpoint)
+		if err != nil {
+			return result, err
+		}
+		result.BytesRead += bytesRead
+		parsed, err := parseCoolingMatrix(body, c.maxSeries-result.SeriesReturned)
+		if err != nil {
+			return result, err
+		}
+		// A fleet selector bounds both label sets, but their cross product is not
+		// authority. Validate each exact node+UUID pair and reject ambiguous aliases.
+		if profile.Version == domain.CoolingUploadProductionVersion {
+			for _, sample := range parsed.Samples {
+				node, gpu, valid := domain.DCGMIdentity(domain.SortedLabels(sample.Metric), profile.Task(query, slot))
+				if !valid || !allowed[domain.CoolingUploadAsset{NodeID: domain.StableNodeID(node), GPUUUID: domain.PhysicalGPUUUID(gpu)}] {
+					return result, &Error{Code: domain.FailureMalformedResponse, Message: "cooling source returned an unauthorized or ambiguous GPU identity"}
+				}
+			}
+		}
+		result.SeriesReturned += parsed.SeriesReturned
+		result.WarningCount += parsed.WarningCount
+		result.Samples = append(result.Samples, parsed.Samples...)
+	}
+
+	return result, nil
+}
+
+// V2 preserves its existing per-node selectors. V3 uses exactly four disjoint
+// alias selectors per metric, regardless of fleet size; response identity is
+// still checked against the exact approved pairs before observations are built.
+func coolingSelectors(profile domain.CoolingUploadProfile, metric string) []string {
+	groups := make(map[domain.StableNodeID][]string)
+	var nodes []domain.StableNodeID
+	for _, asset := range profile.Assets {
+		if _, ok := groups[asset.NodeID]; !ok {
+			nodes = append(nodes, asset.NodeID)
+		}
+		groups[asset.NodeID] = append(groups[asset.NodeID], regexp.QuoteMeta(string(asset.GPUUUID)))
+	}
+	type group struct {
+		node  string
+		gpus  []string
+		regex bool
+	}
+	var selected []group
+	if profile.Version == domain.CoolingUploadProductionVersion {
+		var hosts, gpus []string
+		for _, node := range nodes {
+			hosts = append(hosts, regexp.QuoteMeta(string(node)))
+			gpus = append(gpus, groups[node]...)
+		}
+		selected = []group{{strings.Join(hosts, "|"), gpus, true}}
+	} else {
+		for _, node := range nodes {
+			selected = append(selected, group{string(node), groups[node], false})
+		}
+	}
+	var result []string
+	for _, g := range selected {
 		for _, hostLabel := range []string{"Hostname", "hostname"} {
-			host := hostLabel + "=" + strconv.Quote(string(node))
+			op := "="
+			if g.regex {
+				op = "=~"
+			}
+			host := hostLabel + op + strconv.Quote(g.node)
 			if hostLabel == "hostname" {
 				host += `,Hostname=""`
 			}
 			for _, gpuLabel := range []string{"UUID", "uuid"} {
-				gpu := gpuLabel + "=~" + gpus
+				gpu := gpuLabel + "=~" + strconv.Quote(strings.Join(g.gpus, "|"))
 				if gpuLabel == "uuid" {
 					gpu += `,UUID=""`
 				}
-				query := fmt.Sprintf("%s{%s,%s}[%ds]", field.Name, host, gpu, domain.CoolingUploadInterval/time.Second)
-				params.Set("query", query)
-				endpoint.RawQuery = params.Encode()
-				bounded := *c
-				bounded.maxBytes -= result.BytesRead
-				body, bytesRead, err := bounded.get(ctx, endpoint)
-				if err != nil {
-					return result, err
-				}
-				result.BytesRead += bytesRead
-				remaining := c.maxSeries - result.SeriesReturned
-				parsed, err := parseCoolingMatrix(body, remaining)
-				if err != nil {
-					return result, err
-				}
-				result.SeriesReturned += parsed.SeriesReturned
-				result.WarningCount += parsed.WarningCount
-				result.Samples = append(result.Samples, parsed.Samples...)
+				result = append(result, fmt.Sprintf("%s{%s,%s}[%ds]", metric, host, gpu, domain.CoolingUploadInterval/time.Second))
 			}
 		}
 	}
-	return result, nil
+	return result
 }
 
 func parseCoolingMatrix(body []byte, maxSeries int) (QueryResult, error) {

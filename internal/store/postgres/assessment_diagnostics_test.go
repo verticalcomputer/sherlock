@@ -100,3 +100,13 @@ func TestAssessmentDiagnosticBounds(t *testing.T) {
 		t.Fatal("nil errors must not generate diagnostics")
 	}
 }
+
+func TestProductionSchedulingDiagnosticsKeepStages(t *testing.T) {
+	for _, stage := range []string{"production.claim_attempt", "production.failure_account"} {
+		err := assessmentTransactionError(stage, time.Now(), context.DeadlineExceeded, "unknown")
+		d := AssessmentDiagnosticFields(err)[1].([]assessmentDiagnostic)[0]
+		if d.Stage != stage || d.ErrorClass != "context_deadline" {
+			t.Fatalf("scheduler diagnostic lost: %+v", d)
+		}
+	}
+}

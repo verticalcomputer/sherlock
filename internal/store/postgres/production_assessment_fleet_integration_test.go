@@ -1,0 +1,363 @@
+//go:build integration
+
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
+	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
+	"github.com/verticalcomputer/sherlock/internal/domain"
+)
+
+func productionFleetFixture(t *testing.T, n int) (*assessmentFixture, *ProductionAssessmentStore, a.ProductionConfig, domain.CoolingUploadProfile, string, time.Time) {
+	t.Helper()
+	f := newAssessmentFixture(t)
+	var now time.Time
+	if err := f.admin.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	writer, profile, _ := seedAssessmentUploadProfile(t, f, now.UTC())
+	profile.Version = 3
+	profile.Revision++
+	profile.State = "ENABLED"
+	profile.EndsAt = time.Time{}
+	profile.Assets = nil
+	c := f.config
+	c.Assets = nil
+	c.Implementation = 2
+	c.RunDurationSeconds = 0
+	c.BudgetsMS = []int64{120000}
+	c.Limits.GPUCount = 128
+	c.Limits.NodeCount = 16
+	nodes := []string{}
+	for i := 0; i < n; i++ {
+		node := fmt.Sprintf("fixture-comp%03d", i/8)
+		gpu := fmt.Sprintf("GPU-00000000-0000-0000-0000-%012d", i)
+		if i%8 == 0 {
+			nodes = append(nodes, node)
+			f.exec(t, `INSERT INTO goodput_inventory_revision_entities(cluster_id,revision_id,entity_kind,stable_node_id)VALUES($1,$2,'NODE',$3)`, c.ClusterID, c.InventoryRevision, node)
+		}
+		f.exec(t, `INSERT INTO goodput_inventory_revision_entities(cluster_id,revision_id,entity_kind,stable_node_id,physical_gpu_uuid)VALUES($1,$2,'GPU',$3,$4)`, c.ClusterID, c.InventoryRevision, node, gpu)
+		c.Assets = append(c.Assets, a.Asset{EntityKey: fmt.Sprintf("%s/GPU/%s/%s/", c.ClusterID, node, gpu), NodeID: node, GPUUUID: gpu})
+		profile.Assets = append(profile.Assets, domain.CoolingUploadAsset{NodeID: domain.StableNodeID(node), GPUUUID: domain.PhysicalGPUUUID(gpu)})
+	}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := domain.ChecksumSHA256(raw).String()
+	if err = writer.RegisterCoolingUploadProfile(t.Context(), profile, hash); err != nil {
+		t.Fatal(err)
+	}
+	for i := range c.Bindings {
+		c.Bindings[i].ScheduleRevision = profile.Revision
+		c.Bindings[i].UploadProfileHash = hash
+		c.Bindings[i].ScopeNodes = nodes
+	}
+	registry, err := a.NewRegistry(cooling.Category{}, cooling.ProductionCategory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := a.NormalizeProductionConfig(t.Context(), a.ProductionConfig{Schema: 1, Revision: 1, Assessment: c}, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewProductionAssessmentStore(t.Context(), f.admin, registry, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startup, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	began := time.Now()
+	err = store.Start(startup)
+	stop()
+	if err != nil {
+		t.Fatalf("fleet admission %d GPUs: %v", n, err)
+	}
+	t.Logf("%d-GPU production startup: %s", n, time.Since(began))
+	return f, store, cfg, profile, hash, now.UTC()
+}
+
+func seedFleetSnapshots(t *testing.T, f *assessmentFixture, s *ProductionAssessmentStore, c a.ProductionConfig, entry time.Time, final bool) {
+	t.Helper()
+	f.exec(t, `UPDATE production_assessment_enrollments SET created_at=$2 WHERE enrollment_id=$1`, c.Assessment.RunID, entry)
+	through := 30
+	if final {
+		through = 150
+	}
+	for _, asset := range c.Assessment.Assets {
+		one := c
+		one.Assessment.Assets = []a.Asset{asset}
+		e, err := a.NewProductionAssetEngine(t.Context(), c, entry, s.registry, asset.EntityKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for sec := 0; sec <= through; sec += 15 {
+			at := entry.Add(time.Duration(sec) * time.Second)
+			if err = e.Advance(t.Context(), at, at, at, productionStoreSamples(t, one, at), nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(e.Candidates) != 1 {
+			t.Fatalf("fleet snapshot expected candidate: %+v", e.Failures)
+		}
+		snapshot, err := e.SnapshotProduction(asset.EntityKey, entry.Add(time.Duration(through)*time.Second))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var due *time.Time
+		if !final {
+			due = &e.Candidates[0].DueAt
+		}
+		f.exec(t, `UPDATE production_assessment_states SET snapshot=$3,next_due_at=$4 WHERE enrollment_id=$1 AND asset=$2`, c.Assessment.RunID, asset.EntityKey, snapshot, due)
+	}
+}
+
+func TestProductionFleetFairPartialRefreshAndRestart(t *testing.T) {
+	f, s, c, _, _, now := productionFleetFixture(t, 128)
+	seedFleetSnapshots(t, f, s, c, now.Add(-5*time.Minute), false)
+	// A malformed oldest due asset must not repeatedly consume the head of both
+	// lanes. Other assets remain valid and retain their original due timestamps.
+	broken := c.Assessment.Assets[0].EntityKey
+	f.exec(t, `UPDATE production_assessment_states SET snapshot=convert_to('{}','UTF8') WHERE asset=$1`, broken)
+	// Each real snapshot commit takes 80ms in this disposable fixture, forcing
+	// partial 2s slices without approaching the unchanged 250ms GPU deadline.
+	f.exec(t, `CREATE FUNCTION fleet_slow_commit()RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF NEW.snapshot IS DISTINCT FROM OLD.snapshot THEN PERFORM pg_sleep(0.08); END IF; RETURN NEW;END$$; CREATE TRIGGER fleet_slow_commit BEFORE UPDATE ON production_assessment_states FOR EACH ROW EXECUTE FUNCTION fleet_slow_commit()`)
+	began := time.Now()
+	_ = s.Refresh(t.Context())
+	if time.Since(began) > a.ShadowRefreshBudget+300*time.Millisecond {
+		t.Fatal("unbounded fleet refresh")
+	}
+	var dueDone, acquired, unattemptedFailures int
+	if err := f.admin.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE last_due_attempt_at IS NOT NULL),count(*) FILTER(WHERE last_acquire_attempt_at IS NOT NULL),count(*) FILTER(WHERE last_due_attempt_at IS NULL AND last_acquire_attempt_at IS NULL AND failure_count<>0) FROM production_assessment_states`).Scan(&dueDone, &acquired, &unattemptedFailures); err != nil {
+		t.Fatal(err)
+	}
+	if dueDone == 0 || acquired == 0 || dueDone == 128 || acquired == 128 || unattemptedFailures != 0 {
+		t.Fatalf("partial lane progress due%d acquired%d unattemptedfailures%d", dueDone, acquired, unattemptedFailures)
+	}
+	// A fresh store has no memory cursor; progress survives restart exclusively
+	// through durable per-lane timestamps.
+	restarted, err := NewProductionAssessmentStore(t.Context(), f.admin, s.registry, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	due, acq, err := restarted.refreshQueues(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due[0].dueAttempt != nil || acq[0].acquireAttempt != nil {
+		t.Fatal("restart forgot untouched fleet work")
+	}
+	f.exec(t, `DROP TRIGGER fleet_slow_commit ON production_assessment_states;DROP FUNCTION fleet_slow_commit()`)
+	for pass := 0; pass < 64; pass++ {
+		_ = restarted.Refresh(t.Context())
+		if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM production_assessment_states WHERE (next_due_at IS NOT NULL AND last_due_attempt_at IS NULL) OR last_acquire_attempt_at IS NULL`).Scan(&unattemptedFailures); err != nil {
+			t.Fatal(err)
+		}
+		if unattemptedFailures == 0 {
+			break
+		}
+	}
+	if unattemptedFailures != 0 {
+		t.Fatalf("starved %d fleet assets", unattemptedFailures)
+	}
+	var deadlines int
+	if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM production_assessment_states WHERE next_due_at IS NOT NULL AND asset<>$1`, broken).Scan(&deadlines); err != nil || deadlines != 0 {
+		t.Fatalf("due backlog did not terminate: %d %v", deadlines, err)
+	}
+	var preservedDeadlines int
+	if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM production_assessment_decisions WHERE kind='TERMINAL' AND logical_at<=$1 AND (convert_from(evidence,'UTF8')::jsonb#>>'{decision,lateness_us}')::bigint>0`, now.Add(-3*time.Minute+30*time.Second)).Scan(&preservedDeadlines); err != nil || preservedDeadlines != 127 {
+		t.Fatalf("deadline reset or missing observed lateness: %d %v", preservedDeadlines, err)
+	}
+	var untouchedBefore, untouchedAfter int
+	if err = f.admin.QueryRow(t.Context(), `SELECT sum(failure_count) FROM production_assessment_states`).Scan(&untouchedBefore); err != nil {
+		t.Fatal(err)
+	}
+	canceled, stop := context.WithCancel(t.Context())
+	stop()
+	if err = restarted.Refresh(canceled); err == nil {
+		t.Fatal("cancellation ignored")
+	}
+	if err = f.admin.QueryRow(t.Context(), `SELECT sum(failure_count) FROM production_assessment_states`).Scan(&untouchedAfter); err != nil || untouchedAfter != untouchedBefore {
+		t.Fatal("canceled refresh charged unattempted GPUs")
+	}
+}
+
+func TestProductionFleetScopeCannotChangeOnRestart(t *testing.T) {
+	f, s, c, _, _, _ := productionFleetFixture(t, 112)
+	changed := c
+	changed.Assessment.Assets = changed.Assessment.Assets[:111]
+	other, err := NewProductionAssessmentStore(t.Context(), f.admin, s.registry, changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = other.Start(t.Context()); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("fleet shrink silently changed authority: %v", err)
+	}
+}
+
+func TestProductionFleetStatusAndDowngradeGuard(t *testing.T) {
+	f, _, c, _, _, _ := productionFleetFixture(t, 128)
+	status, err := ReadProductionAssessmentStatus(t.Context(), f.admin, c.Assessment.ClusterID, c.Assessment.RunID)
+	if err != nil || len(status.Assets) != 128 {
+		t.Fatalf("fleet status truncated: %d %v", len(status.Assets), err)
+	}
+	body, err := os.ReadFile("../../../migrations/000088_production_assessment_fairness.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.admin.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(t.Context(), string(body)); err == nil {
+		t.Fatal("fleet fairness downgrade allowed")
+	}
+	_ = tx.Rollback(t.Context())
+	var columns int
+	if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns WHERE table_name='production_assessment_states' AND column_name IN ('last_due_attempt_at','last_acquire_attempt_at')`).Scan(&columns); err != nil || columns != 2 {
+		t.Fatalf("refused downgrade changed schema %d %v", columns, err)
+	}
+	// Empty unused fixture enrollment can be deliberately removed; no history is
+	// dropped by the migration to make rollback succeed.
+	f.exec(t, `DELETE FROM production_assessment_states;DELETE FROM production_assessment_controls;DELETE FROM production_assessment_enrollments`)
+	tx, err = f.admin.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(t.Context(), string(body)); err != nil {
+		t.Fatal("empty downgrade rejected", err)
+	}
+	if err = tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Query-local de-duplication must preserve whole-document validation, conflicting
+// duplicate fields and each receipt's task timing even when JSON bodies repeat.
+func TestProductionFleetReceiptDocumentDeduplication(t *testing.T) {
+	f, s, c, profile, hash, now := productionFleetFixture(t, 128)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	writer, _ := NewCollectionStore(f.admin)
+	query := domain.CoolingUploadQueries()[0]
+	ids := []string{}
+	for i := 0; i < 7; i++ {
+		slot := now.Truncate(15 * time.Second).Add(time.Duration(i-6) * 15 * time.Second)
+		report := assessmentUploadReport(profile, hash, query, slot)
+		report.Version = 3
+		if _, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, string(profile.Task(query, slot).RunID))
+	}
+	asset := c.Assessment.Assets[0]
+	var binding a.Binding
+	field, _ := domain.CoolingUploadField(query)
+	for _, b := range c.Assessment.Bindings {
+		if b.Metric == field.Name {
+			binding = b
+		}
+	}
+	if binding.Metric == "" {
+		t.Fatal("fixture query binding missing")
+	}
+	conflict := domain.DCGMFieldEvidence{NodeID: domain.StableNodeID(asset.NodeID), GPU: domain.PhysicalGPUUUID(asset.GPUUUID), Metric: binding.Metric, State: "UNSUPPORTED", Reason: "fixture conflict"}
+	raw, _ := json.Marshal([]domain.DCGMFieldEvidence{conflict})
+	for _, id := range ids[2:4] {
+		f.exec(t, `UPDATE collection_runs SET metric_fields=metric_fields||$2::jsonb WHERE run_id=$1`, id, raw)
+	}
+	f.exec(t, `UPDATE collection_runs SET metric_fields=metric_fields||'[{"node_id":7}]'::jsonb WHERE run_id=$1`, ids[4])
+	f.exec(t, `UPDATE collection_runs SET metric_fields=metric_fields||jsonb_build_array(jsonb_build_object('reason',repeat('x',70000))) WHERE run_id=$1`, ids[5])
+	// This newest row owns the shared healthy-document ordinal; its timing is
+	// invalid, but it must not hide the usable older receipts sharing the body.
+	f.exec(t, `UPDATE collection_runs SET scheduled_for=scheduled_for+interval '1 second' WHERE run_id=$1`, ids[6])
+	var at time.Time
+	if err := f.admin.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(t.Context())
+	attempts, selected, truncated, err := loadProductionUploadAttempts(t.Context(), tx, c.Assessment, asset, binding, query, at.Add(-15*time.Minute), at)
+	if err != nil || truncated || len(selected) != 6 {
+		t.Fatalf("receipt selection: count%d truncated%t %v", len(selected), truncated, err)
+	}
+	for i, id := range ids[:6] {
+		if attempts[id].usable != (i < 2) {
+			t.Fatalf("receipt%d usable%t", i, attempts[id].usable)
+		}
+	}
+	if _, ok := attempts[ids[6]]; ok {
+		t.Fatal("invalid task admitted through shared metadata")
+	}
+}
+
+func TestProductionFleetReceiptProfileRevisionsRemainScoped(t *testing.T) {
+	f, s, c, profile, hash, now := productionFleetFixture(t, 128)
+	writer, _ := NewCollectionStore(f.admin)
+	query := domain.CoolingUploadQueries()[0]
+	expected := map[string]int64{}
+	for generation := 0; generation < 3; generation++ {
+		if generation > 0 {
+			profile.Revision++
+			if generation == 2 {
+				profile.Assets = profile.Assets[1:]
+			}
+			raw, _ := json.Marshal(profile)
+			hash = domain.ChecksumSHA256(raw).String()
+			if err := writer.RegisterCoolingUploadProfile(t.Context(), profile, hash); err != nil {
+				t.Fatal(err)
+			}
+		}
+		f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+		f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+		f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+		for i := 0; i < 2; i++ {
+			slot := now.Truncate(15 * time.Second).Add(time.Duration(generation*2+i-6) * 15 * time.Second)
+			report := assessmentUploadReport(profile, hash, query, slot)
+			report.Version = 3
+			if _, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil {
+				t.Fatal(err)
+			}
+			if generation < 2 {
+				expected[string(profile.Task(query, slot).RunID)] = profile.Revision
+			}
+		}
+	}
+	field, _ := domain.CoolingUploadField(query)
+	var binding a.Binding
+	for _, b := range c.Assessment.Bindings {
+		if b.Metric == field.Name {
+			binding = b
+		}
+	}
+	var at time.Time
+	if err := f.admin.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(t.Context())
+	attempts, ids, truncated, err := loadProductionUploadAttempts(t.Context(), tx, c.Assessment, c.Assessment.Assets[0], binding, query, at.Add(-15*time.Minute), at)
+	if err != nil || truncated || len(ids) != len(expected) {
+		t.Fatalf("mixed-profile selection %d %v %v", len(ids), truncated, err)
+	}
+	for id, revision := range expected {
+		got, ok := attempts[id]
+		if !ok || !got.usable || got.provenance.ScheduleRevision != revision {
+			t.Fatalf("profile-specific proof lost: revision%d %+v", revision, got)
+		}
+	}
+}

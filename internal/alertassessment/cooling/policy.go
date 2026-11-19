@@ -160,7 +160,7 @@ func (Category) ValidatePolicy(ctx context.Context, p a.Payload) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	policy, err := decodePayload[Policy](p, "policy", stateLimit)
+	policy, err := decodePolicy(ctx, p)
 	if err != nil {
 		return err
 	}

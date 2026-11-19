@@ -113,7 +113,7 @@ func (Category) Evaluate(ctx context.Context, r a.Request) (a.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return a.Result{}, err
 	}
-	p, tracker, arm, err := decode(r)
+	p, tracker, arm, err := decode(ctx, r)
 	if err != nil {
 		return a.Result{}, err
 	}

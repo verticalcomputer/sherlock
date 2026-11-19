@@ -21,33 +21,51 @@ type coolingUploadStore interface {
 func configureCoolingUpload(ctx context.Context, base http.Handler, identity collectorcontrol.IdentityAuthenticator,
 	auth collectorcontrol.RequestAuthenticator, store coolingUploadStore, clock collectorcontrol.Clock,
 	scope config.PrometheusUploadScope, logger *slog.Logger) http.Handler {
-	profile, hash, err := config.LoadCoolingUploadProfile()
+	profiles, err := config.LoadCoolingUploadProfiles()
 	if err != nil {
 		logger.Warn("control.cooling_upload_disabled", "reason", "invalid optional profile")
 		return base
 	}
-	if hash == "" {
+	if len(profiles) == 0 {
 		return base
 	}
-	if !coolingUploadScopeAllowed(profile, scope) {
-		logger.Warn("control.cooling_upload_disabled", "reason", "profile outside intake scope")
+	enrollments := make([]collectorcontrol.CoolingUploadEnrollment, 0, len(profiles))
+	for _, p := range profiles {
+		if !coolingUploadScopeAllowed(p.Profile, scope) {
+			logger.Warn("control.cooling_upload_disabled", "reason", "profile outside intake scope")
+			return base
+		}
+		enrollments = append(enrollments, collectorcontrol.CoolingUploadEnrollment{Profile: p.Profile, Hash: p.Hash})
+	}
+	// Validate the complete set before any registration; authentication and source
+	// ownership are checked again by durable registration and each receipt.
+	admitted := enrollments[:0]
+	for _, e := range enrollments {
+		// A stalled cluster cannot consume the other cluster's admission budget.
+		bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := store.RegisterCoolingUploadProfile(bounded, e.Profile, e.Hash)
+		cancel()
+		if err != nil {
+			logger.Warn("control.cooling_upload_disabled", "profile", e.Profile.ProfileID, "reason", "profile admission rejected")
+			continue
+		}
+		admitted = append(admitted, e)
+	}
+	if len(admitted) == 0 {
 		return base
 	}
-	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := store.RegisterCoolingUploadProfile(bounded, profile, hash); err != nil {
-		logger.Warn("control.cooling_upload_disabled", "reason", "profile admission rejected")
-		return base
-	}
-	cooling, err := collectorcontrol.NewCoolingUploadHandler(identity, auth, store, clock, profile, hash)
+	cooling, err := collectorcontrol.NewSharedCoolingUploadHandler(identity, auth, store, clock, admitted)
 	if err != nil {
 		logger.Warn("control.cooling_upload_disabled", "reason", "profile handler rejected")
 		return base
 	}
+
 	mux := http.NewServeMux()
 	mux.Handle(domain.CoolingUploadPath, cooling)
 	mux.Handle("/", base)
-	logger.Info("control.cooling_upload_configured", "profile", profile.ProfileID, "revision", profile.Revision)
+	for _, p := range admitted {
+		logger.Info("control.cooling_upload_configured", "profile", p.Profile.ProfileID, "revision", p.Profile.Revision)
+	}
 	return mux
 }
 

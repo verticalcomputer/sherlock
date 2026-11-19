@@ -38,7 +38,7 @@ func ReadProductionAssessmentStatus(ctx context.Context, pool *pgxpool.Pool, clu
 	if err != nil {
 		return s, err
 	}
-	rows, err := pool.Query(ctx, `SELECT asset,revision,next_due_at,last_attempt_at,last_failure_code,last_failure_at,failure_count FROM production_assessment_states WHERE cluster_id=$1 AND enrollment_id=$2 ORDER BY asset LIMIT 9`, cluster, enrollment)
+	rows, err := pool.Query(ctx, `SELECT asset,revision,next_due_at,last_attempt_at,last_failure_code,last_failure_at,failure_count FROM production_assessment_states WHERE cluster_id=$1 AND enrollment_id=$2 ORDER BY asset LIMIT 129`, cluster, enrollment)
 	if err != nil {
 		return s, err
 	}
@@ -50,7 +50,7 @@ func ReadProductionAssessmentStatus(ctx context.Context, pool *pgxpool.Pool, clu
 		}
 		s.Assets = append(s.Assets, x)
 	}
-	if len(s.Assets) > 8 {
+	if len(s.Assets) > 128 {
 		return ProductionAssessmentStatus{}, a.ErrInvalid
 	}
 	return s, rows.Err()

@@ -261,3 +261,89 @@ func TestProductionSnapshotStopsDuringTraversal(t *testing.T) {
 		t.Fatalf("traversal ignored cancellation: %v", err)
 	}
 }
+
+func TestProductionFleetLimitsPreserveShadowBounds(t *testing.T) {
+	c, r, _ := productionFixture(t)
+	c.Assessment.Assets = nil
+	nodes := []string{}
+	for i := 0; i < 128; i++ {
+		node := fmt.Sprintf("node-%02d", i/8)
+		gpu := fmt.Sprintf("GPU-%012d", i)
+		if i%8 == 0 {
+			nodes = append(nodes, node)
+		}
+		c.Assessment.Assets = append(c.Assessment.Assets, a.Asset{EntityKey: fmt.Sprintf("%s/GPU/%s/%s/", c.Assessment.ClusterID, node, gpu), NodeID: node, GPUUUID: gpu})
+	}
+	c.Assessment.Limits.GPUCount = 128
+	c.Assessment.Limits.NodeCount = 16
+	for i := range c.Assessment.Bindings {
+		c.Assessment.Bindings[i].ScopeNodes = nodes
+	}
+	if _, err := a.NormalizeProductionConfig(t.Context(), c, r); err != nil {
+		t.Fatalf("full production fleet rejected: %v", err)
+	}
+	for _, counts := range [][2]int64{{129, 16}, {128, 17}} {
+		bad := c
+		bad.Assessment.Limits.GPUCount = counts[0]
+		bad.Assessment.Limits.NodeCount = counts[1]
+		if _, err := a.NormalizeProductionConfig(t.Context(), bad, r); err == nil {
+			t.Fatal("unbounded production accepted")
+		}
+	}
+	shadow := c.Assessment
+	shadow.Implementation = 1
+	shadow.RunDurationSeconds = 60
+	shadow.BudgetsMS = []int64{0, 15000, 30000, 60000, 120000}
+	raw, err := json.Marshal(shadow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ParseConfig(t.Context(), raw, r); err == nil {
+		t.Fatal("fleet production limits leaked into shadow")
+	}
+}
+
+func TestProductionAssetEngineRetainsEnrollmentHash(t *testing.T) {
+	c, r, start := productionFixture(t)
+	second := c.Assessment.Assets[0]
+	second.GPUUUID = "GPU-00000000-0000-0000-0000-000000000002"
+	second.EntityKey = fmt.Sprintf("%s/GPU/%s/%s/", c.Assessment.ClusterID, second.NodeID, second.GPUUUID)
+	c.Assessment.Assets = append(c.Assessment.Assets, second)
+	c.Assessment.Limits.GPUCount = 2
+	c, err := a.NormalizeProductionConfig(t.Context(), c, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := a.NewProductionEngine(t.Context(), c, start, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = full.RestoreProduction(second.EntityKey, nil); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := a.NewProductionAssetEngine(t.Context(), c, start, r, second.EntityKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullReport, err := full.Report("SYNTHETIC", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectedReport, err := selected.Report("SYNTHETIC", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := c.Assessment.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fullReport.ConfigHash != want || selectedReport.ConfigHash != want || len(selected.Enrollments) != 1 || len(selected.Config.Assets) != 1 {
+		t.Fatal("asset engine lost immutable full-enrollment identity")
+	}
+	if len(c.Assessment.Assets) != 2 {
+		t.Fatal("asset engine mutated source enrollment")
+	}
+	if _, err = a.NewProductionAssetEngine(t.Context(), c, start, r, "unadmitted"); err == nil {
+		t.Fatal("asset engine expanded admission")
+	}
+}

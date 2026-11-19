@@ -118,7 +118,8 @@ func loadAssessmentUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, ass
 	if err != nil {
 		return profile, err
 	}
-	if a.DecodeStrict(body, &profile, 16<<10) != nil || profile.Validate() != nil ||
+	if a.DecodeStrict(body, &profile, domain.CoolingUploadProductionProfileMaxBytes) != nil || profile.Validate() != nil ||
+		(profile.Version == domain.CoolingUploadVersion && len(body) > 16<<10) ||
 		profile.ProfileID != b.UploadProfileID || profile.Revision != b.ScheduleRevision || profile.CollectorID != collector || string(collector) != b.UploadCollectorID ||
 		string(profile.ClusterID) != c.ClusterID || string(profile.SourceID) != c.SourceID || profile.InventoryRevision != c.InventoryRevision ||
 		!profile.StartsAt.Equal(starts) || !profile.EndsAt.Equal(ends) {
