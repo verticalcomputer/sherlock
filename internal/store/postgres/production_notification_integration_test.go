@@ -18,10 +18,11 @@ import (
 )
 
 type notificationFixture struct {
-	p  *pgxpool.Pool
-	s  *storepg.ProductionNotificationStore
-	q  *storepg.AlertOutboxStore
-	at time.Time
+	p           *pgxpool.Pool
+	s           *storepg.ProductionNotificationStore
+	q           *storepg.AlertOutboxStore
+	at          time.Time
+	evidenceURL string
 }
 
 func notificationTestFixture(t *testing.T) *notificationFixture {
@@ -44,7 +45,7 @@ func notificationTestFixture(t *testing.T) *notificationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &notificationFixture{p, storepg.NewProductionNotificationStore(p), q, at}
+	return &notificationFixture{p: p, s: storepg.NewProductionNotificationStore(p), q: q, at: at, evidenceURL: "https://sherlock.example/admin/clusters/notify-cluster/assessment/notify-enrollment/occurrence-1"}
 }
 func (f *notificationFixture) publish(t *testing.T, n int, kind string, suppress ...bool) {
 	t.Helper()
@@ -54,7 +55,7 @@ func (f *notificationFixture) publish(t *testing.T, n int, kind string, suppress
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx)
-	e := storepg.ProductionAssessmentEvent{EnrollmentID: "notify-enrollment", ClusterID: "notify-cluster", SourceID: "notify-source", Category: "gpu_cooling", Asset: "notify-cluster/GPU/node-a/GPU-a/", OccurrenceID: "occurrence-1", EventID: fmt.Sprintf("event-%d", n), Kind: kind, Summary: "Investigation required <@everyone>", EvidenceURL: "https://sherlock.example/admin/clusters/notify-cluster/assessment/notify-enrollment/occurrence-1", At: f.at.Add(time.Duration(n) * time.Microsecond), Evidence: json.RawMessage(`{"validated":true}`)}
+	e := storepg.ProductionAssessmentEvent{EnrollmentID: "notify-enrollment", ClusterID: "notify-cluster", SourceID: "notify-source", Category: "gpu_cooling", Asset: "notify-cluster/GPU/node-a/GPU-a/", OccurrenceID: "occurrence-1", EventID: fmt.Sprintf("event-%d", n), Kind: kind, Summary: "Investigation required <@everyone>", EvidenceURL: f.evidenceURL, At: f.at.Add(time.Duration(n) * time.Microsecond), Evidence: json.RawMessage(`{"validated":true}`)}
 	e.SuppressDelivery = len(suppress) > 0 && suppress[0]
 	if err = storepg.PublishProductionAssessment(ctx, tx, e); err != nil {
 		t.Fatal(err)
@@ -93,6 +94,36 @@ func (f *notificationFixture) finish(t *testing.T, c storepg.AlertClaim, outcome
 	_, e := f.q.Finish(context.Background(), c, alertdelivery.Result{Outcome: outcome, Code: code, HTTPStatus: http})
 	if e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestProductionNotificationWithoutEvidenceURLLifecycle(t *testing.T) {
+	f := notificationTestFixture(t)
+	f.evidenceURL = ""
+	if _, err := f.p.Exec(t.Context(), `UPDATE production_assessment_enrollments SET evidence_base_url='' WHERE enrollment_id='notify-enrollment'`); err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, 1, "OPEN")
+	initial := f.claim(t)
+	if strings.Contains(initial.Message, "History:") || strings.Contains(initial.Message, "/admin/") || !strings.Contains(initial.Message, "occurrence-1") || !strings.Contains(initial.Message, "Investigation required &lt;@everyone&gt;") {
+		t.Fatalf("initial notification lost context or manufactured a link: %s", initial.Message)
+	}
+	f.finish(t, initial, alertdelivery.Accepted)
+	f.publish(t, 2, "WORSEN")
+	f.publish(t, 3, "RECOVER")
+	catchup := f.claim(t)
+	if strings.Contains(catchup.Message, "History:") || strings.Contains(catchup.Message, "/admin/") || !strings.Contains(catchup.Message, "Catch-up: 2 retained events") || !strings.Contains(catchup.Message, "concern recovered before this delivery") || !strings.Contains(catchup.Message, "occurrence-1") {
+		t.Fatalf("catch-up lost context or manufactured a link: %s", catchup.Message)
+	}
+	f.finish(t, catchup, alertdelivery.Accepted)
+	h := f.history(t)
+	if h.Occurrence.EvidenceURL != "" || h.Occurrence.ClosedAt == nil || len(h.Events) != 3 {
+		t.Fatalf("history not retained without a URL: %+v", h)
+	}
+	for _, event := range h.Events {
+		if len(event.Evidence) == 0 || event.EvidenceID == "" {
+			t.Fatalf("event proof missing: %+v", event)
+		}
 	}
 }
 func TestProductionNotificationA1AndScopedClaim(t *testing.T) {

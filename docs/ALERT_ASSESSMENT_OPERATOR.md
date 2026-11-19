@@ -223,7 +223,13 @@ that check fail; review them and preserve other authorized services' grants
 before changing privileges. Do not grant broad table access to bypass preflight.
 
 The outer config is `{schema:1, revision:1, notifications_enabled:false,
-evidence_base_url:"https://YOUR_AUTHENTICATED_SHERLOCK_ORIGIN", assessment:{...}}`.
+evidence_base_url:"", assessment:{...}}`. The evidence origin is optional:
+omit it or leave it empty for Slack messages without a history link. Messages
+retain cluster/node/GPU identity, incident/occurrence IDs, concern/evidence times
+and the investigation reason; full evidence remains stored in Sherlock.
+If a history link is wanted, configure the real authenticated HTTPS origin.
+Nonempty origins must still pass URL validation and cannot change within an
+existing enrollment. Do not substitute a placeholder or relative URL.
 Use the existing shadow assessment shape inside `assessment`, with:
 
 - A unique stable `run_id` used as the production enrollment ID.
@@ -307,7 +313,9 @@ silently discarding history or increasing execution limits.
 
 Before live enablement, verify the named source's fresh 15-second receipts,
 24 hours without unhandled execution-budget failures, existing urgent authority,
-exact original-warning routing handoff and hardware-team evidence access. Review
+exact original-warning routing handoff and the context forwarded to the hardware
+team. When a history URL is configured, verify their evidence access too; otherwise
+internal operators retain responsibility for retrieving Sherlock's stored proof. Review
 at least 20 concern/transient episodes with zero missed actionable cases and at
 most one unnecessary investigation request, recording the limited sample size.
 Measure decision, publication and receiver delay separately. A separately

@@ -242,7 +242,7 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 			kind = "OPEN"
 		}
 
-		link := strings.TrimRight(baseURL, "/") + "/admin/clusters/" + url.PathEscape(c.ClusterID) + "/assessment/" + url.PathEscape(c.RunID) + "/" + d.CandidateID
+		link := productionEvidenceURL(baseURL, c.ClusterID, c.RunID, d.CandidateID)
 		if err = PublishProductionAssessment(ctx, tx, ProductionAssessmentEvent{EnrollmentID: c.RunID, ClusterID: c.ClusterID, SourceID: c.SourceID, Category: c.Category, Asset: asset.EntityKey, OccurrenceID: d.CandidateID, EventID: d.ID, Kind: kind, SuppressDelivery: !eligible, Summary: d.Summary, EvidenceURL: link, At: d.LogicalAt, Evidence: json.RawMessage(evidence)}); err != nil {
 			return err
 		}
@@ -277,6 +277,13 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	}
 	stage, started, outcome = "production.commit", time.Now(), "unknown"
 	return tx.Commit(ctx)
+}
+
+func productionEvidenceURL(baseURL, cluster, enrollment, occurrence string) string {
+	if baseURL == "" {
+		return ""
+	}
+	return strings.TrimRight(baseURL, "/") + "/admin/clusters/" + url.PathEscape(cluster) + "/assessment/" + url.PathEscape(enrollment) + "/" + occurrence
 }
 func (s *ProductionAssessmentStore) Cleanup(ctx context.Context) (count int, resultErr error) {
 	started := time.Now()
