@@ -826,8 +826,13 @@ type auditEvent struct {
 }
 
 func (client *Client) request(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	return client.requestQuery(ctx, method, path, nil, body)
+}
+
+func (client *Client) requestQuery(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Request, error) {
 	endpoint := *client.baseURL
 	endpoint.Path = path
+	endpoint.RawQuery = query.Encode()
 	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), body)
 	if err != nil {
 		return nil, errors.New("create admin API request")
@@ -857,6 +862,9 @@ func (client *Client) do(request *http.Request) ([]byte, error) {
 	}
 	defer response.Body.Close()
 	limit := maximumResponseBytes
+	if strings.HasPrefix(request.URL.Path, "/internal/admin/v1/clusters/") && strings.Contains(request.URL.Path, "/assessment/") {
+		limit = 20 << 20
+	}
 	if strings.HasPrefix(request.URL.Path, "/internal/admin/v1/investigations/") {
 		limit = maximumReportResponseBytes
 	}

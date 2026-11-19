@@ -277,7 +277,7 @@
         "monitoring",
         "investigation"
       ],
-      "summary": "Experimental cooling replay, restricted shadow enrollment, exports and qualification limits."
+      "summary": "Cooling replay, restricted shadow enrollment, continuous production assessment, scoped Slack delivery, evidence access and activation gates."
     },
     {
       "path": "cmd/sherlock-assessment/README.md",

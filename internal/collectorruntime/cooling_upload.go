@@ -106,6 +106,10 @@ func RunCoolingUpload(ctx context.Context, executor coolingExecutor, client *HTT
 	}
 	defer lock.release()
 
+	if err := applyCoolingUploadState(dir, profile, hash); err != nil {
+		return err
+	}
+	logger.Info("collector.cooling_profile_applied", "profile", profile.ProfileID, "revision", profile.Revision, "state", profile.State)
 	s := coolingSpool{prometheusSpool: prometheusSpool{dir: dir, client: client, logger: logger}, profile: profile, hash: hash}
 	// Clear a crash remnant before starting the independent writer and reader.
 	temp := filepath.Join(dir, ".report.tmp")
@@ -131,7 +135,7 @@ func RunCoolingUpload(ctx context.Context, executor coolingExecutor, client *HTT
 			if slot.Before(profile.StartsAt) {
 				slot = profile.StartsAt
 			}
-			if !slot.Before(profile.EndsAt) {
+			if !profile.ActiveAt(slot) {
 				return nil
 			}
 			timer := time.NewTimer(time.Until(slot))
@@ -159,21 +163,31 @@ func RunCoolingUpload(ctx context.Context, executor coolingExecutor, client *HTT
 		ticker := time.NewTicker(coolingReplayInterval)
 		defer ticker.Stop()
 		expiry := profile.EndsAt.Add(domain.CoolingUploadRetention)
-		timer := time.NewTimer(time.Until(expiry))
-		defer timer.Stop()
+		var expired <-chan time.Time
+		if profile.Version == domain.CoolingUploadProductionVersion {
+			expiry = time.Time{}
+			if profile.State == "DISABLED" {
+				expiry = time.Now().Add(domain.CoolingUploadRetention)
+			}
+		}
+		if !expiry.IsZero() {
+			timer := time.NewTimer(time.Until(expiry))
+			defer timer.Stop()
+			expired = timer.C
+		}
 		for {
 			now := time.Now()
 			if err := s.flush(runCtx, now); err != nil {
 				return err
 			}
-			if !now.Before(expiry) {
+			if !expiry.IsZero() && !now.Before(expiry) {
 				return nil
 			}
 			select {
 			case <-runCtx.Done():
 				return runCtx.Err()
 			case <-ticker.C:
-			case <-timer.C:
+			case <-expired:
 			case <-wake:
 			}
 		}
@@ -182,6 +196,9 @@ func RunCoolingUpload(ctx context.Context, executor coolingExecutor, client *HTT
 }
 
 func (s coolingSpool) collect(ctx context.Context, executor coolingExecutor, slot time.Time) error {
+	if !s.profile.ActiveAt(slot) {
+		return nil
+	}
 	entries, err := s.entries()
 	if err != nil {
 		return err
@@ -204,7 +221,7 @@ func (s coolingSpool) collect(ctx context.Context, executor coolingExecutor, slo
 	}
 	for index, result := range results {
 		report := domain.CoolingUploadReport{
-			Version: domain.CoolingUploadVersion, ProfileID: s.profile.ProfileID, ProfileRevision: s.profile.Revision,
+			Version: s.profile.Version, ProfileID: s.profile.ProfileID, ProfileRevision: s.profile.Revision,
 			ProfileHash: s.hash, Result: result,
 		}
 		raw, err := json.Marshal(report)
@@ -225,7 +242,7 @@ func (s coolingSpool) entries() ([]os.DirEntry, error) {
 		return nil, err
 	}
 	defer dir.Close()
-	entries, err := dir.ReadDir(coolingSpoolMaxReports + 3)
+	entries, err := dir.ReadDir(coolingSpoolMaxReports + 5)
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
@@ -235,7 +252,7 @@ func (s coolingSpool) entries() ([]os.DirEntry, error) {
 		if !entry.Type().IsRegular() {
 			return nil, fmt.Errorf("invalid cooling report spool entry")
 		}
-		if entry.Name() != ".lock" && entry.Name() != ".report.tmp" {
+		if entry.Name() != ".lock" && entry.Name() != ".report.tmp" && entry.Name() != coolingStateFile && entry.Name() != coolingStateTemp {
 			reports = append(reports, entry)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -94,6 +95,9 @@ func validateAssessmentAuthority(ctx context.Context, tx pgx.Tx, c a.Config, ass
 }
 
 func loadAssessmentUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, at time.Time) (domain.CoolingUploadProfile, error) {
+	if c.Production() {
+		return loadProductionUploadProfile(ctx, tx, c, asset, b, query, at)
+	}
 	var profile domain.CoolingUploadProfile
 	if field, ok := domain.CoolingUploadField(query); !ok || field.Name != b.Metric {
 		return profile, ErrMonitoringAuthority
@@ -276,6 +280,9 @@ func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.
 }
 
 func loadAssessmentUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, profile domain.CoolingUploadProfile, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
+	if c.Production() {
+		return loadProductionUploadAttempts(ctx, tx, c, asset, b, query, from, at)
+	}
 	rows, err := tx.Query(ctx, assessmentUploadAttemptSQL, c.ClusterID, c.SourceID, query, from, at, profile.ProfileID, profile.Revision, b.UploadProfileHash, profile.CollectorID)
 	if err != nil {
 		return nil, nil, false, err
@@ -455,7 +462,7 @@ func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Ass
 			out = append(out, f)
 		}
 	}
-	qualified, err := loadAssessmentQualified(ctx, tx, c, asset, at)
+	qualified, err := loadAssessmentQualified(ctx, tx, c, asset, at, admitted...)
 	if err != nil {
 		return nil, err
 	}
@@ -489,6 +496,9 @@ WITH scope AS MATERIALIZED (
  WHERE f.run_id=$4 AND f.asset=$3 AND f.kind='QUALIFIED' AND f.available_at<=$5
  GROUP BY 1,2,3,4,5
  HAVING bool_or(q.body->>'transition'='OPEN') AND NOT bool_or(q.body->>'transition'='RECOVER')
+ UNION
+ SELECT q.policy_id,q.occurrence,q.rule_id,q.rule_version,q.enrollment_revision
+ FROM jsonb_to_recordset($6::jsonb) q(policy_id text,occurrence bigint,rule_id text,rule_version bigint,enrollment_revision bigint)
 ), transitions AS (
  SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot
  FROM scope n
@@ -506,8 +516,24 @@ FROM transitions
 ORDER BY CASE WHEN transition='OPEN' AND severity='CRITICAL' THEN 0 WHEN transition='OPEN' THEN 1 ELSE 2 END,
          occurred_at,policy_id,occurrence,transition LIMIT 33`
 
-func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at time.Time) ([]a.Fact, error) {
-	rows, err := tx.Query(ctx, assessmentQualifiedSQL, c.ClusterID, c.SourceID, asset.EntityKey, c.RunID, at)
+func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
+	retained := []map[string]any{}
+	if c.Production() && len(admitted) > 0 {
+		for _, f := range admitted[0] {
+			if f.Asset == asset.EntityKey && f.Kind == "QUALIFIED" {
+				var q a.Qualified
+				if json.Unmarshal(f.Body, &q) == nil && q.Transition == "OPEN" {
+					retained = append(retained, map[string]any{"policy_id": q.PolicyID, "occurrence": q.Occurrence, "rule_id": q.Rule, "rule_version": q.RuleVersion, "enrollment_revision": q.EnrollmentRevision})
+				}
+			}
+		}
+	}
+	body, _ := json.Marshal(retained)
+	query := assessmentQualifiedSQL
+	if c.Production() {
+		query = strings.Replace(query, "FROM assessment_facts f", "FROM (SELECT NULL::text AS run_id,NULL::text AS asset,NULL::text AS kind,NULL::timestamptz AS available_at,NULL::bytea AS body WHERE false) f", 1)
+	}
+	rows, err := tx.Query(ctx, query, c.ClusterID, c.SourceID, asset.EntityKey, c.RunID, at, body)
 	if err != nil {
 		return nil, err
 	}

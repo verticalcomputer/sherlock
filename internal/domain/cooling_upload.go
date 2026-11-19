@@ -10,16 +10,18 @@ import (
 )
 
 const (
-	CoolingUploadPath          = "/collector/v2/prometheus/cooling-reports"
-	CoolingUploadRunPrefix     = "prometheus-cooling-v2-"
-	CoolingUploadVersion       = 2
-	CoolingUploadInterval      = 15 * time.Second
-	CoolingUploadRetention     = 15 * time.Minute
-	CoolingUploadSourceTimeout = 8 * time.Second
-	CoolingUploadMaxWindow     = 24 * time.Hour
-	CoolingUploadMaxAssets     = 8
-	CoolingUploadMaxNodes      = 2
-	CoolingUploadMaxBytes      = 1 << 20
+	CoolingUploadPath      = "/collector/v2/prometheus/cooling-reports"
+	CoolingUploadRunPrefix = "prometheus-cooling-v2-"
+	CoolingUploadVersion   = 2
+	// V3 versions profile/report authority, not the existing authenticated V2 transport.
+	CoolingUploadProductionVersion = 3
+	CoolingUploadInterval          = 15 * time.Second
+	CoolingUploadRetention         = 15 * time.Minute
+	CoolingUploadSourceTimeout     = 8 * time.Second
+	CoolingUploadMaxWindow         = 24 * time.Hour
+	CoolingUploadMaxAssets         = 8
+	CoolingUploadMaxNodes          = 2
+	CoolingUploadMaxBytes          = 1 << 20
 )
 
 type CoolingUploadAsset struct {
@@ -38,10 +40,11 @@ type CoolingUploadProfile struct {
 	StartsAt          time.Time            `json:"starts_at"`
 	EndsAt            time.Time            `json:"ends_at"`
 	Assets            []CoolingUploadAsset `json:"assets"`
+	State             string               `json:"state,omitempty"`
 }
 
 func (p CoolingUploadProfile) Validate() error {
-	if p.Version != CoolingUploadVersion || p.Revision <= 0 {
+	if (p.Version != CoolingUploadVersion && p.Version != CoolingUploadProductionVersion) || p.Revision <= 0 {
 		return fmt.Errorf("invalid cooling upload profile version or revision")
 	}
 	for _, id := range []string{p.ProfileID, string(p.CollectorID), string(p.ClusterID), string(p.SourceID), p.InventoryRevision} {
@@ -49,9 +52,18 @@ func (p CoolingUploadProfile) Validate() error {
 			return fmt.Errorf("invalid cooling upload profile identity")
 		}
 	}
-	if p.StartsAt.IsZero() || !alignedCoolingUploadSlot(p.StartsAt) || !alignedCoolingUploadSlot(p.EndsAt) ||
-		!p.EndsAt.After(p.StartsAt) || p.EndsAt.Sub(p.StartsAt) > CoolingUploadMaxWindow {
-		return fmt.Errorf("invalid cooling upload profile window")
+	if p.StartsAt.IsZero() || !alignedCoolingUploadSlot(p.StartsAt) {
+		return fmt.Errorf("invalid cooling upload profile start")
+	}
+	switch p.Version {
+	case CoolingUploadVersion:
+		if p.State != "" || !alignedCoolingUploadSlot(p.EndsAt) || !p.EndsAt.After(p.StartsAt) || p.EndsAt.Sub(p.StartsAt) > CoolingUploadMaxWindow {
+			return fmt.Errorf("invalid cooling upload profile window")
+		}
+	case CoolingUploadProductionVersion:
+		if !p.EndsAt.IsZero() || (p.State != "ENABLED" && p.State != "DISABLED") {
+			return fmt.Errorf("invalid continuous cooling upload state")
+		}
 	}
 	if len(p.Assets) == 0 || len(p.Assets) > CoolingUploadMaxAssets || !slices.IsSortedFunc(p.Assets, compareCoolingUploadAssets) {
 		return fmt.Errorf("invalid cooling upload profile asset bounds or order")
@@ -82,10 +94,28 @@ func alignedCoolingUploadSlot(slot time.Time) bool {
 	return slot.Equal(slot.Truncate(CoolingUploadInterval))
 }
 
+// ActiveAt is collection authority, not proof of receipt admission. V3 has no
+// time-based stop; an explicit higher disabled revision stops local acquisition.
+func (p CoolingUploadProfile) ActiveAt(slot time.Time) bool {
+	if slot.Before(p.StartsAt) {
+		return false
+	}
+	if p.Version == CoolingUploadProductionVersion {
+		return p.State == "ENABLED"
+	}
+	return p.Version == CoolingUploadVersion && slot.Before(p.EndsAt)
+}
+
 func (p CoolingUploadProfile) Task(query QueryKind, slot time.Time) CollectionTask {
 	slot = slot.UTC()
-	hash := ChecksumSHA256([]byte(fmt.Sprintf("prometheus-cooling-v2\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s",
+	identityVersion := "prometheus-cooling-v2"
+	if p.Version == CoolingUploadProductionVersion {
+		identityVersion = "prometheus-cooling-v3"
+	}
+	hash := ChecksumSHA256([]byte(fmt.Sprintf(identityVersion+"\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s",
 		p.ProfileID, p.Revision, p.CollectorID, p.ClusterID, p.SourceID, query, slot.Format(time.RFC3339))))
+	// Keep the reserved upload namespace recognized by existing provenance
+	// readers; the digest binds V3 separately without altering V2 identities.
 	id := CoolingUploadRunPrefix + hash.String()
 	return CollectionTask{
 		RunID: RunID(id), ClusterID: p.ClusterID, SourceID: p.SourceID, Query: query, ScheduledFor: slot,
@@ -129,7 +159,7 @@ func (r CoolingUploadReport) Validate(p CoolingUploadProfile, hash string, now t
 		return err
 	}
 	digest, err := ParseSHA256(hash)
-	if err != nil || digest.String() != hash || r.Version != CoolingUploadVersion ||
+	if err != nil || digest.String() != hash || r.Version != p.Version ||
 		r.ProfileID != p.ProfileID || r.ProfileRevision != p.Revision || r.ProfileHash != hash {
 		return fmt.Errorf("cooling upload report does not match the enrolled profile")
 	}
@@ -137,7 +167,7 @@ func (r CoolingUploadReport) Validate(p CoolingUploadProfile, hash string, now t
 	task := result.Task
 	field, ok := CoolingUploadField(task.Query)
 	slot := task.ScheduledFor
-	if !ok || !alignedCoolingUploadSlot(slot) || slot.Before(p.StartsAt) || !slot.Before(p.EndsAt) ||
+	if !ok || !alignedCoolingUploadSlot(slot) || !p.ActiveAt(slot) ||
 		slot.After(now) || slot.Before(now.Add(-CoolingUploadRetention)) {
 		return fmt.Errorf("invalid cooling upload query or slot")
 	}

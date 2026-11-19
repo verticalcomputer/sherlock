@@ -27,6 +27,15 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if len(os.Args) == 2 && os.Args[1] == "assessment-production" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runProductionAssessment(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("control.production_assessment_stopped", "reason", "startup or runtime failure")
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 {
 		if len(os.Args) != 2 || os.Args[1] != "prometheus-upload" {
 			logger.Error("control.mode_invalid")

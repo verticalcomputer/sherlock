@@ -262,6 +262,7 @@ func New(options Options) (*Server, error) {
 	mux.HandleFunc("GET /admin/clusters/{id}/investigations", server.clusterDetailTab("investigations"))
 	mux.HandleFunc("GET /admin/clusters/{id}/health", server.clusterDetailTab("health"))
 	mux.HandleFunc("GET /admin/clusters/{id}/gpu-metrics", server.clusterGPUMetricsPage)
+	mux.HandleFunc("GET /admin/clusters/{id}/assessment/{enrollment}/{occurrence}", server.assessmentPage)
 	mux.HandleFunc("POST /admin/clusters/{id}/investigations", server.startInvestigation)
 	mux.HandleFunc("POST /admin/clusters/{id}/evidence-repair-proposals", server.startEvidenceRepairProposal)
 	mux.HandleFunc("GET /admin/clusters/{id}/edit", server.clusterEditPage)

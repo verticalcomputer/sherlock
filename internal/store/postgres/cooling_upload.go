@@ -33,6 +33,20 @@ func (s *CollectionStore) RegisterCoolingUploadProfile(ctx context.Context, prof
 	if err := lockCoolingUploadProfile(ctx, tx, profile.ProfileID, profile.Revision); err != nil {
 		return err
 	}
+	// Promotion is irreversible for a profile family. Check before the
+	// idempotent-startup path too: a previously registered V2 file must not
+	// undo a later V3 disable when a disconnected old process restarts.
+	if profile.Version == domain.CoolingUploadVersion {
+		var promoted bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+            SELECT 1 FROM public.prometheus_cooling_upload_profiles
+            WHERE profile_id=$1 AND protocol_version=3)`, profile.ProfileID).Scan(&promoted); err != nil {
+			return err
+		}
+		if promoted {
+			return fmt.Errorf("cooling upload profile family has advanced to continuous authority")
+		}
+	}
 	var identical bool
 	err = tx.QueryRow(ctx, `SELECT profile_hash=$3 AND profile=$4::jsonb
  FROM public.prometheus_cooling_upload_profiles WHERE profile_id=$1 AND revision=$2`,
@@ -40,6 +54,17 @@ func (s *CollectionStore) RegisterCoolingUploadProfile(ctx context.Context, prof
 	if err == nil {
 		if !identical {
 			return fmt.Errorf("cooling upload profile revision already binds different content")
+		}
+		if profile.Version == domain.CoolingUploadProductionVersion {
+			var current bool
+			if err := tx.QueryRow(ctx, `SELECT revoked_at IS NULL AND NOT EXISTS (
+              SELECT 1 FROM public.prometheus_cooling_upload_profiles newer WHERE newer.profile_id=p.profile_id AND newer.revision>p.revision)
+              FROM public.prometheus_cooling_upload_profiles p WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision).Scan(&current); err != nil {
+				return err
+			}
+			if !current {
+				return fmt.Errorf("cooling upload profile revision is superseded")
+			}
 		}
 		return nil
 	}
@@ -53,20 +78,25 @@ func (s *CollectionStore) RegisterCoolingUploadProfile(ctx context.Context, prof
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return err
 	}
-	if !now.Before(profile.EndsAt.Add(-domain.CoolingUploadInterval)) {
+	if profile.Version == domain.CoolingUploadVersion && !now.Before(profile.EndsAt.Add(-domain.CoolingUploadInterval)) {
 		return fmt.Errorf("cooling upload profile has no future usable slot")
 	}
 	if err := requireCoolingUploadOwner(ctx, tx, profile); err != nil {
 		return err
 	}
-	if err := requireCoolingUploadInventory(ctx, tx, profile, now); err != nil {
-		return err
+	if profile.State != "DISABLED" {
+		if err := requireCoolingUploadInventory(ctx, tx, profile, now); err != nil {
+			return err
+		}
+	}
+	if profile.Version == domain.CoolingUploadProductionVersion {
+		return registerContinuousCoolingProfile(ctx, tx, profile, hash, encoded, now)
 	}
 	var overlapping bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (
  SELECT 1 FROM public.prometheus_cooling_upload_profiles
  WHERE cluster_id=$1 AND source_id=$2 AND collector_id=$3 AND revoked_at IS NULL
- AND starts_at<$5 AND ends_at>$4 AND ends_at>$6)`, profile.ClusterID, profile.SourceID, profile.CollectorID,
+ AND (ends_at IS NULL OR ends_at>$4) AND (ends_at IS NULL OR ends_at>$6) AND starts_at<$5 AND collection_state<>'DISABLED')`, profile.ClusterID, profile.SourceID, profile.CollectorID,
 		profile.StartsAt, profile.EndsAt, now).Scan(&overlapping); err != nil {
 		return err
 	}
@@ -116,7 +146,7 @@ func (s *CollectionStore) RecordCoolingUpload(ctx context.Context, collector dom
 	}
 	slot := report.Result.Task.ScheduledFor
 	if revokedAt != nil || profile.CollectorID != collector || profile.ClusterID != cluster ||
-		!registeredAt.Before(slot) || now.After(profile.EndsAt.Add(domain.CoolingUploadRetention)) {
+		!registeredAt.Before(slot) || (profile.Version == domain.CoolingUploadVersion && now.After(profile.EndsAt.Add(domain.CoolingUploadRetention))) {
 		return false, collectorcontrol.ErrCoolingUploadRejected
 	}
 	if err := report.Validate(profile, profileHash, now); err != nil {
@@ -170,6 +200,11 @@ func (s *CollectionStore) RecordCoolingUpload(ctx context.Context, collector dom
 }
 
 func lockCoolingUploadProfile(ctx context.Context, tx pgx.Tx, id string, revision int64) error {
+	// Serialize revisions of the same continuous authority before the original
+	// per-revision lock used by the SQL revocation guard.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "prometheus-cooling-profile-family:"+id); err != nil {
+		return err
+	}
 	key := fmt.Sprintf("prometheus-cooling-profile:%s:%d", id, revision)
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, key)
 	return err

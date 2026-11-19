@@ -1092,7 +1092,7 @@ func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact,
 		}
 	}
 	for _, f := range ordered {
-		if f.Run != e.Config.RunID || e.Enrollments[f.Asset] == nil || f.AvailableAt.After(at) || f.AvailableAt.Before(e.StartAt) || !f.AvailableAt.Before(e.AdmissionEndAt) {
+		if f.Run != e.Config.RunID || e.Enrollments[f.Asset] == nil || f.AvailableAt.After(at) || f.AvailableAt.Before(e.StartAt) || !e.Config.production && !f.AvailableAt.Before(e.AdmissionEndAt) {
 			return nil, ErrInvalid
 		}
 		h, err := FactIdentity(e.Config.Category, f)
@@ -1306,13 +1306,13 @@ func (e *Engine) provenanceAuthorized(metric string, p Provenance) bool {
 		return false
 	}
 	for _, b := range e.Config.Bindings {
-		if b.Metric != metric || b.Operation != p.Operation || b.ScheduleRevision != p.ScheduleRevision {
+		if b.Metric != metric || b.Operation != p.Operation || (!e.Config.production && b.ScheduleRevision != p.ScheduleRevision) || (e.Config.production && p.ScheduleRevision < b.ScheduleRevision) {
 			continue
 		}
 		if b.UploadProfileID == "" {
 			return p.Mode != "upload"
 		}
-		return p.Mode == "upload" && b.UploadProfileID == p.UploadProfileID && b.UploadProfileHash == p.UploadProfileHash && b.UploadCollectorID == p.CollectorID
+		return p.Mode == "upload" && b.UploadProfileID == p.UploadProfileID && (b.UploadProfileHash == p.UploadProfileHash || e.Config.production && ValidHash(p.UploadProfileHash)) && b.UploadCollectorID == p.CollectorID
 	}
 	return false
 }
@@ -1434,7 +1434,7 @@ func (e *Engine) trusted(ctx context.Context, c *Candidate) bool {
 	entry := c.Entry
 	fallback := entry.Fallback
 	if c.ID != id || e.Enrollments[c.Asset] == nil || c.Sequence <= 0 || !slices.Contains(Budgets[:], c.BudgetMS) ||
-		c.EnteredAt.Before(e.StartAt) || !c.EnteredAt.Before(e.AdmissionEndAt) || c.EnteredAt != clock(c.EnteredAt) || !c.EnteredAt.Equal(entry.AvailableAt) || !c.DueAt.Equal(c.EnteredAt.Add(time.Duration(c.BudgetMS)*time.Millisecond)) ||
+		c.EnteredAt.Before(e.StartAt) || !e.Config.production && !c.EnteredAt.Before(e.AdmissionEndAt) || c.EnteredAt != clock(c.EnteredAt) || !c.EnteredAt.Equal(entry.AvailableAt) || !c.DueAt.Equal(c.EnteredAt.Add(time.Duration(c.BudgetMS)*time.Millisecond)) ||
 		!fallback.DueAt.Equal(c.DueAt) || fallback.TerminalID != terminalID || fallback.Schema != 1 || fallback.Action != "INVESTIGATE" || fallback.Route != e.Config.Fallback.Route ||
 		fallback.Summary == "" || len(fallback.Summary) > 2048 || !utf8.ValidString(fallback.Summary) ||
 		entry.Basis != "CATEGORY_CONCERN" && entry.Basis != "INDEPENDENT_URGENT" || len(entry.Support) == 0 || Set(entry.Support, 32) != nil {
@@ -1637,7 +1637,7 @@ func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, com
 		en.Revision++
 		return time.Time{}
 	}
-	if int64(len(e.Candidates)/len(Budgets)) >= e.Config.Limits.PhysicalCandidates {
+	if int64(len(e.Candidates)/len(e.Config.BudgetsMS)) >= e.Config.Limits.PhysicalCandidates {
 		e.recordFailure("CAPACITY", en.Asset, "physical_candidates", "", at, "", nil)
 		e.BeginDrain("CAPACITY")
 		return time.Time{}
@@ -1735,6 +1735,14 @@ func (e *Engine) followTracker(ctx context.Context, en *Enrollment, at, executed
 		}
 		e.stageSourceMutation()
 		e.retain(m)
+		if e.Config.production {
+			for _, c := range e.Candidates {
+				if c.Asset == en.Asset && c.Sequence == en.Sequence {
+					id, _ := Identity("recovery", e.Config.Category, map[string]any{"candidate": c.ID})
+					e.Decisions = append(e.Decisions, Decision{ID: id, CandidateID: c.ID, Asset: c.Asset, Sequence: c.Sequence, BudgetMS: c.BudgetMS, Kind: "RECOVER", LogicalAt: at, ExecutedAt: executed, CommittedAt: e.commitTime(executed), Action: "NONE", DecisionSource: "CATEGORY", BundleID: m.Bundle.ID, Codes: []string{}, Reasons: x.Reasons, Support: x.Support, Summary: x.Summary, Details: x.Details, UrgentOccurrences: []Occurrence{}})
+				}
+			}
+		}
 		en.Active, en.DiscoveryFloor, en.SharedContext = false, at, nil
 		if x.State != nil {
 			en.Tracker = x.State
@@ -1885,7 +1893,7 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 	if at.Before(e.StartAt) || executed.Before(at) || committed.Before(executed) || !e.lastPass.IsZero() && at.Before(e.lastPass) {
 		return ErrInvalid
 	}
-	if !at.Before(e.AdmissionEndAt) {
+	if !e.Config.production && !at.Before(e.AdmissionEndAt) {
 		e.BeginDrain("DURATION")
 	}
 	if len(e.ExpiryFailure) > 0 {
@@ -3663,7 +3671,7 @@ func (r *archiveReader) validateObserved(ctx context.Context, e *Engine) error {
 	if returnErr != nil {
 		return returnErr
 	}
-	if enrollmentCount != int64(len(e.Config.Assets)) || quarantined != r.run.IncompleteCount || len(e.Candidates)%len(Budgets) != 0 || int64(len(e.Candidates)/len(Budgets)) != r.run.PhysicalCount {
+	if enrollmentCount != int64(len(e.Config.Assets)) || quarantined != r.run.IncompleteCount || len(e.Candidates)%len(Budgets) != 0 || int64(len(e.Candidates)/len(e.Config.BudgetsMS)) != r.run.PhysicalCount {
 		return ErrInvalid
 	}
 	type physicalKey struct {

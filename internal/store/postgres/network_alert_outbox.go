@@ -16,7 +16,10 @@ import (
 
 const maxAlertAttempts = 8
 
-type AlertOutboxStore struct{ pool *pgxpool.Pool }
+type AlertOutboxStore struct {
+	pool                                    *pgxpool.Pool
+	assessmentCluster, assessmentEnrollment string
+}
 
 func NewAlertOutboxStore(pool *pgxpool.Pool) (*AlertOutboxStore, error) {
 	if pool == nil {
@@ -89,12 +92,18 @@ type AlertClaim struct {
 // a previous HTTP acceptance can therefore be delivered twice if its result
 // was lost before Finish committed.
 func (store *AlertOutboxStore) Claim(ctx context.Context) (AlertClaim, bool, error) {
+	if store.assessmentEnrollment != "" {
+		return store.claimAssessment(ctx)
+	}
 	return store.claim(ctx, "")
 }
 
 // ClaimForCluster bounds lab/tenant-specific delivery without consuming another
 // cluster's alerts. Ordinary alert-worker delivery retains its existing scope.
 func (store *AlertOutboxStore) ClaimForCluster(ctx context.Context, cluster string) (AlertClaim, bool, error) {
+	if store.assessmentEnrollment != "" {
+		return AlertClaim{}, false, errors.New("assessment worker requires its enrollment scope")
+	}
 	if cluster == "" || len(cluster) > 128 || strings.ContainsAny(cluster, "\r\n\x00") {
 		return AlertClaim{}, false, errors.New("invalid alert cluster scope")
 	}
@@ -103,7 +112,7 @@ func (store *AlertOutboxStore) ClaimForCluster(ctx context.Context, cluster stri
 func (store *AlertOutboxStore) claim(ctx context.Context, cluster string) (AlertClaim, bool, error) {
 	if _, err := store.pool.Exec(ctx, `UPDATE gp09_alert_outbox SET status='FAILED',lease_token=NULL,
 		lease_until=NULL,last_code='RECEIPT_LOST_AFTER_ATTEMPT_LIMIT',updated_at=clock_timestamp()
-		WHERE status='LEASED' AND attempt_count>=8 AND lease_until<=clock_timestamp() AND ($1='' OR cluster_id=$1)`, cluster); err != nil {
+		WHERE assessment_enrollment='' AND status='LEASED' AND attempt_count>=8 AND lease_until<=clock_timestamp() AND ($1='' OR cluster_id=$1)`, cluster); err != nil {
 		return AlertClaim{}, false, fmt.Errorf("expire exhausted GP-09 delivery leases: %w", err)
 	}
 	var tokenBytes [16]byte
@@ -114,7 +123,7 @@ func (store *AlertOutboxStore) claim(ctx context.Context, cluster string) (Alert
 	var claim AlertClaim
 	err := store.pool.QueryRow(ctx, `WITH candidate AS (
 		SELECT alert_id FROM gp09_alert_outbox
-		WHERE ($2='' OR cluster_id=$2) AND attempt_count < 8 AND
+		WHERE assessment_enrollment='' AND ($2='' OR cluster_id=$2) AND attempt_count < 8 AND
 			((status='PENDING' AND available_at<=clock_timestamp()) OR
 			 (status='LEASED' AND lease_until<=clock_timestamp()))
 		ORDER BY available_at,alert_id FOR UPDATE SKIP LOCKED LIMIT 1
@@ -149,6 +158,27 @@ func (store *AlertOutboxStore) Finish(ctx context.Context, claim AlertClaim, res
 		return "", fmt.Errorf("begin GP-09 delivery receipt: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Production completion uses the same occurrence fence as maintenance and claims.
+	var occurrence, enrollment, cluster string
+	if err = tx.QueryRow(ctx, `SELECT assessment_occurrence,assessment_enrollment,cluster_id FROM gp09_alert_outbox WHERE alert_id=$1`, claim.ID).Scan(&occurrence, &enrollment, &cluster); err != nil {
+		return "", err
+	}
+	if occurrence != "" {
+		if store.assessmentEnrollment != enrollment || store.assessmentCluster != cluster {
+			return "", errors.New("delivery scope mismatch")
+		}
+		if _, err = tx.Exec(ctx, `SELECT occurrence_id FROM production_notification_occurrences WHERE occurrence_id=$1 FOR UPDATE`, occurrence); err != nil {
+			return "", err
+		}
+	} else if store.assessmentEnrollment != "" {
+		return "", errors.New("delivery scope mismatch")
+	}
+	var inherited int
+	if occurrence != "" {
+		if err = tx.QueryRow(ctx, `SELECT inherited_attempts FROM production_notification_intents WHERE alert_id=$1`, claim.ID).Scan(&inherited); err != nil {
+			return "", err
+		}
+	}
 	var attempt int
 	err = tx.QueryRow(ctx, `SELECT attempt_count FROM gp09_alert_outbox
 		WHERE alert_id=$1 AND lease_token=$2 AND status='LEASED' AND lease_until>clock_timestamp()
@@ -162,14 +192,30 @@ func (store *AlertOutboxStore) Finish(ctx context.Context, claim AlertClaim, res
 	if attempt != claim.Attempt {
 		return "", errors.New("GP-09 delivery attempt changed")
 	}
+	// A 200 response with an unreadable/unrecognized body can follow remote
+	// acceptance just as a transport failure can. Preserve both ambiguous paths.
+	if occurrence != "" && (result.Code == "TRANSPORT_FAILURE" || result.Code == "UNEXPECTED_RESPONSE") {
+		if _, err = tx.Exec(ctx, `UPDATE production_notification_intents SET receipt_uncertain=true WHERE alert_id=$1`, claim.ID); err != nil {
+			return "", err
+		}
+	}
 	status := "PENDING"
 	if result.Outcome == alertdelivery.Accepted {
 		status = "ACCEPTED"
 	}
-	if result.Outcome == alertdelivery.PermanentFailure || attempt >= maxAlertAttempts {
+	if result.Outcome != alertdelivery.Accepted && (result.Outcome == alertdelivery.PermanentFailure || attempt+inherited >= maxAlertAttempts) {
 		status = "FAILED"
 	}
-	delay := time.Duration(1<<min(attempt, 8)) * time.Second
+	if status == "PENDING" && occurrence != "" {
+		var authorized bool
+		if err = tx.QueryRow(ctx, `SELECT e.notifications_enabled AND o.created_at>=e.notifications_enabled_at FROM production_assessment_enrollments e JOIN gp09_alert_outbox o ON o.assessment_enrollment=e.enrollment_id AND o.cluster_id=e.cluster_id WHERE o.alert_id=$1`, claim.ID).Scan(&authorized); err != nil {
+			return "", err
+		}
+		if !authorized {
+			status = "DISABLED"
+		}
+	}
+	delay := time.Duration(1<<min(attempt+inherited, 8)) * time.Second
 	if result.RetryAfter > delay {
 		delay = result.RetryAfter
 	}

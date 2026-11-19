@@ -30,13 +30,22 @@ func (s *coolingUploadStoreStub) RecordCoolingUpload(_ context.Context, collecto
 	return s.accepted, s.err
 }
 
-func TestCoolingUploadHandler(t *testing.T) {
+func TestCoolingUploadHandler(t *testing.T) { testCoolingUploadHandler(t, domain.CoolingUploadVersion) }
+func TestContinuousCoolingUploadHandler(t *testing.T) {
+	testCoolingUploadHandler(t, domain.CoolingUploadProductionVersion)
+}
+func testCoolingUploadHandler(t *testing.T, version int) {
 	certificate := &x509.Certificate{SerialNumber: big.NewInt(7), Raw: []byte("cooling test certificate")}
 	profile := domain.CoolingUploadProfile{Version: 2, ProfileID: "cooling", Revision: 1, CollectorID: "collector-1",
 		ClusterID: "cluster-1", SourceID: "source-1", InventoryRevision: "inventory", StartsAt: transportNow.Add(-time.Minute),
 		EndsAt: transportNow.Add(time.Hour), Assets: []domain.CoolingUploadAsset{{NodeID: "node", GPUUUID: "GPU-1"}}}
+	if version == domain.CoolingUploadProductionVersion {
+		profile.Version = version
+		profile.EndsAt = time.Time{}
+		profile.State = "ENABLED"
+	}
 	hash := domain.ChecksumSHA256([]byte("approval")).String()
-	report := domain.CoolingUploadReport{Version: 2, ProfileID: profile.ProfileID, ProfileRevision: profile.Revision, ProfileHash: hash,
+	report := domain.CoolingUploadReport{Version: version, ProfileID: profile.ProfileID, ProfileRevision: profile.Revision, ProfileHash: hash,
 		Result: domain.CollectionResult{Task: profile.Task(domain.QueryGPUTemperature, transportNow), Status: domain.ResultFailed,
 			StartedAt: transportNow, CompletedAt: transportNow,
 			Failures: []domain.CollectionFailure{{Code: domain.FailureSourceUnavailable, Message: "source unavailable"}}}}

@@ -86,10 +86,11 @@ type InvestigationCanceller interface {
 }
 
 type Options struct {
-	Provider    SnapshotProvider
-	Management  Management
-	Credentials CredentialManagement
-	AccessTests CredentialAccessTesting
+	AssessmentHistory AssessmentHistoryProvider
+	Provider          SnapshotProvider
+	Management        Management
+	Credentials       CredentialManagement
+	AccessTests       CredentialAccessTesting
 	// GPUMetrics is optional: without it the GPU metrics route reports
 	// that the feature is not configured.
 	GPUMetrics GPUMetricsProvider
@@ -112,6 +113,7 @@ type Options struct {
 }
 
 type Server struct {
+	assessmentHistoryProvider AssessmentHistoryProvider
 	provider                  SnapshotProvider
 	management                Management
 	credentials               CredentialManagement
@@ -158,6 +160,7 @@ func New(options Options) (*Server, error) {
 		return nil, errors.New("human authorization requires a verified human session and grant store")
 	}
 	server := &Server{
+		assessmentHistoryProvider: options.AssessmentHistory,
 		provider:                  options.Provider,
 		management:                options.Management,
 		credentials:               options.Credentials,
@@ -179,6 +182,7 @@ func New(options Options) (*Server, error) {
 		server.humanSessionToken = append([]byte(nil), options.ServiceToken...)
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /internal/admin/v1/clusters/{cluster_id}/assessment/{enrollment_id}/{occurrence_id}", server.assessmentHistory)
 	mux.HandleFunc("GET /internal/admin/v1/human-session", server.humanSessionStatus)
 	mux.HandleFunc("GET /internal/admin/v1/human-access", server.humanAccess)
 	mux.HandleFunc("GET /internal/admin/v1/dashboard", server.dashboard)

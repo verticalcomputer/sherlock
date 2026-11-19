@@ -80,6 +80,7 @@ type Config struct {
 	RunDurationSeconds int64           `json:"run_duration_seconds"`
 	Limits             Limits          `json:"limits"`
 
+	production        bool
 	originalInputHash string
 	boundTypedHash    string
 }
@@ -210,7 +211,7 @@ func (c Config) validate(ctx context.Context, r *Registry) (Payload, error) {
 
 func (c Config) validateCommon(d *Descriptor) error {
 
-	if c.Schema != 1 || c.Contract != ContractVersion || !ValidID(c.Category, 128) || c.Implementation < 1 || !ValidID(c.RunID, 128) || !ValidID(c.ClusterID, 128) || !ValidID(c.SourceID, 128) || !ValidID(c.InventoryRevision, 128) || !slices.Equal(c.BudgetsMS, v1Budgets[:]) || c.RunDurationSeconds < 1 || c.RunDurationSeconds > 86400 {
+	if c.Schema != 1 || c.Contract != ContractVersion || !ValidID(c.Category, 128) || c.Implementation < 1 || !ValidID(c.RunID, 128) || !ValidID(c.ClusterID, 128) || !ValidID(c.SourceID, 128) || !ValidID(c.InventoryRevision, 128) || !c.validLifecycle() {
 		return ErrInvalid
 	}
 	if d != nil && (c.Category != d.Category || c.Contract != d.Contract || c.Implementation != d.Implementation) {
@@ -317,3 +318,12 @@ func configPolicy(ctx context.Context, c Category, d Descriptor, raw json.RawMes
 
 // Hash identifies the config returned by ParseConfig or NormalizeConfig.
 func (c Config) Hash() (string, error) { return Identity("config", c.Category, c) }
+
+// Production reports the host-owned lifecycle. Ordinary Config JSON cannot set it.
+func (c Config) Production() bool { return c.production }
+func (c Config) validLifecycle() bool {
+	if c.production {
+		return slices.Equal(c.BudgetsMS, []int64{120000}) && c.RunDurationSeconds == 0 && c.usesUpload()
+	}
+	return slices.Equal(c.BudgetsMS, v1Budgets[:]) && c.RunDurationSeconds >= 1 && c.RunDurationSeconds <= 86400
+}

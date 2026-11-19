@@ -226,7 +226,7 @@ func configureAdminAPIServer(cfg config.API, pool *pgxpool.Pool, artifactStore a
 		return nil, err
 	}
 	serviceToken := []byte(cfg.AdminAPIServiceToken.Reveal())
-	options := adminapi.Options{Provider: views, GPUMetrics: views, Progress: progressService, Management: management, Auditor: auditor, ServiceToken: serviceToken, RequireHumanSession: cfg.AdminHumanSessionRequired, HumanAuthorization: management, RequireHumanAuthorization: cfg.AdminHumanAuthorizationRequired}
+	options := adminapi.Options{AssessmentHistory: storepg.NewProductionNotificationStore(pool), Provider: views, GPUMetrics: views, Progress: progressService, Management: management, Auditor: auditor, ServiceToken: serviceToken, RequireHumanSession: cfg.AdminHumanSessionRequired, HumanAuthorization: management, RequireHumanAuthorization: cfg.AdminHumanAuthorizationRequired}
 	if cfg.CredentialKeyring.ActiveVersion != "" {
 		options.Credentials = management
 		options.AccessTests = management

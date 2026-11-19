@@ -111,3 +111,68 @@ func TestCoolingUploadReportClockAndAuthority(t *testing.T) {
 		})
 	}
 }
+
+func TestContinuousCoolingProfileHasExplicitLifecycle(t *testing.T) {
+	p := coolingTestProfile()
+	p.Version = CoolingUploadProductionVersion
+	p.EndsAt = time.Time{}
+	p.State = "ENABLED"
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !p.ActiveAt(p.StartsAt.Add(365 * 24 * time.Hour)) {
+		t.Fatal("continuous authority expired")
+	}
+	v2 := p
+	v2.Version = CoolingUploadVersion
+	v2.State = ""
+	v2.EndsAt = p.StartsAt.Add(time.Hour)
+	if p.Task(QueryGPUPower, p.StartsAt).RunID == v2.Task(QueryGPUPower, p.StartsAt).RunID {
+		t.Fatal("versioned task identities collided")
+	}
+	for name, mutate := range map[string]func(*CoolingUploadProfile){
+		"implicit state":   func(p *CoolingUploadProfile) { p.State = "" },
+		"unreviewed state": func(p *CoolingUploadProfile) { p.State = "ACTIVE" },
+		"fake end":         func(p *CoolingUploadProfile) { p.EndsAt = p.StartsAt.Add(24 * time.Hour) },
+		"v2 unbounded":     func(p *CoolingUploadProfile) { p.Version = CoolingUploadVersion; p.State = "" },
+		"v2 production":    func(p *CoolingUploadProfile) { p.Version = CoolingUploadVersion; p.EndsAt = p.StartsAt.Add(time.Hour) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := p
+			mutate(&bad)
+			if bad.Validate() == nil {
+				t.Fatal("invalid lifecycle accepted")
+			}
+		})
+	}
+	p.State = "DISABLED"
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if p.ActiveAt(p.StartsAt) || p.ActiveAt(p.StartsAt.Add(time.Hour)) {
+		t.Fatal("disabled authority collected")
+	}
+}
+
+func TestContinuousCoolingReportVersionAndDisabledAdmission(t *testing.T) {
+	p := coolingTestProfile()
+	p.Version = CoolingUploadProductionVersion
+	p.State = "ENABLED"
+	p.EndsAt = time.Time{}
+	slot := p.StartsAt.Add(48 * time.Hour)
+	hash := ChecksumSHA256([]byte("v3")).String()
+	report := CoolingUploadReport{Version: p.Version, ProfileID: p.ProfileID, ProfileRevision: p.Revision, ProfileHash: hash,
+		Result: CollectionResult{Task: p.Task(QueryGPUPower, slot), Status: ResultPartial, StartedAt: slot, CompletedAt: slot, Failures: []CollectionFailure{{Code: FailurePartialData, Message: "missing samples"}}}}
+	if err := report.Validate(p, hash, slot); err != nil {
+		t.Fatal(err)
+	}
+	report.Version = CoolingUploadVersion
+	if report.Validate(p, hash, slot) == nil {
+		t.Fatal("cross-version report accepted")
+	}
+	report.Version = p.Version
+	p.State = "DISABLED"
+	if report.Validate(p, hash, slot) == nil {
+		t.Fatal("disabled report accepted")
+	}
+}

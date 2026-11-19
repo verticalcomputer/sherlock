@@ -29,6 +29,11 @@ func main() {
 }
 
 const usage = `usage:
+  sherlock-admin assessment status --cluster <id> --enrollment <id>
+  sherlock-admin assessment history --cluster <id> --enrollment <id> --occurrence <id> [--after <event-sequence>] [--after-audit <audit-id>]
+  sherlock-admin assessment acknowledge --cluster <id> --enrollment <id> --occurrence <id> --expected-version <n> --actor <local-operator>
+  sherlock-admin assessment maintenance --cluster <id> --enrollment <id> --occurrence <id> --expected-version <n> --actor <local-operator> --seconds <0-86400> --reason <reason>
+  sherlock-admin assessment disable-notifications --cluster <id> --enrollment <id> --expected-version <n> --actor <local-operator>
   sherlock-admin bootstrap <cluster-id>
   sherlock-admin revoke <collector-id>
   sherlock-admin api-key create --cluster <cluster-id> --label <safe-label> --expires-in <duration> --capability <capability> [--capability <capability> ...]
@@ -65,6 +70,9 @@ Control revisions fence enrollment changes; occurrence and episode version fence
 Reviewed recovery records an evidence-bound disposition, not measured recovery.`
 
 func run(arguments []string, stdout, stderr io.Writer) int {
+	if len(arguments) > 0 && arguments[0] == "assessment" {
+		return runAssessmentAdmin(arguments[1:], stdout, stderr)
+	}
 	if len(arguments) > 0 && arguments[0] == "slurm-failures" {
 		return runSlurmFailureAdmin(arguments[1:], stdout, stderr)
 	}
