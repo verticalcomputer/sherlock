@@ -457,12 +457,20 @@ func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Ass
 			}
 			return nil, err
 		}
+		started := time.Now()
 		attempts, ids, truncated, err := loadAssessmentAttempts(ctx, tx, c, asset, binding, authority, from, at)
 		if err != nil {
+			if c.Production() && binding.UploadProfileID != "" {
+				err = assessmentTransactionError("production.input.receipts", started, err, "not_attempted")
+			}
 			return nil, err
 		}
+		started = time.Now()
 		samples, sampleTruncated, err := loadAssessmentSamples(ctx, tx, c, asset, binding, authority.query, from, at, attempts, ids, known)
 		if err != nil {
+			if c.Production() && binding.UploadProfileID != "" {
+				err = assessmentTransactionError("production.input.samples", started, err, "not_attempted")
+			}
 			return nil, err
 		}
 		out = append(out, samples...)

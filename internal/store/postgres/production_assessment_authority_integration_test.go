@@ -10,10 +10,25 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
 func TestProductionAssessmentAuthorityLockAttribution(t *testing.T) {
-	f, store, c, _ := productionStoreFixture(t)
+	f, store, c, profile, hash, now := productionFleetFixture(t, 1)
+	// Backdate this disposable registration so the writer can admit a recent
+	// real report and the sample selector receives a nonempty run-ID set.
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	writer, err := NewCollectionStore(f.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := assessmentUploadReport(profile, hash, domain.CoolingUploadQueries()[0], now.Truncate(domain.CoolingUploadInterval))
+	report.Version = domain.CoolingUploadProductionVersion
+	if admitted, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil || !admitted {
+		t.Fatalf("seed sample selection: admitted=%t err=%v", admitted, err)
+	}
 	b := c.Assessment.Bindings[0]
 	asset := c.Assessment.Assets[0]
 	const advisory = `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`
@@ -27,6 +42,8 @@ func TestProductionAssessmentAuthorityLockAttribution(t *testing.T) {
 		{"profile", `LOCK TABLE prometheus_cooling_upload_profiles IN ACCESS EXCLUSIVE MODE`, nil},
 		{"inventory", `LOCK TABLE goodput_inventory_revisions IN ACCESS EXCLUSIVE MODE`, nil},
 		{"inventory_assets", `LOCK TABLE goodput_inventory_revision_entities IN ACCESS EXCLUSIVE MODE`, nil},
+		{"receipts", `LOCK TABLE prometheus_cooling_upload_receipts IN ACCESS EXCLUSIVE MODE`, nil},
+		{"samples", `LOCK TABLE observations IN ACCESS EXCLUSIVE MODE`, nil},
 	} {
 		t.Run(tc.stage, func(t *testing.T) {
 			blocker, err := f.admin.Begin(t.Context())
