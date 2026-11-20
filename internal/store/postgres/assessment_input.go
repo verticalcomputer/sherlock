@@ -222,14 +222,16 @@ const assessmentObservationSQL = assessmentObservationColumnsSQL + `
  FROM observations` + assessmentObservationScopeSQL + `
  AND run_id=ANY($3::text[]) AND (entity_key=$5 OR entity_key=$7 OR labels @> $8::jsonb OR labels @> $9::jsonb)` + assessmentObservationOrderSQL
 
-// Each admitted upload run covers a bounded fleet. Keep the run lookup inside
-// the lateral boundary so a growing entity history cannot drive the scan.
-// Select by run membership to preserve even unexpected sample IDs and extra
-// rows for the same asset. The shared limit still applies across all runs.
+// Receipt validation reconstructs each run ID from the cooling upload task.
+// The literal namespace predicate lets custom and generic plans select the
+// partial index. Probe both indexed keys before projecting the evidence so
+// all observation IDs (including extra or malformed records) remain visible.
 const productionUploadObservationSQL = assessmentObservationColumnsSQL + `
  FROM (SELECT DISTINCT unnest($3::text[]) AS selected_run) ids
- CROSS JOIN LATERAL (SELECT * FROM observations WHERE run_id=ids.selected_run OFFSET 0) o` + assessmentObservationScopeSQL + `
- AND entity_key=$5` + assessmentObservationOrderSQL
+ CROSS JOIN LATERAL (
+  SELECT * FROM observations WHERE run_id=ids.selected_run AND entity_key=$5
+  AND starts_with(run_id,'` + domain.CoolingUploadRunPrefix + `') OFFSET 0
+ ) o` + assessmentObservationScopeSQL + assessmentObservationOrderSQL
 
 type assessmentAttempt struct {
 	completed  time.Time
