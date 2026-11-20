@@ -993,8 +993,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "f28c49b134186773194da84cb515e6037d7b2ef6b74a1ebef2ce57b7b8eb8a1e",
-      "size": 33034
+      "sha256": "d80542d9f9c424d9a51f05eee0e6fc25b24c65e5f48def22b9232b749df08d13",
+      "size": 33828
     },
     {
       "executable": false,
@@ -5061,8 +5061,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_diagnostics.go",
-      "sha256": "ffbb793212d29e8e5aa4a7a8abc668ec5ac63df122f6e285db72a48f8a23410c",
-      "size": 7182
+      "sha256": "e0ce03e5c43d8025b508ad96efdb36be578b05941a9de9a930d504fe453eff4e",
+      "size": 7293
     },
     {
       "executable": false,
@@ -5091,8 +5091,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_failure_code.go",
-      "sha256": "5e422b5f3a5bf250bcee165a6e169f10f20f98872e3ac30012335f4a0cf38634",
-      "size": 1339
+      "sha256": "2d2e30c4e467bf74ce6f74bd6e6bb746d8847f57857e04307fa31377e7d30ca1",
+      "size": 1452
     },
     {
       "executable": false,
@@ -5109,8 +5109,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_input.go",
-      "sha256": "8dd4be6b358aed032fb3ac81e2166abfa3c834b8cf697d43104ac6e315475111",
-      "size": 30261
+      "sha256": "42a514de4ff761eae135d8293538234a7eefc42cf086922e94a4e4014fb2b50d",
+      "size": 30504
     },
     {
       "executable": false,
@@ -5223,8 +5223,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/cooling_observation_index_integration_test.go",
-      "sha256": "90f93f05088eb4d1ce5ab4bf65ecacc2f9803ad4d44ed9fc82a23bb711a0bda9",
-      "size": 2604
+      "sha256": "fc973f3310fca02e99eb5703680035c2311bfbb5a75feef7bf35cfc9cd4cd5ae",
+      "size": 17138
     },
     {
       "executable": false,
@@ -5253,8 +5253,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/cooling_upload_integration_test.go",
-      "sha256": "bc1b4e6554cafb8e769263fbe3167cbd5b09414e89a52ac8edcd127b67126da7",
-      "size": 25432
+      "sha256": "a5f8fecd09f0e616b78930eea1fac6313257c56d0dd8cfec22243f4086d4eb23",
+      "size": 26502
     },
     {
       "executable": false,
@@ -5679,8 +5679,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment.go",
-      "sha256": "b8460a306fc9eda6e40793704286c520c65ad1384981726a223f7d4f391233be",
-      "size": 22221
+      "sha256": "793d742800d9923d0ad86e384a3e40f5e3af27af9be94d0c62fa62761c7a4801",
+      "size": 22346
     },
     {
       "executable": false,
@@ -5691,14 +5691,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_fleet_history_integration_test.go",
-      "sha256": "526a3a01ea4f86d381a3efc6215cef9caad8a9f4a13db972626a26fcc1e5e8dd",
-      "size": 11404
+      "sha256": "31bd68c5385edd237b1a938fdf58c245f1dba5e1a8933e54b828c9e28ead4ef1",
+      "size": 12556
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_fleet_integration_test.go",
-      "sha256": "70a15c57b42d84faa6428b5980549fbc08005928ebece9248ffcc807c69dfd24",
-      "size": 20613
+      "sha256": "b6c7948afb45d81ed655f6559aabdc6972c63c85b8e996b9aa44f1a631e8c0c5",
+      "size": 27625
     },
     {
       "executable": false,
@@ -5709,14 +5709,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_input.go",
-      "sha256": "d3bdbdcdf97f370ee533b0e8eba0c773a3a5a55cde0d5e6afaf1b5758901eb8d",
-      "size": 12334
+      "sha256": "5c0febe3211407c036d3498ec3d88e58ec01883da969c9b65bcdd13dc46d93e0",
+      "size": 12814
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_integration_test.go",
-      "sha256": "4e0a94e4f00b2abf678df5ca81a8502cc45002fd05213761fd28b3de5720f900",
-      "size": 16948
+      "sha256": "2365571d641ee8b5b7f80d9b5912e6aa2363a93cf23b4cd16515aa4f900f2e9d",
+      "size": 17322
     },
     {
       "executable": false,
@@ -5931,8 +5931,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/retention_integration_test.go",
-      "sha256": "65a063b9fca5293d2aaf194d6275e36938cb271f0624c971f783935a5cd9f392",
-      "size": 26588
+      "sha256": "488f91758316c4a7895df67882deaeb4ae158da721ce07638d56715511a8660b",
+      "size": 26648
     },
     {
       "executable": false,
@@ -7527,14 +7527,26 @@
     {
       "executable": false,
       "path": "migrations/000089_cooling_observation_lookup.down.sql",
-      "sha256": "487337528ce21d6c2111ed5f620bbdad496313401337734eb2f1230724ccb9f4",
-      "size": 1206
+      "sha256": "488f2303287a77f3e7f0707b36aa5f205c6d9661ce382db512855870bb3990a4",
+      "size": 84
     },
     {
       "executable": false,
       "path": "migrations/000089_cooling_observation_lookup.up.sql",
-      "sha256": "4478362026eb1c201c78ce1c7dd3e8b6428fdbf0b3663af4f68bb73688955ef1",
-      "size": 1393
+      "sha256": "41fec2c895ba5dd417635304d8fb1b71da30aa4d574efeddcf7168324cecccf3",
+      "size": 236
+    },
+    {
+      "executable": false,
+      "path": "migrations/000090_cooling_receipt_observations.down.sql",
+      "sha256": "8227cdb4881be767c76d0ef8ef5a21ef5e16a14a2ae261735f8eff19d8d893e2",
+      "size": 751
+    },
+    {
+      "executable": false,
+      "path": "migrations/000090_cooling_receipt_observations.up.sql",
+      "sha256": "b05aa1d1e4292cbb1ba3b52e901ca5f8d16bd4ec7bceea4fcc221f64d8cc2687",
+      "size": 4945
     },
     {
       "executable": false,
@@ -7647,8 +7659,8 @@
     {
       "executable": false,
       "path": "scripts/production-assessment-grants.sql",
-      "sha256": "46905ba1d4f647ee4845d82e3dbf42d4f109cd15538db1c6accd958371f6ae48",
-      "size": 1871
+      "sha256": "2c0d6c5aadf5bf862db3a25adf2542cf0da862dc3f3b7e814ad71cbb09fe5daf",
+      "size": 1914
     },
     {
       "executable": true,
@@ -7749,7 +7761,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "44d4c98c115d5c288c315ad2fa7653349d228598da478ca6590d2c558dda9c2d",
+      "sha256": "134f1fbf7f74e951682f66a23ab5e0a8d1e274b6e29db44f39ced8335b09cf1e",
       "size": 16457
     },
     {
