@@ -82,15 +82,16 @@ jobs:
       - name: Run integration shard
         shell: bash
         run: python3 scripts/run-integration-shard.py "${{ matrix.lane }}" 2>&1 | tee "${{ runner.temp }}/integration-${{ matrix.lane }}.log"
-      # Race instrumentation changes latency. Keep the full aged-backlog budget
-      # qualification explicit in a normal build, alongside race lifecycle tests.
-      - name: Qualify aged production assessment budget
+      # Race instrumentation changes latency. Qualify production assessment budgets
+      # in a normal build, alongside race lifecycle tests.
+      - name: Qualify production assessment budgets
         if: matrix.lane == 'postgres-0'
         shell: bash
         run: |
           go test -tags=integration ./internal/store/postgres -list '^TestProductionAssessmentAgedBacklogBudget$' | grep -Fx 'TestProductionAssessmentAgedBacklogBudget'
           go test -tags=integration ./internal/store/postgres -list '^TestProductionAssessmentFleetAgedBacklogBudget$' | grep -Fx 'TestProductionAssessmentFleetAgedBacklogBudget'
-          go test -count=1 -tags=integration ./internal/store/postgres -run '^TestProductionAssessment(AgedBacklogBudget|FleetAgedBacklogBudget)$' -v
+          go test -tags=integration ./internal/store/postgres -list '^TestProductionAssessmentFleetDeepHistoryBudget$' | grep -Fx 'TestProductionAssessmentFleetDeepHistoryBudget'
+          go test -count=1 -tags=integration ./internal/store/postgres -run '^TestProductionAssessment(AgedBacklogBudget|FleetAgedBacklogBudget|FleetDeepHistoryBudget)$' -v
       - name: Preserve integration results
         if: always()
         uses: actions/upload-artifact@v4
