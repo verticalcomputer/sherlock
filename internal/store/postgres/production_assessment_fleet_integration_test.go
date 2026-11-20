@@ -392,17 +392,25 @@ func TestProductionFleetSampleSelectionPreservesValidation(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, change  string
+		extraRows     int
+		badExtraLabel bool
 		want          int
 		wantTruncated bool
 	}{
-		{"canonical", "", 1, false},
-		{"wrong canonical entity with matching UUID labels", `entity_key=entity_key||'other'`, 0, false},
-		{"legacy entity with matching UUID labels", `entity_key='node/fixture-comp000/gpu/GPU-00000000-0000-0000-0000-000000000000'`, 0, false},
-		{"malformed labels", `labels='[{"name":7}]'::jsonb`, 0, true},
-		{"wrong source contract", `source_reference='other'`, 0, false},
-		{"future source sample", `observed_at=observed_at+interval '1 second'`, 0, false},
-		{"expired source slot", `observed_at=observed_at-interval '15 seconds'`, 0, false},
-		{"wrong unit", `unit='watts'`, 0, false},
+		{name: "canonical", want: 1},
+		{name: "wrong canonical entity with matching UUID labels", change: `entity_key=entity_key||'other'`},
+		{name: "legacy entity with matching UUID labels", change: `entity_key='node/fixture-comp000/gpu/GPU-00000000-0000-0000-0000-000000000000'`},
+		{name: "malformed labels", change: `labels='[{"name":7}]'::jsonb`, wantTruncated: true},
+		{name: "wrong source contract", change: `source_reference='other'`},
+		{name: "future source sample", change: `observed_at=observed_at+interval '1 second'`},
+		{name: "expired source slot", change: `observed_at=observed_at-interval '15 seconds'`},
+		{name: "wrong unit", change: `unit='watts'`},
+		{name: "absent metric", change: `metric='other'`},
+		{name: "alternate sample ID only", change: `metric='other'`, extraRows: 1, want: 1},
+		{name: "extra sample ID", extraRows: 1, want: 2},
+		{name: "malformed extra row", extraRows: 1, badExtraLabel: true, want: 1, wantTruncated: true},
+		{name: "row limit", extraRows: 255, want: 256},
+		{name: "row limit sentinel", extraRows: 256, want: 256, wantTruncated: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx, err := s.pool.Begin(t.Context())
@@ -410,8 +418,20 @@ func TestProductionFleetSampleSelectionPreservesValidation(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback(t.Context())
+			if tc.extraRows > 0 {
+				_, err = tx.Exec(t.Context(), `INSERT INTO observations
+ (observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,labels,value,unit,
+  observed_at,collected_at,source_reference,sample_fingerprint,metric_semantics)
+ SELECT 'alternate-'||n,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,
+  CASE WHEN $3 THEN '[{"name":7}]'::jsonb ELSE labels END,value,unit,observed_at,collected_at,source_reference,
+  int4send(n),metric_semantics
+ FROM observations CROSS JOIN generate_series(1,$2::int) n WHERE entity_key=$1`, asset.EntityKey, tc.extraRows, tc.badExtraLabel)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 			if tc.change != "" {
-				if _, err := tx.Exec(t.Context(), `UPDATE observations SET `+tc.change+` WHERE entity_key=$1`, asset.EntityKey); err != nil {
+				if _, err := tx.Exec(t.Context(), `UPDATE observations SET `+tc.change+` WHERE entity_key=$1 AND observation_id LIKE 'prom-cooling-sample-%'`, asset.EntityKey); err != nil {
 					t.Fatal(err)
 				}
 			}

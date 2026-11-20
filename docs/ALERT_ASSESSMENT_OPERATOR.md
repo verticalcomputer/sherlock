@@ -385,3 +385,50 @@ Unavailable or aged-out transaction status is never treated as rollback; an
 operator must investigate persistent `failure_flush.resolve` warnings rather
 than infer exact counts. This change does not rewrite historical failure counts
 or establish the cause of prior refresh stalls.
+
+### Cooling observation index upgrade
+
+Migration 000089 indexes the cooling upload run ID and entity key. On an existing
+observations heap, build it before running the release migrator. Keep ingestion
+running. As the database owner, run the following as a single statement in an
+autocommit session. A concurrent build scans the table twice and can wait for
+older transactions. Check available disk, I/O and upload receipt latency during
+the build. [PostgreSQL concurrent index creation](https://www.postgresql.org/docs/17/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
+
+```sql
+CREATE INDEX CONCURRENTLY observations_cooling_run_entity_idx
+    ON public.observations (run_id, entity_key)
+    WHERE starts_with(run_id, 'prometheus-cooling-v2-');
+```
+
+Inspect an existing index or a build that returned an error using these queries.
+
+```sql
+SELECT pid, phase, blocks_done, blocks_total
+FROM pg_stat_progress_create_index
+WHERE relid = 'public.observations'::regclass;
+
+SELECT indexrelid::regclass, indrelid::regclass, indisready, indisvalid, indislive,
+       pg_get_indexdef(indexrelid)
+FROM pg_index
+WHERE indexrelid = to_regclass('public.observations_cooling_run_entity_idx');
+```
+
+Once the build completes, verify the table, both keys in order, the partial
+predicate, and all three flags. Run `sherlock-migrate` with the release
+migration directory. It checks the definition and flags before recording version
+89. A fresh installation can create the index within the migration while the
+observations heap has zero allocated bytes.
+
+If a build was interrupted, wait for the build session to finish and inspect
+the catalog. An absent index can be built directly. For an invalid index with
+the expected table and definition, drop it with the autocommit statement below
+and repeat the build. Resolve any name or definition conflict with the database
+owner before proceeding. A binary rollback can retain the index. For a schema
+downgrade on an existing heap, verify the index identity, execute the concurrent
+drop, then run the down migration and remove version 89 from the migration
+ledger in the same transaction. [PostgreSQL concurrent index removal](https://www.postgresql.org/docs/17/sql-dropindex.html)
+
+```sql
+DROP INDEX CONCURRENTLY public.observations_cooling_run_entity_idx;
+```

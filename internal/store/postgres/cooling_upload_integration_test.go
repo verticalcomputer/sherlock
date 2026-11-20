@@ -196,7 +196,35 @@ func TestCoolingUploadTransactionalAuthority(t *testing.T) {
 			t.Fatalf("accepted=%t want=%t err=%v", ok, want, err)
 		}
 	}
-	record(report, true)
+	// An evaluator may hold a shared family and revision lock until its
+	// evidence snapshot commits. Receipt admission can overlap that read,
+	// while an authority change must still wait for it.
+	reader, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Rollback(ctx)
+	for _, key := range []string{"prometheus-cooling-profile-family:" + profile.ProfileID, fmt.Sprintf("prometheus-cooling-profile:%s:%d", profile.ProfileID, profile.Revision)} {
+		if _, err := reader.Exec(ctx, "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))", key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bounded, cancel := context.WithTimeout(ctx, time.Second)
+	accepted, err := store.RecordCoolingUpload(bounded, collector, cluster, report)
+	cancel()
+	if err != nil || !accepted {
+		t.Fatalf("receipt under evaluator lock: accepted=%t err=%v", accepted, err)
+	}
+	// Even an idempotent registration traverses the change-authority lock.
+	changeCtx, cancelChange := context.WithTimeout(ctx, 100*time.Millisecond)
+	changeErr := store.RegisterCoolingUploadProfile(changeCtx, profile, hash)
+	cancelChange()
+	if !errors.Is(changeErr, context.DeadlineExceeded) {
+		t.Fatalf("registration did not wait for the evaluator: %v", changeErr)
+	}
+	if err = reader.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
 	assertHealthUnchanged()
 	record(report, true)
 	modified := reportAt(profile, domain.QueryGPUTemperature, slot)

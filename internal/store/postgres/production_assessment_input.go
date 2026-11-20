@@ -4,40 +4,49 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
+	"github.com/verticalcomputer/sherlock/internal/collectorcontrol"
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
 // The profile identity and inventory stay pinned; a compatible, registered V3
 // revision may replace it without changing occurrence or original deadline.
-func loadProductionUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, at time.Time) (domain.CoolingUploadProfile, error) {
-	var p domain.CoolingUploadProfile
+func loadProductionUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, at time.Time) (p domain.CoolingUploadProfile, err error) {
 	field, ok := domain.CoolingUploadField(query)
 	if !ok || field.Name != b.Metric {
 		return p, ErrMonitoringAuthority
 	}
-	var body []byte
+	stage, started := "production.input.profile_family_lock", time.Now()
+	defer func() { err = assessmentTransactionError(stage, started, err, "not_attempted") }()
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))`, "prometheus-cooling-profile-family:"+b.UploadProfileID); err != nil {
 		return p, err
 	}
-	err := tx.QueryRow(ctx, `SELECT p.profile FROM prometheus_cooling_upload_profiles p JOIN sources s USING(cluster_id,source_id) JOIN clusters k USING(cluster_id)
+	stage, started = "production.input.profile", time.Now()
+	var body []byte
+	err = tx.QueryRow(ctx, `SELECT p.profile FROM prometheus_cooling_upload_profiles p JOIN sources s USING(cluster_id,source_id) JOIN clusters k USING(cluster_id)
  WHERE p.profile_id=$1 AND p.revision>=$2 AND p.collector_id=$3 AND p.cluster_id=$4 AND p.source_id=$5 AND p.inventory_revision=$6
  AND p.protocol_version=3 AND p.collection_state='ENABLED' AND p.revoked_at IS NULL AND p.registered_at<=$7 AND p.starts_at<=$7
  AND s.kind='prometheus' AND k.removed_at IS NULL ORDER BY p.revision DESC LIMIT 1`, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.ClusterID, c.SourceID, c.InventoryRevision, at).Scan(&body)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p, ErrMonitoringAuthority
+	}
 	if err != nil {
-		return p, fmt.Errorf("%w: %v", ErrMonitoringAuthority, err)
+		return p, err
 	}
 	if a.DecodeStrict(body, &p, 64<<10) != nil || p.Validate() != nil || !productionProfileScope(p, c, asset, b) {
 		return p, ErrMonitoringAuthority
 	}
+	stage, started = "production.input.profile_revision_lock", time.Now()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))`, fmt.Sprintf("prometheus-cooling-profile:%s:%d", p.ProfileID, p.Revision)); err != nil {
 		return p, err
 	}
+	stage, started = "production.input.profile_active", time.Now()
 	var active bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prometheus_cooling_upload_profiles WHERE profile_id=$1 AND revision=$2 AND revoked_at IS NULL AND collection_state='ENABLED')`, p.ProfileID, p.Revision).Scan(&active); err != nil {
 		return p, err
@@ -45,15 +54,21 @@ func loadProductionUploadProfile(ctx context.Context, tx pgx.Tx, c a.Config, ass
 	if !active {
 		return p, ErrMonitoringAuthority
 	}
+	stage, started = "production.input.inventory", time.Now()
 	var inventory string
 	err = tx.QueryRow(ctx, `SELECT revision_id FROM goodput_inventory_revisions WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=$3 AND observed_at<=$3 AND source_at<=$3 ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1`, c.ClusterID, c.SourceID, at).Scan(&inventory)
-	if err != nil || inventory != c.InventoryRevision {
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && inventory != c.InventoryRevision {
 		return p, ErrMonitoringAuthority
 	}
-	if err = requireCoolingUploadAssets(ctx, tx, p); err != nil {
+	if err != nil {
+		return p, err
+	}
+	stage, started = "production.input.inventory_assets", time.Now()
+	err = requireCoolingUploadAssets(ctx, tx, p)
+	if errors.Is(err, collectorcontrol.ErrCoolingUploadRejected) {
 		return p, ErrMonitoringAuthority
 	}
-	return p, nil
+	return p, err
 }
 func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.Asset, b a.Binding) bool {
 	if p.Version != 3 || p.ProfileID != b.UploadProfileID || p.Revision < b.ScheduleRevision || string(p.CollectorID) != b.UploadCollectorID || string(p.ClusterID) != c.ClusterID || string(p.SourceID) != c.SourceID || p.InventoryRevision != c.InventoryRevision {

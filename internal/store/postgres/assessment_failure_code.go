@@ -24,13 +24,15 @@ func assessmentFailureCode(err error) string {
 			code = "TIME_BUDGET"
 			return false
 		}
-		message := candidate.Error()
+		// Engine failures use a leading code, optionally followed by a detail.
+		// PostgreSQL messages can contain the same words as incidental text.
+		prefix, _, _ := strings.Cut(candidate.Error(), ":")
 		switch {
-		case strings.Contains(message, "TIME_BUDGET"):
+		case prefix == "TIME_BUDGET":
 			code = "TIME_BUDGET"
-		case code != "TIME_BUDGET" && strings.Contains(message, "AUTHORITY_LOST"):
+		case code != "TIME_BUDGET" && prefix == "AUTHORITY_LOST":
 			code = "AUTHORITY_LOST"
-		case code == "STORE_FAILURE" && strings.Contains(message, "CAPACITY"):
+		case code == "STORE_FAILURE" && prefix == "CAPACITY":
 			code = "CAPACITY"
 		}
 		return true
