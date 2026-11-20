@@ -2133,7 +2133,7 @@
     {
       "executable": false,
       "path": "internal/alertassessment/budget.go",
-      "sha256": "f8c369cdc88255806be4aa409171a3f58a5405fc81bd7c26e164d43d3cd50285",
+      "sha256": "7468410f96e6a059dad81276f4e40d1ebe036282bc6089779e66c3893acd343e",
       "size": 361
     },
     {
@@ -5697,8 +5697,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_fleet_integration_test.go",
-      "sha256": "b6c7948afb45d81ed655f6559aabdc6972c63c85b8e996b9aa44f1a631e8c0c5",
-      "size": 27625
+      "sha256": "e62ae4495f8f73e6fa540b0f6a41f57a77e6aa046e4555cae35d3af406e7e2b8",
+      "size": 30005
     },
     {
       "executable": false,
@@ -5709,8 +5709,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_input.go",
-      "sha256": "5c0febe3211407c036d3498ec3d88e58ec01883da969c9b65bcdd13dc46d93e0",
-      "size": 12814
+      "sha256": "ad332c2b03263759b5ccc684c5a96aedae8d2dc2c914b757a1b6e6100ec43865",
+      "size": 14122
     },
     {
       "executable": false,
@@ -7761,7 +7761,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "134f1fbf7f74e951682f66a23ab5e0a8d1e274b6e29db44f39ced8335b09cf1e",
+      "sha256": "ab01c66f99f443db23ac2b89247f1d18aa848ddf977b0af50eb75dab2a1a1487",
       "size": 16457
     },
     {
