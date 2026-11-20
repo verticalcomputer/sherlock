@@ -1,4 +1,4 @@
--- Apply only to an explicitly authorized database after migrations 84-86.
+-- Apply only to an explicitly authorized database after migration 90.
 -- A NOLOGIN group separates production assessment from restricted shadow and
 -- workload control credentials. Login/password/CONNECT provisioning is external.
 DO $$ BEGIN
@@ -19,7 +19,7 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON
 GRANT USAGE,SELECT ON SEQUENCE public.production_notification_audit_audit_id_seq TO sherlock_assessment_production;
 GRANT SELECT ON public.clusters,public.sources,
  public.prometheus_cooling_upload_profiles,public.prometheus_cooling_upload_receipts,
- public.collection_runs,public.observations,
+ public.prometheus_cooling_receipt_observations,public.collection_runs,public.observations,
  public.goodput_inventory_revisions,public.goodput_inventory_revision_entities,
  public.gp09_monitor_enrollments,public.gp09_monitor_episodes,public.gp09_monitor_transitions
  TO sherlock_assessment_production;

@@ -404,6 +404,16 @@ func coolingUploadRestrictedStore(t *testing.T, pool *pgxpool.Pool) *storepg.Col
 		t.Fatal(err)
 	}
 	t.Cleanup(restricted.Close)
+	var canForgeProof bool
+	err = restricted.QueryRow(ctx, `SELECT
+		has_any_column_privilege('public.prometheus_cooling_receipt_observations', 'INSERT,UPDATE') OR
+		has_table_privilege('public.prometheus_cooling_receipt_observations', 'DELETE,TRUNCATE,TRIGGER') OR
+		has_column_privilege('public.prometheus_cooling_upload_receipts','observation_lookup_complete','INSERT,UPDATE') OR
+		has_function_privilege('public.cooling_observation_locator()','EXECUTE') OR
+		has_function_privilege('public.cooling_receipt_observation_proof()','EXECUTE')`).Scan(&canForgeProof)
+	if err != nil || canForgeProof {
+		t.Fatalf("restricted upload role can directly author lookup proof=%t: %v", canForgeProof, err)
+	}
 	store, err := storepg.NewCollectionStore(restricted)
 	if err != nil {
 		t.Fatal(err)
@@ -478,15 +488,20 @@ func waitForCoolingUploadSlot(t *testing.T, pool *pgxpool.Pool, slot time.Time) 
 func assertCoolingUploadRows(t *testing.T, pool *pgxpool.Pool, wantRuns, wantSamples, wantReceipts int) {
 	t.Helper()
 	var runs, observations, receipts, projections, envelopes, events, completions, jobs, work, caches int
-	var touched int
+	var touched, proven, locators int
 	err := pool.QueryRow(t.Context(), `SELECT
  (SELECT count(*) FROM collection_runs), (SELECT count(*) FROM observations),
  (SELECT count(*) FROM prometheus_cooling_upload_receipts), (SELECT count(*) FROM current_projections),
  (SELECT count(*) FROM evidence_envelopes), (SELECT count(*) FROM cluster_events),
  (SELECT count(*) FROM collection_events), (SELECT count(*) FROM collection_jobs), (SELECT count(*) FROM collector_work_items),
- (SELECT count(*) FROM collection_target_inventory), (SELECT count(*) FROM sources WHERE availability<>'UNKNOWN' OR last_attempt_at IS NOT NULL)`).
-		Scan(&runs, &observations, &receipts, &projections, &envelopes, &events, &completions, &jobs, &work, &caches, &touched)
-	if err != nil || runs != wantRuns || observations != wantSamples || receipts != wantReceipts ||
+ (SELECT count(*) FROM collection_target_inventory), (SELECT count(*) FROM sources WHERE availability<>'UNKNOWN' OR last_attempt_at IS NOT NULL),
+ (SELECT count(*) FROM prometheus_cooling_upload_receipts WHERE observation_lookup_complete),
+ (SELECT count(*) FROM prometheus_cooling_receipt_observations)`).
+		Scan(&runs, &observations, &receipts, &projections, &envelopes, &events, &completions, &jobs, &work, &caches, &touched, &proven, &locators)
+	if err != nil || proven != wantReceipts || locators != wantSamples {
+		t.Fatalf("proven receipts=%d want=%d locators=%d want=%d err=%v", proven, wantReceipts, locators, wantSamples, err)
+	}
+	if runs != wantRuns || observations != wantSamples || receipts != wantReceipts ||
 		projections+envelopes+events+completions+jobs+work+caches+touched != 0 {
 		t.Fatalf("runs=%d samples=%d receipts=%d projections=%d envelopes=%d events=%d completions=%d jobs=%d work=%d caches=%d touched=%d err=%v",
 			runs, observations, receipts, projections, envelopes, events, completions, jobs, work, caches, touched, err)

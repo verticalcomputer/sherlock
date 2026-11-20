@@ -21,6 +21,13 @@ func TestProductionAssessmentFleetDeepHistoryBudget(t *testing.T) {
 	const historicSlots = 58 // Leave one complete slot of margin at the admission cutoff.
 
 	f, s, c, profile, hash, now := productionFleetFixture(t, fleetSize)
+	var hasOldIndex bool
+	if err := f.admin.QueryRow(t.Context(), `SELECT to_regclass('public.observations_cooling_run_entity_idx') IS NOT NULL`).Scan(&hasOldIndex); err != nil {
+		t.Fatal(err)
+	}
+	if hasOldIndex {
+		t.Fatal("fresh migrations installed the old cooling observations index")
+	}
 	seedUnrelatedFleetObservations(t, f, c.Assessment, now.Add(-2*time.Hour))
 	seedFleetSnapshots(t, f, s, c, now.Add(-30*time.Minute), true)
 	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
@@ -46,7 +53,7 @@ func TestProductionAssessmentFleetDeepHistoryBudget(t *testing.T) {
 			}
 		}
 	}
-	f.exec(t, `ANALYZE public.observations; ANALYZE public.collection_runs; ANALYZE public.prometheus_cooling_upload_receipts`)
+	f.exec(t, `ANALYZE public.observations; ANALYZE public.collection_runs; ANALYZE public.prometheus_cooling_upload_receipts; ANALYZE public.prometheus_cooling_receipt_observations`)
 
 	// Pause the real upload immediately before commit, after its rows and receipt
 	// exist in the transaction. The assessment's first sample read releases it.
@@ -171,7 +178,7 @@ func assertFleetObservationLookupWork(t *testing.T, pool *pgxpool.Pool, query pg
 	for i := range parameters {
 		parameters[i] = fmt.Sprintf("$%d", i+1)
 	}
-	explain := "EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) EXECUTE " + statement + "(" + strings.Join(parameters, ",") + ")"
+	explain := "EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, FORMAT JSON) EXECUTE " + statement + "(" + strings.Join(parameters, ",") + ")"
 	// EXECUTE expects SQL literals. pgx's simple protocol safely encodes the
 	// captured arguments, including the text array of admitted run IDs.
 	args := append([]any{pgx.QueryExecModeSimpleProtocol}, query.Args...)
@@ -183,15 +190,24 @@ func assertFleetObservationLookupWork(t *testing.T, pool *pgxpool.Pool, query pg
 		if err = tx.QueryRow(ctx, explain, args...).Scan(&planJSON); err != nil {
 			t.Fatalf("explain %s: %v", mode, err)
 		}
-		var plans []struct{ Plan fleetObservationPlan }
+		var plans []struct {
+			Plan          fleetObservationPlan
+			ExecutionTime float64 `json:"Execution Time"`
+		}
 		if err = json.Unmarshal(planJSON, &plans); err != nil || len(plans) != 1 || plans[0].Plan.Rows == 0 {
 			t.Fatalf("decode %s sample plan with admitted rows: %v", mode, err)
 		}
-		if rows := plans[0].Plan.maxRows(); rows > rowLimit {
-			t.Fatalf("%s sample lookup visited %d rows in one plan node, limit %d for one GPU in admitted runs", mode, rows, rowLimit)
-		} else {
-			t.Logf("%s sample lookup visited at most %d rows in any plan node", mode, rows)
+		plan := plans[0].Plan
+		for _, index := range []string{"prometheus_cooling_receipt_observations_pkey", "observations_pkey"} {
+			if !plan.usedIndex(index) {
+				t.Fatalf("%s sample lookup did not use %s: %s", mode, index, planJSON)
+			}
 		}
+		rows := plan.maxRows()
+		if rows > rowLimit {
+			t.Fatalf("%s sample lookup visited %d rows in one plan node, limit %d for one GPU in admitted runs", mode, rows, rowLimit)
+		}
+		t.Logf("%s sample lookup visited at most %d rows in any plan node, shared hits=%d reads=%d, execution=%.3fms", mode, rows, plan.SharedHits, plan.SharedReads, plans[0].ExecutionTime)
 	}
 }
 
@@ -266,6 +282,9 @@ type fleetObservationPlan struct {
 	Loops        int                    `json:"Actual Loops"`
 	Filtered     int                    `json:"Rows Removed by Filter"`
 	IndexRecheck int                    `json:"Rows Removed by Index Recheck"`
+	IndexName    string                 `json:"Index Name"`
+	SharedHits   int                    `json:"Shared Hit Blocks"`
+	SharedReads  int                    `json:"Shared Read Blocks"`
 	Children     []fleetObservationPlan `json:"Plans"`
 }
 
@@ -275,4 +294,16 @@ func (p fleetObservationPlan) maxRows() int {
 		rows = max(rows, child.maxRows())
 	}
 	return rows
+}
+
+func (p fleetObservationPlan) usedIndex(name string) bool {
+	if p.Loops > 0 && p.IndexName == name {
+		return true
+	}
+	for _, child := range p.Children {
+		if child.usedIndex(name) {
+			return true
+		}
+	}
+	return false
 }

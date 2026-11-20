@@ -5,6 +5,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -363,7 +364,7 @@ func TestProductionFleetReceiptProfileRevisionsRemainScoped(t *testing.T) {
 	}
 }
 
-// The indexed production selector must agree with the legacy selector plus its
+// The receipt directory must agree with the legacy selector plus its
 // existing upload validation, including malformed and mismatched identities.
 func TestProductionFleetSampleSelectionPreservesValidation(t *testing.T) {
 	f, s, c, profile, hash, now := productionFleetFixture(t, 8)
@@ -448,5 +449,138 @@ func TestProductionFleetSampleSelectionPreservesValidation(t *testing.T) {
 				t.Fatalf("selector validation differs: production%v legacy%v truncated%t: %v", got, legacy, truncated, err)
 			}
 		})
+	}
+}
+
+func TestProductionReceiptLookupEmptyAndPartial(t *testing.T) {
+	f, _, c, profile, hash, now := productionFleetFixture(t, 2)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	writer, err := NewCollectionStore(f.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot := now.Truncate(domain.CoolingUploadInterval)
+	for _, query := range domain.CoolingUploadQueries() {
+		report := assessmentUploadReport(profile, hash, query, slot)
+		report.Version = domain.CoolingUploadProductionVersion
+		if query == domain.QueryGPUTemperature {
+			report.Result.Status = domain.ResultPartial
+			report.Result.Observations = report.Result.Observations[:1]
+			report.Result.Coverage = domain.Coverage{SeriesReturned: 1}
+			report.Result.Failures = []domain.CollectionFailure{{Code: domain.FailurePartialData, Message: "missing one sample"}}
+		} else {
+			report.Result.Status = domain.ResultFailed
+			report.Result.Observations = nil
+			report.Result.Coverage = domain.Coverage{}
+			report.Result.Failures = []domain.CollectionFailure{{Code: domain.FailureSourceUnavailable, Message: "source unavailable"}}
+		}
+		if accepted, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil || !accepted {
+			t.Fatalf("receipt accepted=%t: %v", accepted, err)
+		}
+	}
+	tx, err := beginProductionAssessmentTx(t.Context(), f.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackMonitoringTx(tx)
+	if err = tx.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	for _, asset := range c.Assessment.Assets {
+		facts, err := loadAssessmentInput(t.Context(), tx, c.Assessment, asset, now)
+		if err != nil || len(facts) != len(c.Assessment.Bindings) {
+			t.Fatalf("per-attempt coverage: %d facts, %v", len(facts), err)
+		}
+		records := map[string]bool{}
+		for _, fact := range facts {
+			var coverage a.Coverage
+			if fact.Kind != "COVERAGE" || json.Unmarshal(fact.Body, &coverage) != nil || coverage.Code != "UNSUPPORTED" {
+				t.Fatalf("partial or failed receipt produced unexpected fact: %+v", fact)
+			}
+			records[coverage.SourceRecord] = true
+		}
+		for _, query := range domain.CoolingUploadQueries() {
+			if !records[string(profile.Task(query, slot).RunID)] {
+				t.Fatalf("missing coverage for %s", query)
+			}
+		}
+	}
+}
+
+func TestProductionReceiptLookupCutoverPreservesPendingProof(t *testing.T) {
+	f, store, c, profile, hash, now := productionFleetFixture(t, 1)
+	asset := c.Assessment.Assets[0]
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles DISABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
+	writer, err := NewCollectionStore(f.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot := now.Truncate(domain.CoolingUploadInterval)
+	upload := func(query domain.QueryKind, at time.Time) {
+		t.Helper()
+		report := assessmentUploadReport(profile, hash, query, at)
+		report.Version = domain.CoolingUploadProductionVersion
+		if accepted, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil || !accepted {
+			t.Fatalf("receipt accepted=%t: %v", accepted, err)
+		}
+	}
+	// Admit the first report against the previous schema and then run the
+	// actual forward migration before admitting another report.
+	migrate := func(direction string) {
+		t.Helper()
+		sql, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations." + direction + ".sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.exec(t, string(sql))
+	}
+	migrate("down")
+	oldSlot := slot.Add(-domain.CoolingUploadInterval)
+	upload(domain.QueryGPUPower, oldSlot)
+	legacy := string(profile.Task(domain.QueryGPUPower, oldSlot).RunID)
+	migrate("up")
+	upload(domain.QueryGPUTemperature, slot)
+
+	occurrence, due := seedProductionDue(t, f, store, c, now)
+	var original []byte
+	if err = f.admin.QueryRow(t.Context(), `SELECT snapshot FROM production_assessment_states WHERE asset=$1`, asset.EntityKey).Scan(&original); err != nil {
+		t.Fatal(err)
+	}
+	err = store.refreshAsset(t.Context(), asset, false)
+	if !errors.Is(err, errReceiptLookupIncomplete) {
+		t.Fatalf("mixed cutover window admitted: %v", err)
+	}
+	diagnostic := AssessmentDiagnosticFields(err)[1].([]assessmentDiagnostic)[0]
+	if assessmentFailureCode(err) != "RECEIPT_LOOKUP_INCOMPLETE" || diagnostic.Stage != "production.input.receipts" || diagnostic.ErrorClass != "receipt_lookup_incomplete" {
+		t.Fatalf("cutover diagnostic: %+v %s", diagnostic, assessmentFailureCode(err))
+	}
+	var intact bool
+	if err = f.admin.QueryRow(t.Context(), `SELECT snapshot=$2 AND next_due_at=$3 AND NOT EXISTS(SELECT 1 FROM production_assessment_decisions) FROM production_assessment_states WHERE asset=$1`, asset.EntityKey, original, due).Scan(&intact); err != nil || !intact {
+		t.Fatalf("failed acquisition changed proof or decided from missing input: %v", err)
+	}
+	// Refresh runs the deadline lane first. Its stored proof must produce a
+	// single decision at the original deadline even while acquisition fails.
+	if err = store.Refresh(t.Context()); !errors.Is(err, errReceiptLookupIncomplete) {
+		t.Fatalf("cutover refresh: %v", err)
+	}
+	var count int
+	if err = f.admin.QueryRow(t.Context(), `SELECT count(*) FROM production_assessment_decisions WHERE occurrence_id=$1 AND logical_at=$2 AND kind='TERMINAL'`, occurrence, due).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("retained deadline count=%d: %v", count, err)
+	}
+
+	// Advance only the fixture's old receipt past the receipt-time cutoff to
+	// exercise the next acquisition without waiting for the window to expire.
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_receipts DISABLE TRIGGER USER`)
+	f.exec(t, `UPDATE prometheus_cooling_upload_receipts SET received_at=received_at-interval '16 minutes' WHERE run_id=$1`, legacy)
+	f.exec(t, `ALTER TABLE prometheus_cooling_upload_receipts ENABLE TRIGGER USER`)
+	if err = store.refreshAsset(t.Context(), asset, false); err != nil {
+		t.Fatalf("new receipt acquisition: %v", err)
+	}
+	if err = f.admin.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM production_assessment_states s, jsonb_array_elements(convert_from(s.snapshot,'UTF8')::jsonb->'facts') fact WHERE s.asset=$1 AND fact#>>'{body,provenance,collection_run_id}'=$2)`, asset.EntityKey, string(profile.Task(domain.QueryGPUTemperature, slot).RunID)).Scan(&intact); err != nil || !intact {
+		t.Fatalf("fresh receipt missing after cutover: %v", err)
 	}
 }

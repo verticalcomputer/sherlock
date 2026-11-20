@@ -386,49 +386,54 @@ operator must investigate persistent `failure_flush.resolve` warnings rather
 than infer exact counts. This change does not rewrite historical failure counts
 or establish the cause of prior refresh stalls.
 
-### Cooling observation index upgrade
+### Upgrade the production cooling evidence lookup
 
-Migration 000089 indexes the cooling upload run ID and entity key. On an existing
-observations heap, build it before running the release migrator. Keep ingestion
-running. As the database owner, run the following as a single statement in an
-autocommit session. A concurrent build scans the table twice and can wait for
-older transactions. Check available disk, I/O and upload receipt latency during
-the build. [PostgreSQL concurrent index creation](https://www.postgresql.org/docs/17/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
+Use the migration set shipped with the new evaluator. Starting at schema 88,
+the new set records the superseded index migration (89) and installs a small
+lookup table in migration 90. Starting at 89, it installs 90 and preserves any
+existing observations index. Keep intake running. If migration 90 reports
+lock contention (SQLSTATE `55P03`), let the ingest transaction finish and
+retry the migrator. A failed migration leaves the schema ledger at 89. Apply the
+production assessment grants from the same release so the evaluator can read
+the new table. Keep hardware notifications disabled during qualification.
 
-```sql
-CREATE INDEX CONCURRENTLY observations_cooling_run_entity_idx
-    ON public.observations (run_id, entity_key)
-    WHERE starts_with(run_id, 'prometheus-cooling-v2-');
-```
+New cooling receipts carry a completeness marker. In the same transaction,
+PostgreSQL records references to the raw observations by run and entity. A
+complete lookup can contain zero references for a report with zero samples.
+The evaluator still checks the report's collection status, coverage, scope,
+and raw observations. The marker certifies only the lookup.
 
-Inspect an existing index or a build that returned an error using these queries.
-
-```sql
-SELECT pid, phase, blocks_done, blocks_total
-FROM pg_stat_progress_create_index
-WHERE relid = 'public.observations'::regclass;
-
-SELECT indexrelid::regclass, indrelid::regclass, indisready, indisvalid, indislive,
-       pg_get_indexdef(indexrelid)
-FROM pg_index
-WHERE indexrelid = to_regclass('public.observations_cooling_run_entity_idx');
-```
-
-Once the build completes, verify the table, both keys in order, the partial
-predicate, and all three flags. Run `sherlock-migrate` with the release
-migration directory. It checks the definition and flags before recording version
-89. A fresh installation can create the index within the migration while the
-observations heap has zero allocated bytes.
-
-If a build was interrupted, wait for the build session to finish and inspect
-the catalog. An absent index can be built directly. For an invalid index with
-the expected table and definition, drop it with the autocommit statement below
-and repeat the build. Resolve any name or definition conflict with the database
-owner before proceeding. A binary rollback can retain the index. For a schema
-downgrade on an existing heap, verify the index identity, execute the concurrent
-drop, then run the down migration and remove version 89 from the migration
-ledger in the same transaction. [PostgreSQL concurrent index removal](https://www.postgresql.org/docs/17/sql-dropindex.html)
+Allow a full evidence window (normally 15 minutes) of new receipts. Check
+each enrolled profile and revision against the original source slots and
+inventory for both temperature and power. The following query measures the
+lookup portion of readiness. Set the psql variables to the enrolled profile ID
+and revision. Missing slots, partial reports, and missing GPU identities need
+separate coverage checks even when every received report has a complete lookup.
 
 ```sql
-DROP INDEX CONCURRENTLY public.observations_cooling_run_entity_idx;
+SELECT u.profile_revision, r.query_kind, count(*) AS received,
+       count(*) FILTER (WHERE u.observation_lookup_complete) AS indexed,
+       min(r.scheduled_for) AS first_slot, max(r.scheduled_for) AS last_slot
+FROM public.prometheus_cooling_upload_receipts u
+JOIN public.collection_runs r USING (run_id)
+WHERE u.profile_id = :'profile_id' AND u.profile_revision >= :'revision'::bigint
+  AND u.received_at BETWEEN now() - interval '15 minutes' AND now()
+GROUP BY u.profile_revision, r.query_kind;
 ```
+
+Pre-upgrade receipts remain in Sherlock with their original evidence. Inspect
+outstanding deadlines and older retained evidence separately before enabling
+delivery. A missing lookup for a selected eligible receipt must leave acquisition
+incomplete and records `RECEIPT_LOOKUP_INCOMPLETE`. Preserve the stored evaluator
+state across restart. Back up and restore the lookup table together with its
+receipts and raw observations so a restored completeness marker has its
+corresponding rows.
+
+Start with notifications disabled. Compare per-slot outcomes with raw evidence,
+including partial reports and missing samples. Verify successful acquisitions
+for every enrolled asset and check new failure counters, full sweep time,
+intake lag, storage and WAL growth under simultaneous collection. The production
+limits remain 250 ms per GPU, 2 seconds per refresh and 15 seconds for a healthy
+fleet sweep. Enable the scoped Slack workers only after live coverage and timing
+pass. Keep the schema and receipt history in place if the evaluator needs to
+be stopped or the application rolled back.

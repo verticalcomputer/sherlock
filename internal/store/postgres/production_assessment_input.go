@@ -82,6 +82,8 @@ func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.A
 	return slices.Equal(slices.Compact(nodes), b.ScopeNodes) && slices.Contains(p.Assets, domain.CoolingUploadAsset{NodeID: domain.StableNodeID(asset.NodeID), GPUUUID: domain.PhysicalGPUUUID(asset.GPUUUID)})
 }
 
+var errReceiptLookupIncomplete = errors.New("receipt observation lookup incomplete")
+
 // Look up each receipt's run by its unique ID before applying scope predicates.
 // The lateral boundary prevents a low-cardinality source-time estimate from
 // rescanning the source's run history for every receipt.
@@ -94,7 +96,7 @@ func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.A
 // merely because their old profile has since been revoked.
 func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
 	rows, err := tx.Query(ctx, `WITH selected AS MATERIALIZED (
- SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,
+ SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,u.observation_lookup_complete,
  CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields ELSE NULL END AS metric_fields,
  p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at
  FROM prometheus_cooling_upload_receipts u JOIN prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
@@ -113,7 +115,7 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
  row_number() OVER(PARTITION BY profile_hash,revision ORDER BY received_at DESC,run_id DESC) AS profile_ordinal
  FROM selected
 )
-SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,
+SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,observation_lookup_complete,
  CASE WHEN receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields THEN metric_fields END,
  receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields AS fields_changed,
  CASE WHEN profile_ordinal=1 THEN
@@ -139,11 +141,11 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,
 		var fieldsChanged bool
 		var slot, completed, received time.Time
 		var status domain.ResultStatus
-		var complete bool
+		var complete, lookupComplete bool
 		var fieldsBody, profileBody []byte
 		var inventory *string
 		var inventoryAt *time.Time
-		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &fieldsBody, &fieldsChanged, &profileBody, &hash, &revision, &inventory, &inventoryAt); err != nil {
+		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &lookupComplete, &fieldsBody, &fieldsChanged, &profileBody, &hash, &revision, &inventory, &inventoryAt); err != nil {
 			return nil, nil, false, err
 		}
 		if err := ctx.Err(); err != nil {
@@ -169,6 +171,12 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,
 		task := profile.Task(query, slot)
 		if string(task.RunID) != id || !slot.Equal(slot.Truncate(domain.CoolingUploadInterval)) || completed.Before(slot) || completed.After(task.Deadline) || received.After(at) {
 			continue
+		}
+		// Historical receipts have no complete observation directory. Abort the
+		// acquisition transaction so an unproven absence cannot advance state.
+		// The independent due lane can still evaluate retained facts on time.
+		if !lookupComplete {
+			return nil, nil, false, errReceiptLookupIncomplete
 		}
 		p := a.Provenance{Mode: "upload", CollectionRunID: id, Operation: b.Operation, ScheduleRevision: profile.Revision, InventoryRevision: profile.InventoryRevision, CollectorID: string(profile.CollectorID), UploadProfileID: profile.ProfileID, UploadProfileHash: hash}
 		ids = append(ids, id)

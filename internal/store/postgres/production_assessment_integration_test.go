@@ -230,6 +230,11 @@ func TestProductionAssessmentRestrictedRole(t *testing.T) {
 	if err = CheckProductionAssessmentRole(t.Context(), pool); err != nil {
 		t.Fatal("restricted role rejected", err)
 	}
+	f.exec(t, "REVOKE SELECT ON public.prometheus_cooling_receipt_observations FROM sherlock_assessment_production")
+	if err = CheckProductionAssessmentRole(t.Context(), pool); err == nil {
+		t.Fatal("production evaluator accepted without receipt lookup access")
+	}
+	f.exec(t, "GRANT SELECT ON public.prometheus_cooling_receipt_observations TO sherlock_assessment_production")
 	var profileBody []byte
 	var profileHash string
 	binding := cfg.Assessment.Bindings[0]
