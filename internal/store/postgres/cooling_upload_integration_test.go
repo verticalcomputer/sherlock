@@ -404,6 +404,16 @@ func coolingUploadRestrictedStore(t *testing.T, pool *pgxpool.Pool) *storepg.Col
 		t.Fatal(err)
 	}
 	t.Cleanup(restricted.Close)
+	var canForgeProof bool
+	err = restricted.QueryRow(ctx, `SELECT
+		has_any_column_privilege('public.prometheus_cooling_receipt_observations', 'INSERT,UPDATE') OR
+		has_table_privilege('public.prometheus_cooling_receipt_observations', 'DELETE,TRUNCATE,TRIGGER') OR
+		has_column_privilege('public.prometheus_cooling_upload_receipts','observation_lookup_complete','INSERT,UPDATE') OR
+		has_function_privilege('public.cooling_observation_locator()','EXECUTE') OR
+		has_function_privilege('public.cooling_receipt_observation_proof()','EXECUTE')`).Scan(&canForgeProof)
+	if err != nil || canForgeProof {
+		t.Fatalf("restricted upload role can directly author lookup proof=%t: %v", canForgeProof, err)
+	}
 	store, err := storepg.NewCollectionStore(restricted)
 	if err != nil {
 		t.Fatal(err)

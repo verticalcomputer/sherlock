@@ -1,4 +1,5 @@
 SET LOCAL lock_timeout = '1s';
+LOCK TABLE public.observations IN ACCESS EXCLUSIVE MODE;
 DROP TRIGGER prometheus_cooling_upload_receipt_observation_proof ON public.prometheus_cooling_upload_receipts;
 DROP TRIGGER cooling_observation_locator_insert ON public.observations;
 DROP TRIGGER cooling_observation_locator_update ON public.observations;

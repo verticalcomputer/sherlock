@@ -3,8 +3,10 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +57,19 @@ func TestCoolingReceiptObservationUpgrade(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// A large unrelated entity in this run must never hide another GPU.
+			const unrelatedRows = 257
+			addUnrelated := func(prefix string) {
+				t.Helper()
+				f.exec(t, `INSERT INTO public.observations
+					(observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,labels,value,unit,
+					 observed_at,collected_at,source_reference,sample_fingerprint)
+					SELECT $2||n,o.run_id,o.cluster_id,o.source_id,o.schema_version,o.kind,'unrelated',o.metric,o.labels,o.value,o.unit,
+					 o.observed_at,o.collected_at,o.source_reference,decode(md5($2||n),'hex')
+					FROM (SELECT * FROM public.observations WHERE run_id=$1 LIMIT 1) o,
+					     generate_series(1,$3::int) n`, result.Task.RunID, prefix, unrelatedRows)
+			}
+			addUnrelated("before-")
 			if original89 {
 				f.exec(t, `CREATE INDEX observations_cooling_run_entity_idx ON public.observations
 					(run_id, entity_key) WHERE starts_with(run_id, 'prometheus-cooling-v2-')`)
@@ -133,15 +148,158 @@ func TestCoolingReceiptObservationUpgrade(t *testing.T) {
 					t.Fatalf("receipt proven=%t locators=%d actual matches=%d want=%d: %v", proven, total, matching, want, err)
 				}
 			}
-			assertLookup(len(result.Observations) + 1)
+			want := len(result.Observations) + 1 + unrelatedRows
+			assertLookup(want)
+			addUnrelated("after-")
+			want += unrelatedRows
+			assertLookup(want)
 			f.exec(t, `UPDATE public.observations SET entity_key='changed',observation_id='renamed' WHERE observation_id='alternate'`)
-			assertLookup(len(result.Observations) + 1)
+			assertLookup(want)
 			f.exec(t, `DELETE FROM public.observations WHERE observation_id='renamed'`)
-			assertLookup(len(result.Observations))
+			assertLookup(want - 1)
 			f.exec(t, down)
 			var receipts int
 			if err := f.admin.QueryRow(ctx, `SELECT count(*) FROM public.prometheus_cooling_upload_receipts`).Scan(&receipts); err != nil || receipts != 2 {
 				t.Fatalf("down migration retained %d receipts: %v", receipts, err)
+			}
+		})
+	}
+}
+
+func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
+	for _, isolation := range []pgx.TxIsoLevel{pgx.ReadCommitted, pgx.RepeatableRead, pgx.Serializable} {
+		t.Run(string(isolation), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			f := newAssessmentFixtureThrough(t, "000088_production_assessment_fairness.up.sql")
+			now := time.Now().UTC()
+			_, profile, hash := seedAssessmentUploadProfile(t, f, now)
+			slot := now.Truncate(domain.CoolingUploadInterval)
+			run := profile.Task(domain.QueryGPUTemperature, slot).RunID
+			secondRun := profile.Task(domain.QueryGPUPower, slot).RunID
+			secondPayload := strings.Repeat("0", 64)
+			const insertRun = `INSERT INTO public.collection_runs
+				(run_id,cluster_id,source_id,query_kind,idempotency_key,status,scheduled_for,started_at,completed_at,series_returned,bytes_read,coverage_complete)
+				VALUES($1,$2,$3,$6,'prometheus-cooling-report-v2-'||$4,'SUCCEEDED',$5,$5,$5,1,1,true)`
+			f.exec(t, insertRun, run, profile.ClusterID, profile.SourceID, hash, slot, domain.QueryGPUTemperature)
+			f.exec(t, insertRun, secondRun, profile.ClusterID, profile.SourceID, secondPayload, slot, domain.QueryGPUPower)
+
+			receipt, err := f.admin.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rollbackMonitoringTx(receipt)
+			var found bool
+			// Pin the old transaction snapshot without locking the objects upgraded by 90.
+			if err := receipt.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.collection_runs WHERE run_id=$1)`, run).Scan(&found); err != nil || !found {
+				t.Fatalf("pre-cutover run visible=%t: %v", found, err)
+			}
+			const insert = `INSERT INTO public.prometheus_cooling_upload_receipts
+				(run_id,profile_id,profile_revision,profile_hash,collector_id,payload_hash) VALUES($1,$2,$3,$4,$5,$6)`
+			insertReceipt := func() error {
+				_, err := receipt.Exec(ctx, insert, run, profile.ProfileID, profile.Revision, hash, profile.CollectorID, hash)
+				return err
+			}
+			// The reverse race starts a raw writer on the other run before DDL,
+			// then commits that row after a fresh, complete empty receipt.
+			raw, err := f.admin.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rollbackMonitoringTx(raw)
+			if err := raw.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.collection_runs WHERE run_id=$1)`, secondRun).Scan(&found); err != nil || !found {
+				t.Fatalf("pre-cutover raw writer sees run=%t: %v", found, err)
+			}
+			upgrade, err := f.admin.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rollbackMonitoringTx(upgrade)
+			var pending chan error
+			if isolation == pgx.ReadCommitted {
+				// Hold the catalog cutover open so the actual INSERT statement is
+				// already waiting when the last pre-trigger raw observation commits.
+				if _, err := upgrade.Exec(ctx, `LOCK TABLE public.prometheus_cooling_upload_receipts IN ACCESS EXCLUSIVE MODE`); err != nil {
+					t.Fatal(err)
+				}
+				pid := receipt.Conn().PgConn().PID()
+				pending = make(chan error, 1)
+				go func() { pending <- insertReceipt() }()
+				for {
+					var waiting bool
+					err := f.admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1
+						AND relation='public.prometheus_cooling_upload_receipts'::regclass AND NOT granted)`, pid).Scan(&waiting)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if waiting {
+						break
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+			}
+			f.exec(t, `INSERT INTO public.observations
+				(observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,labels,value,unit,
+				 observed_at,collected_at,source_reference,sample_fingerprint)
+				VALUES('pre-cutover-alternate',$1,$2,$3,1,'gpu_temperature','fixture','fixture','[]',1,'celsius',
+				$4,$4,'fixture','fixture'::bytea)`, run, profile.ClusterID, profile.SourceID, slot)
+			body, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations.up.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Match sherlock-migrate's atomic DDL and migration-ledger commit.
+			if _, err := upgrade.Exec(ctx, string(body)+"INSERT INTO public.schema_migrations(version) VALUES (90)"); err != nil {
+				t.Fatal(err)
+			}
+			if err := upgrade.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if pending != nil {
+				err = <-pending
+			} else {
+				err = insertReceipt()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := receipt.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var proven bool
+			var locators int
+			err = f.admin.QueryRow(ctx, `SELECT observation_lookup_complete,
+				(SELECT count(*) FROM public.prometheus_cooling_receipt_observations WHERE run_id=$1)
+				FROM public.prometheus_cooling_upload_receipts WHERE run_id=$1`, run).Scan(&proven, &locators)
+			if err != nil || proven != (isolation == pgx.ReadCommitted) || (proven && locators != 1) {
+				t.Fatalf("cutover receipt proven=%t locator count=%d: %v", proven, locators, err)
+			}
+			fresh, err := f.admin.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rollbackMonitoringTx(fresh)
+			if _, err = fresh.Exec(ctx, insert, secondRun, profile.ProfileID, profile.Revision, hash, profile.CollectorID, secondPayload); err != nil {
+				t.Fatal(err)
+			}
+			if err := fresh.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			_, err = raw.Exec(ctx, `INSERT INTO public.observations
+				(observation_id,run_id,cluster_id,source_id,schema_version,kind,entity_key,metric,labels,value,unit,
+				 observed_at,collected_at,source_reference,sample_fingerprint)
+				VALUES('late-alternate',$1,$2,$3,1,'gpu_power','fixture','fixture','[]',1,'watts',
+				$4,$4,'fixture','fixture'::bytea)`, secondRun, profile.ClusterID, profile.SourceID, slot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := raw.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			err = f.admin.QueryRow(ctx, `SELECT observation_lookup_complete,
+				(SELECT count(*) FROM public.prometheus_cooling_receipt_observations WHERE run_id=$1 AND observation_id='late-alternate')
+				FROM public.prometheus_cooling_upload_receipts WHERE run_id=$1`, secondRun).Scan(&proven, &locators)
+			if err != nil || !proven || locators != 1 {
+				t.Fatalf("post-upgrade receipt proven=%t concurrent locators=%d: %v", proven, locators, err)
 			}
 		})
 	}

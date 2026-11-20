@@ -409,20 +409,23 @@ and revision. Missing slots, partial reports, and missing GPU identities need
 separate coverage checks even when every received report has a complete lookup.
 
 ```sql
-SELECT r.query_kind, count(*) AS received,
+SELECT u.profile_revision, r.query_kind, count(*) AS received,
        count(*) FILTER (WHERE u.observation_lookup_complete) AS indexed,
        min(r.scheduled_for) AS first_slot, max(r.scheduled_for) AS last_slot
 FROM public.prometheus_cooling_upload_receipts u
 JOIN public.collection_runs r USING (run_id)
 WHERE u.profile_id = :'profile_id' AND u.profile_revision >= :'revision'::bigint
   AND u.received_at BETWEEN now() - interval '15 minutes' AND now()
-GROUP BY r.query_kind;
+GROUP BY u.profile_revision, r.query_kind;
 ```
 
 Pre-upgrade receipts remain in Sherlock with their original evidence. Inspect
 outstanding deadlines and older retained evidence separately before enabling
 delivery. A missing lookup for a selected eligible receipt must leave acquisition
-incomplete. Preserve the stored evaluator state across restart.
+incomplete and records `RECEIPT_LOOKUP_INCOMPLETE`. Preserve the stored evaluator
+state across restart. Back up and restore the lookup table together with its
+receipts and raw observations so a restored completeness marker has its
+corresponding rows.
 
 Start with notifications disabled. Compare per-slot outcomes with raw evidence,
 including partial reports and missing samples. Verify successful acquisitions

@@ -1,5 +1,8 @@
 -- Bound the wait for the brief catalog locks on active ingest tables.
 SET LOCAL lock_timeout = '1s';
+-- Take the observation lock before the receipt lock, matching upload write
+-- order. A pending upload can finish its receipt while the migration waits.
+LOCK TABLE public.observations IN SHARE ROW EXCLUSIVE MODE;
 
 -- A constant default keeps existing receipts unproven without rewriting them.
 ALTER TABLE public.prometheus_cooling_upload_receipts
@@ -53,23 +56,27 @@ CREATE TRIGGER cooling_observation_locator_update
 -- Only the receipt trigger certifies completeness. Include all actual rows,
 -- even nonstandard IDs or repeated entities. The existing unique index on
 -- (run_id, sample_fingerprint) bounds discovery to this one admitted run.
--- Supported uploads contain at most 128 observations. Leave an overfull
--- 257-row sentinel unproven rather than treating a truncated lookup as valid.
+-- Valid reports have at most 128 observations. Capture every actual row even
+-- when an exceptional stored run has more, so one entity cannot hide another.
 CREATE FUNCTION public.cooling_receipt_observation_proof() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+SET enable_seqscan = off AS $$
 BEGIN
-    WITH run_samples AS MATERIALIZED (
-        SELECT run_id, entity_key, observation_id
-        FROM public.observations
-        WHERE run_id = NEW.run_id
-        LIMIT 257 FOR SHARE
-    ), captured AS (
-        INSERT INTO public.prometheus_cooling_receipt_observations
-            (run_id, entity_key, observation_id)
-        SELECT run_id, entity_key, observation_id FROM run_samples
-        ON CONFLICT DO NOTHING
-    )
-    SELECT count(*) < 257 INTO NEW.observation_lookup_complete FROM run_samples;
+    -- A fixed snapshot can predate trigger installation and miss a raw
+    -- observation committed before cutover. The migrator records version 90
+    -- in the DDL transaction. At READ COMMITTED the volatile trigger's query
+    -- takes a fresh snapshot after acquiring the receipt table lock.
+    IF current_setting('transaction_isolation') IN ('repeatable read', 'serializable')
+       AND NOT EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = 90) THEN
+        NEW.observation_lookup_complete := false;
+        RETURN NEW;
+    END IF;
+    INSERT INTO public.prometheus_cooling_receipt_observations
+        (run_id, entity_key, observation_id)
+    SELECT run_id, entity_key, observation_id FROM public.observations
+    WHERE run_id = NEW.run_id ORDER BY sample_fingerprint FOR SHARE
+    ON CONFLICT DO NOTHING;
+    NEW.observation_lookup_complete := true;
     RETURN NEW;
 END
 $$;
