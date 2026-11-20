@@ -251,8 +251,8 @@ func TestProductionFleetReceiptDocumentDeduplication(t *testing.T) {
 	writer, _ := NewCollectionStore(f.admin)
 	query := domain.CoolingUploadQueries()[0]
 	ids := []string{}
-	for i := 0; i < 7; i++ {
-		slot := now.Truncate(15 * time.Second).Add(time.Duration(i-6) * 15 * time.Second)
+	for i := 0; i < 8; i++ {
+		slot := now.Truncate(15 * time.Second).Add(time.Duration(i-7) * 15 * time.Second)
 		report := assessmentUploadReport(profile, hash, query, slot)
 		report.Version = 3
 		if _, err := writer.RecordCoolingUpload(t.Context(), profile.CollectorID, profile.ClusterID, report); err != nil {
@@ -278,9 +278,16 @@ func TestProductionFleetReceiptDocumentDeduplication(t *testing.T) {
 	}
 	f.exec(t, `UPDATE collection_runs SET metric_fields=metric_fields||'[{"node_id":7}]'::jsonb WHERE run_id=$1`, ids[4])
 	f.exec(t, `UPDATE collection_runs SET metric_fields=metric_fields||jsonb_build_array(jsonb_build_object('reason',repeat('x',70000))) WHERE run_id=$1`, ids[5])
+	// An incompressible oversized document exercises the early physical-size guard.
+	f.exec(t, `UPDATE collection_runs SET metric_fields=jsonb_build_array((
+ SELECT string_agg(md5(i::text),'') FROM generate_series(1,2300)i)) WHERE run_id=$1`, ids[6])
+	var physicallyLarge bool
+	if err := f.admin.QueryRow(t.Context(), `SELECT pg_column_size(metric_fields)>65536 FROM collection_runs WHERE run_id=$1`, ids[6]).Scan(&physicallyLarge); err != nil || !physicallyLarge {
+		t.Fatalf("oversized physical fixture: %v, %v", physicallyLarge, err)
+	}
 	// This newest row owns the shared healthy-document ordinal; its timing is
 	// invalid, but it must not hide the usable older receipts sharing the body.
-	f.exec(t, `UPDATE collection_runs SET scheduled_for=scheduled_for+interval '1 second' WHERE run_id=$1`, ids[6])
+	f.exec(t, `UPDATE collection_runs SET scheduled_for=scheduled_for+interval '1 second' WHERE run_id=$1`, ids[7])
 	var at time.Time
 	if err := f.admin.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&at); err != nil {
 		t.Fatal(err)
@@ -291,15 +298,15 @@ func TestProductionFleetReceiptDocumentDeduplication(t *testing.T) {
 	}
 	defer tx.Rollback(t.Context())
 	attempts, selected, truncated, err := loadProductionUploadAttempts(t.Context(), tx, c.Assessment, asset, binding, query, at.Add(-15*time.Minute), at)
-	if err != nil || truncated || len(selected) != 6 {
+	if err != nil || truncated || len(selected) != 7 {
 		t.Fatalf("receipt selection: count%d truncated%t %v", len(selected), truncated, err)
 	}
-	for i, id := range ids[:6] {
+	for i, id := range ids[:7] {
 		if attempts[id].usable != (i < 2) {
 			t.Fatalf("receipt%d usable%t", i, attempts[id].usable)
 		}
 	}
-	if _, ok := attempts[ids[6]]; ok {
+	if _, ok := attempts[ids[7]]; ok {
 		t.Fatal("invalid task admitted through shared metadata")
 	}
 }
@@ -582,5 +589,35 @@ func TestProductionReceiptLookupCutoverPreservesPendingProof(t *testing.T) {
 	}
 	if err = f.admin.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM production_assessment_states s, jsonb_array_elements(convert_from(s.snapshot,'UTF8')::jsonb->'facts') fact WHERE s.asset=$1 AND fact#>>'{body,provenance,collection_run_id}'=$2)`, asset.EntityKey, string(profile.Task(domain.QueryGPUTemperature, slot).RunID)).Scan(&intact); err != nil || !intact {
 		t.Fatalf("fresh receipt missing after cutover: %v", err)
+	}
+}
+
+// Compare the actual production projection with row-by-row normalization, including
+// equal numeric values on opposite sides of the serialized document size limit.
+func TestProductionReceiptFieldProjectionEquivalence(t *testing.T) {
+	f := newAssessmentFixture(t)
+	for _, numeric := range []bool{false, true} {
+		var total, differences int
+		err := f.admin.QueryRow(t.Context(), `WITH selected AS MATERIALIZED (
+   SELECT i AS run_id,i/3 AS received_at,i%3 AS revision,'p' AS profile_hash,
+    CASE i%14
+     WHEN 0 THEN NULL::jsonb WHEN 1 THEN 'null'::jsonb
+     WHEN 2 THEN to_jsonb(repeat('x',65534))
+     WHEN 3 THEN to_jsonb(repeat('x',65535))
+     WHEN 4 THEN to_jsonb(repeat('y',65535))
+     WHEN 5 THEN CASE WHEN $1 THEN jsonb_build_array(1.0,repeat('x',65527)) ELSE '["OK"]' END
+     WHEN 6 THEN CASE WHEN $1 THEN jsonb_build_array(1.00,repeat('x',65527)) ELSE '["OK"]' END
+     WHEN 7 THEN CASE WHEN $1 THEN jsonb_build_array(1.0,repeat('x',65527)) ELSE '["OK"]' END
+     ELSE '[{"node":"example","state":"OK"}]'::jsonb END AS metric_fields
+   FROM generate_series(1,257) i
+  ), `+productionReceiptFieldsSQL+`,
+  normalized AS (SELECT *,CASE WHEN octet_length(metric_fields::text)<=65536 THEN metric_fields END AS doc FROM selected),
+  reference AS (SELECT *,row_number() OVER w=1 OR doc IS DISTINCT FROM lag(doc) OVER w AS emit FROM normalized WINDOW w AS (ORDER BY received_at DESC,run_id DESC))
+  SELECT count(*),count(*) FILTER(WHERE p.fields_changed<>r.emit OR
+   (CASE WHEN p.fields_changed THEN p.current_fields::text END) IS DISTINCT FROM (CASE WHEN r.emit THEN r.doc::text END))
+  FROM projected p JOIN reference r USING(run_id)`, numeric).Scan(&total, &differences)
+		if err != nil || total != 257 || differences != 0 {
+			t.Fatalf("numeric=%v rows=%d changed outputs=%d: %v", numeric, total, differences, err)
+		}
 	}
 }
