@@ -84,6 +84,29 @@ func productionProfileScope(p domain.CoolingUploadProfile, c a.Config, asset a.A
 
 var errReceiptLookupIncomplete = errors.New("receipt observation lookup incomplete")
 
+// productionReceiptFieldsSQL projects each receipt against its adjacent predecessor.
+// Equal JSONB numbers can have different serialized widths (1.0 and 1.00).
+// If any document contains a number, check every row against the exact text cap.
+// Otherwise equal documents have equal text size, so only boundaries need checks.
+const productionReceiptFieldsSQL = `
+ordered AS (
+ SELECT *,lag(metric_fields) OVER receipt_order AS previous_fields,
+ row_number() OVER receipt_order AS receipt_ordinal,
+ row_number() OVER(PARTITION BY profile_hash,revision ORDER BY received_at DESC,run_id DESC) AS profile_ordinal
+ FROM selected WINDOW receipt_order AS (ORDER BY received_at DESC,run_id DESC)
+), boundaries AS MATERIALIZED (
+ SELECT *,receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields AS changed FROM ordered
+), inspected AS MATERIALIZED (
+ SELECT *,bool_or(CASE WHEN changed THEN jsonb_path_exists(metric_fields,'strict $.** ? (@.type() == "number")') ELSE false END) OVER() AS has_numbers
+ FROM boundaries
+), bounded AS MATERIALIZED (
+ SELECT *,CASE WHEN (changed OR has_numbers) AND octet_length(metric_fields::text)<=65536 THEN metric_fields END AS current_fields,
+ CASE WHEN (changed OR has_numbers) AND receipt_ordinal<>1 AND octet_length(previous_fields::text)<=65536 THEN previous_fields END AS prior_fields
+ FROM inspected
+), projected AS (
+ SELECT *,receipt_ordinal=1 OR current_fields IS DISTINCT FROM prior_fields AS fields_changed FROM bounded
+)`
+
 // Look up each receipt's run by its unique ID before applying scope predicates.
 // The lateral boundary prevents a low-cardinality source-time estimate from
 // rescanning the source's run history for every receipt.
@@ -97,7 +120,11 @@ var errReceiptLookupIncomplete = errors.New("receipt observation lookup incomple
 func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
 	rows, err := tx.Query(ctx, `WITH selected AS MATERIALIZED (
  SELECT r.run_id,r.scheduled_for,r.completed_at,u.received_at,r.status,r.coverage_complete,u.observation_lookup_complete,
- CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields ELSE NULL END AS metric_fields,
+ -- Drop large invalid fields before carrying them through the window functions.
+ -- Physical size only selects the slow path; text size still decides validity.
+ CASE WHEN pg_column_size(r.metric_fields)>65536 THEN
+  CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields END
+ ELSE r.metric_fields END AS metric_fields,
  p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at
  FROM prometheus_cooling_upload_receipts u JOIN prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
  JOIN LATERAL (SELECT * FROM collection_runs WHERE run_id=u.run_id OFFSET 0) r
@@ -109,20 +136,14 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
  AND p.protocol_version=3 AND p.collection_state='ENABLED' AND p.registered_at<r.scheduled_for AND r.scheduled_for>=p.starts_at
  AND (p.revoked_at IS NULL OR u.received_at<=p.revoked_at)
  ORDER BY u.received_at DESC,r.run_id DESC LIMIT 257
-), grouped AS (
- SELECT *,lag(metric_fields) OVER(ORDER BY received_at DESC,run_id DESC) AS previous_fields,
- row_number() OVER(ORDER BY received_at DESC,run_id DESC) AS receipt_ordinal,
- row_number() OVER(PARTITION BY profile_hash,revision ORDER BY received_at DESC,run_id DESC) AS profile_ordinal
- FROM selected
-)
+), `+productionReceiptFieldsSQL+`
 SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,observation_lookup_complete,
- CASE WHEN receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields THEN metric_fields END,
- receipt_ordinal=1 OR metric_fields IS DISTINCT FROM previous_fields AS fields_changed,
+ CASE WHEN fields_changed THEN current_fields END,fields_changed,
  CASE WHEN profile_ordinal=1 THEN
   (SELECT p.profile FROM prometheus_cooling_upload_profiles p
-   WHERE p.profile_id=grouped.profile_id AND p.revision=grouped.revision AND p.profile_hash=grouped.profile_hash)
+   WHERE p.profile_id=projected.profile_id AND p.revision=projected.revision AND p.profile_hash=projected.profile_hash)
  END,profile_hash,revision,revision_id,source_at
- FROM grouped ORDER BY received_at DESC,run_id DESC`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
+ FROM projected ORDER BY received_at DESC,run_id DESC`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
 	if err != nil {
 		return nil, nil, false, err
 	}

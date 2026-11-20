@@ -6,6 +6,6 @@ import "time"
 // ShadowRefreshBudget also bounds source loading and persistence for a serial
 // refresh. Neither budget changes a candidate's observation deadline.
 const (
-	ShadowGPUBudget     = 250 * time.Millisecond
+	ShadowGPUBudget     = 500 * time.Millisecond
 	ShadowRefreshBudget = 2 * time.Second
 )
