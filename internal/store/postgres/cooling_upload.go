@@ -37,7 +37,7 @@ func (s *CollectionStore) RegisterCoolingUploadProfile(ctx context.Context, prof
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := lockCoolingUploadProfile(ctx, tx, profile.ProfileID, profile.Revision); err != nil {
+	if err := lockCoolingUploadProfile(ctx, tx, profile.ProfileID, profile.Revision, coolingProfileWrite); err != nil {
 		return err
 	}
 	// Promotion is irreversible for a profile family. Check before the
@@ -129,7 +129,7 @@ func (s *CollectionStore) RecordCoolingUpload(ctx context.Context, collector dom
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := lockCoolingUploadProfile(ctx, tx, report.ProfileID, report.ProfileRevision); err != nil {
+	if err := lockCoolingUploadProfile(ctx, tx, report.ProfileID, report.ProfileRevision, coolingProfileRead); err != nil {
 		return false, err
 	}
 	var encodedProfile []byte
@@ -206,14 +206,22 @@ func (s *CollectionStore) RecordCoolingUpload(ctx context.Context, collector dom
 	return true, tx.Commit(ctx)
 }
 
-func lockCoolingUploadProfile(ctx context.Context, tx pgx.Tx, id string, revision int64) error {
-	// Serialize revisions of the same continuous authority before the original
-	// per-revision lock used by the SQL revocation guard.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "prometheus-cooling-profile-family:"+id); err != nil {
+type coolingProfileLock string
+
+const (
+	coolingProfileWrite coolingProfileLock = "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
+	coolingProfileRead  coolingProfileLock = "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))"
+)
+
+// Registration changes authority. Receipts and assessments only read that
+// authority and may overlap. Hold family then revision until commit so both
+// supersession and the SQL revocation guard still fence in-flight receipts.
+func lockCoolingUploadProfile(ctx context.Context, tx pgx.Tx, id string, revision int64, lock coolingProfileLock) error {
+	if _, err := tx.Exec(ctx, string(lock), "prometheus-cooling-profile-family:"+id); err != nil {
 		return err
 	}
 	key := fmt.Sprintf("prometheus-cooling-profile:%s:%d", id, revision)
-	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, key)
+	_, err := tx.Exec(ctx, string(lock), key)
 	return err
 }
 
