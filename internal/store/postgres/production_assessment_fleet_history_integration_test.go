@@ -144,20 +144,54 @@ FROM production_assessment_states WHERE enrollment_id=$1`, c.Assessment.RunID, p
 	}
 	t.Logf("%d GPUs acquired in %s across %d passes with zero GPU budget failures and concurrent same-profile admission", fleetSize, cycleElapsed, len(passes))
 
-	// Inspect the actual first assessment lookup after the timing gate. Bound
-	// executor rows so a warm cache cannot mask a walk across the deep archive.
-	var planJSON []byte
-	if err := f.admin.QueryRow(t.Context(), `EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) `+sampleQuery.SQL, sampleQuery.Args...).Scan(&planJSON); err != nil {
+	// Bound rows examined by both custom and generic plans so a warm cache
+	// cannot mask a scan of the archive or of every GPU in each admitted run.
+	assertFleetObservationLookupWork(t, f.admin, sampleQuery, 2*historicSlots)
+}
+
+func assertFleetObservationLookupWork(t *testing.T, pool *pgxpool.Pool, query pgx.TraceQueryStartData, rowLimit int) {
+	t.Helper()
+	if query.SQL == "" {
+		t.Fatal("production assessment did not read admitted observations")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	var plans []struct{ Plan fleetObservationPlan }
-	if err := json.Unmarshal(planJSON, &plans); err != nil || len(plans) != 1 {
-		t.Fatalf("decode sample plan: %v", err)
+	defer rollbackMonitoringTx(tx)
+	const statement = "fleet_history_samples"
+	if _, err = tx.Conn().Prepare(ctx, statement, query.SQL); err != nil {
+		t.Fatal(err)
 	}
-	if rows, limit := plans[0].Plan.maxRows(), 2*fleetSize*historicSlots; rows > limit {
-		t.Fatalf("sample lookup visited %d rows in one plan node, limit %d for admitted runs", rows, limit)
-	} else {
-		t.Logf("sample lookup visited at most %d rows in any plan node", rows)
+	defer func() { _ = tx.Conn().Deallocate(ctx, statement) }()
+
+	parameters := make([]string, len(query.Args))
+	for i := range parameters {
+		parameters[i] = fmt.Sprintf("$%d", i+1)
+	}
+	explain := "EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) EXECUTE " + statement + "(" + strings.Join(parameters, ",") + ")"
+	// EXECUTE expects SQL literals. pgx's simple protocol safely encodes the
+	// captured arguments, including the text array of admitted run IDs.
+	args := append([]any{pgx.QueryExecModeSimpleProtocol}, query.Args...)
+	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+		if _, err = tx.Exec(ctx, `SELECT set_config('plan_cache_mode',$1,true)`, mode); err != nil {
+			t.Fatal(err)
+		}
+		var planJSON []byte
+		if err = tx.QueryRow(ctx, explain, args...).Scan(&planJSON); err != nil {
+			t.Fatalf("explain %s: %v", mode, err)
+		}
+		var plans []struct{ Plan fleetObservationPlan }
+		if err = json.Unmarshal(planJSON, &plans); err != nil || len(plans) != 1 || plans[0].Plan.Rows == 0 {
+			t.Fatalf("decode %s sample plan with admitted rows: %v", mode, err)
+		}
+		if rows := plans[0].Plan.maxRows(); rows > rowLimit {
+			t.Fatalf("%s sample lookup visited %d rows in one plan node, limit %d for one GPU in admitted runs", mode, rows, rowLimit)
+		} else {
+			t.Logf("%s sample lookup visited at most %d rows in any plan node", mode, rows)
+		}
 	}
 }
 
