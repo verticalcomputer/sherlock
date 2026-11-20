@@ -222,16 +222,21 @@ const assessmentObservationSQL = assessmentObservationColumnsSQL + `
  FROM observations` + assessmentObservationScopeSQL + `
  AND run_id=ANY($3::text[]) AND (entity_key=$5 OR entity_key=$7 OR labels @> $8::jsonb OR labels @> $9::jsonb)` + assessmentObservationOrderSQL
 
-// Receipt validation reconstructs each run ID from the cooling upload task.
-// The literal namespace predicate lets custom and generic plans select the
-// partial index. Probe both indexed keys before projecting the evidence so
-// all observation IDs (including extra or malformed records) remain visible.
+// Start with the run IDs admitted by the receipt selector. Keep both lateral
+// lookups parameterized so even a generic plan fetches evidence by its primary
+// key instead of scanning retained observations by run or by GPU. Recheck raw
+// scope before the global ordering and 257th-row truncation sentinel.
 const productionUploadObservationSQL = assessmentObservationColumnsSQL + `
  FROM (SELECT DISTINCT unnest($3::text[]) AS selected_run) ids
  CROSS JOIN LATERAL (
-  SELECT * FROM observations WHERE run_id=ids.selected_run AND entity_key=$5
-  AND starts_with(run_id,'` + domain.CoolingUploadRunPrefix + `') OFFSET 0
- ) o` + assessmentObservationScopeSQL + assessmentObservationOrderSQL
+  SELECT observation_id AS selected_id FROM public.prometheus_cooling_receipt_observations
+  WHERE run_id=ids.selected_run AND entity_key=$5 OFFSET 0
+ ) refs
+ CROSS JOIN LATERAL (
+  SELECT * FROM public.observations WHERE observation_id=refs.selected_id OFFSET 0
+ ) o` + assessmentObservationScopeSQL + `
+ AND o.run_id=ids.selected_run AND o.entity_key=$5
+ AND starts_with(ids.selected_run,'` + domain.CoolingUploadRunPrefix + `')` + assessmentObservationOrderSQL
 
 type assessmentAttempt struct {
 	completed  time.Time

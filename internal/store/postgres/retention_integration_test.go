@@ -109,6 +109,7 @@ func TestRetentionForeignKeyGraph(t *testing.T) {
 		"collection_runs:evidence_envelopes:n", "collection_runs:observations:a",
 		"collection_runs:prometheus_cooling_upload_receipts:c",
 		"observations:current_projections:a", "observations:goodput_metric_nodes:a",
+		"observations:prometheus_cooling_receipt_observations:c",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("retention FK graph changed; review its owners before changing cleanup:\n%s", strings.Join(got, "\n"))

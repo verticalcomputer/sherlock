@@ -405,6 +405,7 @@ AND NOT EXISTS(SELECT 1 FROM actors a CROSS JOIN schemas s WHERE has_schema_priv
 AND NOT EXISTS(SELECT 1 FROM actors a WHERE has_database_privilege(a.oid,current_database(),'CREATE,TEMPORARY') OR has_parameter_privilege(a.oid,'session_replication_role','SET') OR EXISTS(SELECT 1 FROM pg_parameter_acl p WHERE has_parameter_privilege(a.oid,p.parname::text,'ALTER SYSTEM')))
 AND NOT EXISTS(SELECT 1 FROM actors a CROSS JOIN relations r WHERE pg_has_role(a.oid,r.relowner,'USAGE') OR has_table_privilege(a.oid,r.oid,'TRUNCATE,REFERENCES,TRIGGER') OR has_any_column_privilege(a.oid,r.oid,'REFERENCES') OR (NOT(r.namespace='public'::regnamespace AND r.relname=ANY($1::text[])) AND (has_table_privilege(a.oid,r.oid,'INSERT,UPDATE,DELETE') OR has_any_column_privilege(a.oid,r.oid,'INSERT,UPDATE'))))
 AND NOT EXISTS(SELECT 1 FROM actors a CROSS JOIN pg_proc p JOIN schemas s ON p.pronamespace=s.oid WHERE pg_has_role(a.oid,p.proowner,'USAGE') OR p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE'))
+AND coalesce(has_table_privilege(current_user,to_regclass('public.prometheus_cooling_receipt_observations'),'SELECT'),false)
 AND NOT EXISTS(SELECT 1 FROM unnest($1::text[]) n(name) WHERE NOT has_table_privilege(current_user,'public.'||n.name,'SELECT'))
 `
 

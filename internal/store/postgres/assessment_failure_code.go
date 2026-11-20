@@ -32,6 +32,8 @@ func assessmentFailureCode(err error) string {
 			code = "TIME_BUDGET"
 		case code != "TIME_BUDGET" && prefix == "AUTHORITY_LOST":
 			code = "AUTHORITY_LOST"
+		case code == "STORE_FAILURE" && candidate == errReceiptLookupIncomplete:
+			code = "RECEIPT_LOOKUP_INCOMPLETE"
 		case code == "STORE_FAILURE" && prefix == "CAPACITY":
 			code = "CAPACITY"
 		}

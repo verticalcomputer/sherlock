@@ -148,6 +148,10 @@ func assessmentErrorClass(err error) (string, string) {
 	state, class := "", "store_error"
 	walkAssessmentErrors(err, func(candidate error) bool {
 		switch candidate {
+		case errReceiptLookupIncomplete:
+			if class == "store_error" {
+				class = "receipt_lookup_incomplete"
+			}
 		case ErrMonitoringAuthority:
 			if class == "store_error" {
 				class = "authority_lost"
