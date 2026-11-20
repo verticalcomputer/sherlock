@@ -391,7 +391,9 @@ or establish the cause of prior refresh stalls.
 Use the migration set shipped with the new evaluator. Starting at schema 88,
 the new set records the superseded index migration (89) and installs a small
 lookup table in migration 90. Starting at 89, it installs 90 and preserves any
-existing observations index. Both paths allow intake to continue. Apply the
+existing observations index. Keep intake running. If migration 90 reports
+lock contention (SQLSTATE `55P03`), let the ingest transaction finish and
+retry the migrator. A failed migration leaves the schema ledger at 89. Apply the
 production assessment grants from the same release so the evaluator can read
 the new table. Keep hardware notifications disabled during qualification.
 

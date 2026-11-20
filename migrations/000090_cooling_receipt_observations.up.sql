@@ -1,8 +1,16 @@
 -- Bound the wait for the brief catalog locks on active ingest tables.
 SET LOCAL lock_timeout = '1s';
--- Take the observation lock before the receipt lock, matching upload write
--- order. A pending upload can finish its receipt while the migration waits.
-LOCK TABLE public.observations IN SHARE ROW EXCLUSIVE MODE;
+-- Uploads read receipts before writing observations, then insert a receipt.
+-- Take both DDL locks without waiting so an active upload can always finish.
+LOCK TABLE public.observations IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+LOCK TABLE public.prometheus_cooling_upload_receipts IN ACCESS EXCLUSIVE MODE NOWAIT;
+
+-- A fixed snapshot must see this installation's row to certify a receipt.
+-- A rollback and reinstall creates a new row even at the same schema version.
+CREATE TABLE public.prometheus_cooling_lookup_epoch (
+    installed boolean PRIMARY KEY CHECK (installed)
+);
+INSERT INTO public.prometheus_cooling_lookup_epoch VALUES (true);
 
 -- A constant default keeps existing receipts unproven without rewriting them.
 ALTER TABLE public.prometheus_cooling_upload_receipts
@@ -63,11 +71,10 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
 SET enable_seqscan = off AS $$
 BEGIN
     -- A fixed snapshot can predate trigger installation and miss a raw
-    -- observation committed before cutover. The migrator records version 90
-    -- in the DDL transaction. At READ COMMITTED the volatile trigger's query
-    -- takes a fresh snapshot after acquiring the receipt table lock.
+    -- observation committed before cutover. At READ COMMITTED the volatile
+    -- trigger's query takes a fresh snapshot after acquiring the receipt lock.
     IF current_setting('transaction_isolation') IN ('repeatable read', 'serializable')
-       AND NOT EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = 90) THEN
+       AND NOT EXISTS (SELECT 1 FROM public.prometheus_cooling_lookup_epoch WHERE installed) THEN
         NEW.observation_lookup_complete := false;
         RETURN NEW;
     END IF;

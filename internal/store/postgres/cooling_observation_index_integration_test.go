@@ -87,12 +87,19 @@ func TestCoolingReceiptObservationUpgrade(t *testing.T) {
 			_, err = f.admin.Exec(ctx, up)
 			var pgErr *pgconn.PgError
 			if !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
-				t.Fatalf("expected bounded DDL lock timeout, got %v", err)
+				t.Fatalf("expected DDL lock refusal, got %v", err)
 			}
 			if err := blocker.Rollback(ctx); err != nil {
 				t.Fatal(err)
 			}
-			upgrade, err := f.admin.Begin(ctx)
+			// Isolate the migration's PostgreSQL counters from fixture loads
+			// still awaiting a statistics flush on pooled connections.
+			migrator, err := pgx.Connect(ctx, f.dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer migrator.Close(ctx)
+			upgrade, err := migrator.Begin(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -167,8 +174,16 @@ func TestCoolingReceiptObservationUpgrade(t *testing.T) {
 }
 
 func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
-	for _, isolation := range []pgx.TxIsoLevel{pgx.ReadCommitted, pgx.RepeatableRead, pgx.Serializable} {
-		t.Run(string(isolation), func(t *testing.T) {
+	for _, tc := range []struct {
+		isolation pgx.TxIsoLevel
+		reinstall bool
+	}{{pgx.ReadCommitted, false}, {pgx.RepeatableRead, false}, {pgx.Serializable, false}, {pgx.RepeatableRead, true}} {
+		isolation := tc.isolation
+		name := string(isolation)
+		if tc.reinstall {
+			name += "_across_down_and_reinstall"
+		}
+		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			f := newAssessmentFixtureThrough(t, "000088_production_assessment_fairness.up.sql")
@@ -184,6 +199,13 @@ func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
 			f.exec(t, insertRun, run, profile.ClusterID, profile.SourceID, hash, slot, domain.QueryGPUTemperature)
 			f.exec(t, insertRun, secondRun, profile.ClusterID, profile.SourceID, secondPayload, slot, domain.QueryGPUPower)
 
+			up, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations.up.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.reinstall {
+				f.exec(t, string(up)+"INSERT INTO public.schema_migrations(version) VALUES (90)")
+			}
 			receipt, err := f.admin.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
 			if err != nil {
 				t.Fatal(err)
@@ -215,6 +237,13 @@ func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer rollbackMonitoringTx(upgrade)
+			if tc.reinstall {
+				down, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations.down.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				f.exec(t, string(down)+"DELETE FROM public.schema_migrations WHERE version=90")
+			}
 			var pending chan error
 			if isolation == pgx.ReadCommitted {
 				// Hold the catalog cutover open so the actual INSERT statement is
@@ -243,12 +272,8 @@ func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
 				 observed_at,collected_at,source_reference,sample_fingerprint)
 				VALUES('pre-cutover-alternate',$1,$2,$3,1,'gpu_temperature','fixture','fixture','[]',1,'celsius',
 				$4,$4,'fixture','fixture'::bytea)`, run, profile.ClusterID, profile.SourceID, slot)
-			body, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations.up.sql")
-			if err != nil {
-				t.Fatal(err)
-			}
 			// Match sherlock-migrate's atomic DDL and migration-ledger commit.
-			if _, err := upgrade.Exec(ctx, string(body)+"INSERT INTO public.schema_migrations(version) VALUES (90)"); err != nil {
+			if _, err := upgrade.Exec(ctx, string(up)+"INSERT INTO public.schema_migrations(version) VALUES (90)"); err != nil {
 				t.Fatal(err)
 			}
 			if err := upgrade.Commit(ctx); err != nil {
@@ -301,6 +326,81 @@ func TestCoolingReceiptProofAcrossCutoverSnapshots(t *testing.T) {
 			if err != nil || !proven || locators != 1 {
 				t.Fatalf("post-upgrade receipt proven=%t concurrent locators=%d: %v", proven, locators, err)
 			}
+		})
+	}
+}
+
+func TestCoolingReceiptMigrationDefersToUpload(t *testing.T) {
+	for _, direction := range []string{"up", "down"} {
+		t.Run(direction, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			last := "000089_cooling_observation_lookup.up.sql"
+			if direction == "down" {
+				last = "000090_cooling_receipt_observations.up.sql"
+			}
+			f := newAssessmentFixtureThrough(t, last)
+			now := time.Now().UTC()
+			writer, profile, hash := seedAssessmentUploadProfile(t, f, now)
+			report := assessmentUploadReport(profile, hash, domain.QueryGPUTemperature, now.Truncate(domain.CoolingUploadInterval))
+			// Pause the real writer after its deduplication SELECT and before it
+			// takes the observations write lock. It still holds ACCESS SHARE on receipts.
+			f.exec(t, `CREATE FUNCTION fixture_pause_upload() RETURNS trigger LANGUAGE plpgsql AS $$
+				BEGIN PERFORM pg_advisory_xact_lock(9021); RETURN NEW; END $$;
+				CREATE TRIGGER fixture_pause_upload AFTER INSERT ON public.collection_runs
+				FOR EACH ROW EXECUTE FUNCTION fixture_pause_upload()`)
+			barrier, err := f.admin.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rollbackMonitoringTx(barrier)
+			if _, err = barrier.Exec(ctx, `SELECT pg_advisory_xact_lock(9021)`); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() {
+				ok, err := writer.RecordCoolingUpload(ctx, profile.CollectorID, profile.ClusterID, report)
+				if err == nil && !ok {
+					err = errors.New("upload was not admitted")
+				}
+				done <- err
+			}()
+			for {
+				var paused bool
+				err := f.admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks a
+					JOIN pg_locks r ON a.pid=r.pid
+					WHERE a.locktype='advisory' AND a.objid=9021 AND NOT a.granted
+					AND r.relation='public.prometheus_cooling_upload_receipts'::regclass
+					AND r.granted AND r.mode='AccessShareLock')`).Scan(&paused)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if paused {
+					break
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			body, err := os.ReadFile("../../../migrations/000090_cooling_receipt_observations." + direction + ".sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = f.admin.Exec(ctx, string(body))
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "55P03" || !strings.Contains(pgErr.Message, "could not obtain lock on relation") {
+				t.Fatalf("migration must yield immediately to upload's receipt lock: %v", err)
+			}
+			if err := barrier.Rollback(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			var samples int
+			if err := f.admin.QueryRow(ctx, `SELECT count(*) FROM public.prometheus_cooling_upload_receipts u
+				JOIN public.observations o USING(run_id) WHERE u.run_id=$1`, report.Result.Task.RunID).Scan(&samples); err != nil || samples != len(profile.Assets) {
+				t.Fatalf("concurrent upload committed %d samples: %v", samples, err)
+			}
+			f.exec(t, string(body))
 		})
 	}
 }
