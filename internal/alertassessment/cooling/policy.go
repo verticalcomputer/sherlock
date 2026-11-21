@@ -126,6 +126,20 @@ type Details struct {
 }
 type Category struct{}
 
+// ReplaysVisibleInputOnly opts cooling into catch-up over visible input only.
+// Over an unchanged visible fact set, cooling's results move with logical time
+// only through the freshness of the latest sample and through samples leaving
+// the history window the engine sends (900 s; cooling selects up to history
+// plus freshness before the logical time). A stale current endpoint yields no
+// tracker or arm state change, and persistence, settling and re-arm checks are
+// anchored to that endpoint's source time. The only purely time-driven terminal
+// is the fallback at the arm deadline, which the engine applies as a deadline.
+// Cooling requests no wakes. A change that breaks any of these must return
+// false here.
+func (Category) ReplaysVisibleInputOnly() bool { return true }
+
+var _ a.VisibleInputReplay = Category{}
+
 func (Category) Describe() a.Descriptor {
 	outcomes := []a.Outcome{}
 	for _, p := range []string{"DISCOVER", "ASSESS"} {

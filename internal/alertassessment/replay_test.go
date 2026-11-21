@@ -437,6 +437,10 @@ func TestAssessmentReplayArchiveRejectsTraversal(t *testing.T) {
 
 type reassessmentContextFixture struct{ cooling.Category }
 
+// The fixture records the logical time in its tracker state, so it does not
+// meet the visible-input-only conditions it would otherwise inherit.
+func (reassessmentContextFixture) ReplaysVisibleInputOnly() bool { return false }
+
 func (reassessmentContextFixture) ValidateResult(context.Context, a.Request, a.Result) error {
 	return nil
 }
