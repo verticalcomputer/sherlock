@@ -162,20 +162,21 @@ func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen bool) {
 		if err = store.refreshAsset(ctx, asset, false); err != nil {
 			t.Fatal(err)
 		}
-		var kinds, transitions []string
+		var kinds, decisions, transitions []string
 		var status string
 		var recoverAt, processed time.Time
-		err = f.admin.QueryRow(ctx, `SELECT array_agg(e.kind ORDER BY e.sequence),array_agg(q.transition ORDER BY e.sequence),i.status,max(e.occurred_at) FILTER (WHERE e.kind='RECOVER'),
+		err = f.admin.QueryRow(ctx, `SELECT array_agg(e.kind ORDER BY e.sequence),array_agg(d.kind ORDER BY e.sequence),array_agg(q.transition ORDER BY e.sequence),i.status,max(e.occurred_at) FILTER (WHERE e.kind='RECOVER'),
 			(convert_from(s.snapshot,'UTF8')::jsonb->>'processed_at')::timestamptz
 			FROM production_notification_events e JOIN production_notification_occurrences o USING (occurrence_id)
 			JOIN gp09_alert_outbox q ON q.event_key=e.event_id JOIN incidents i USING (incident_id)
+			JOIN production_assessment_decisions d ON d.event_id=e.event_id AND d.occurrence_id=o.occurrence_id AND d.closed_at=o.closed_at
 			JOIN production_assessment_states s ON s.enrollment_id=o.enrollment_id AND s.asset=o.asset
-			WHERE o.enrollment_id=$1 GROUP BY i.status,s.snapshot`, run).Scan(&kinds, &transitions, &status, &recoverAt, &processed)
+			WHERE o.enrollment_id=$1 GROUP BY i.status,s.snapshot`, run).Scan(&kinds, &decisions, &transitions, &status, &recoverAt, &processed)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Equal(kinds, []string{"OPEN", "RECOVER"}) || !slices.Equal(transitions, []string{"ASSESSMENT_OPEN", "ASSESSMENT_RECOVER"}) || status != "RESOLVED" || !recoverAt.Before(start.Add(510*time.Second)) || processed.Before(start.Add(525*time.Second)) {
-			t.Fatalf("retry %d: %v / %v, incident %s, recovered %s, checkpoint %s", attempt, kinds, transitions, status, recoverAt, processed)
+		if !slices.Equal(kinds, []string{"OPEN", "RECOVER"}) || !slices.Equal(decisions, []string{"TERMINAL", "RECOVER"}) || !slices.Equal(transitions, []string{"ASSESSMENT_OPEN", "ASSESSMENT_RECOVER"}) || status != "RESOLVED" || !recoverAt.Before(start.Add(510*time.Second)) || processed.Before(start.Add(525*time.Second)) {
+			t.Fatalf("retry %d: decisions %v, notifications %v / %v, incident %s, recovered %s, checkpoint %s", attempt, decisions, kinds, transitions, status, recoverAt, processed)
 		}
 	}
 }
