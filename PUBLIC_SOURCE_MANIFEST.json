@@ -2157,8 +2157,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/cooling/evaluator.go",
-      "sha256": "f76f1ce410c06d6e5cb6fd4e2d0d983df5330817b888d46a6c3f01b0de6ed4f0",
-      "size": 15910
+      "sha256": "fa455437ee5fe8a1cd7843dd934e2cbc11d1039c874481e5bcf8abdf2f98d45a",
+      "size": 15920
     },
     {
       "executable": false,
@@ -2169,14 +2169,14 @@
     {
       "executable": false,
       "path": "internal/alertassessment/cooling/evidence.go",
-      "sha256": "8faa5c125e7da60a3236307a602d93cf65db7a3e6c57836f9364aa79016fd28a",
-      "size": 17326
+      "sha256": "9d2278a7d60c6e2410a5e489e7c35ffce090a366f653bf9fc09cb673a2b544fe",
+      "size": 17698
     },
     {
       "executable": false,
       "path": "internal/alertassessment/cooling/evidence_test.go",
-      "sha256": "c554894c978714453b1bcaaf91fca92421fb16f83fe728f7f52dfba44a973ae0",
-      "size": 8046
+      "sha256": "9d4357da26f01d81d178e8a1a04e569309685efec204fc7ef196eabb55e94232",
+      "size": 8890
     },
     {
       "executable": false,
@@ -2205,14 +2205,14 @@
     {
       "executable": false,
       "path": "internal/alertassessment/host.go",
-      "sha256": "d393f3d9a1f97711a0a6dab5ce04f9a0723886087c619edfdafb54ab037d7dd6",
-      "size": 50224
+      "sha256": "892aed10d2139223009afaf67d3b79825641bf8dbe33a9e9134c67cecd74dd5a",
+      "size": 51131
     },
     {
       "executable": false,
       "path": "internal/alertassessment/host_test.go",
-      "sha256": "c1090639879d73a30b574b40951c513293d28c53439ad391fef1d7f2fb1207fb",
-      "size": 34716
+      "sha256": "da55679c043a51bd0a005262c68c87025cf17d0ce3bce5dc5d56eccb143a5784",
+      "size": 36966
     },
     {
       "executable": false,
@@ -2235,20 +2235,20 @@
     {
       "executable": false,
       "path": "internal/alertassessment/production.go",
-      "sha256": "51a17acd2306243987ef94660cec461afc76e8c9de7db76b6788e039df205f2c",
-      "size": 11510
+      "sha256": "8d6d227a0ad0d7616ba40c399301d02fe7619806a90c6470c0656f429ec6c4a7",
+      "size": 15418
     },
     {
       "executable": false,
       "path": "internal/alertassessment/production_batch.go",
-      "sha256": "b5ea6a1e826e95bd29b294d0a927e3ea769aa92a587086eb5f633bcdc4f3975c",
-      "size": 6247
+      "sha256": "2e5fb4dcdeb016cb2c833c21c8be81784d8a0fc451d377aaa9f6c3235f75ea83",
+      "size": 9687
     },
     {
       "executable": false,
       "path": "internal/alertassessment/production_batch_test.go",
-      "sha256": "d031b698d167618d0e0b53f370c6850f3e6f7ae77a0570d59b1cb01bec9f33b3",
-      "size": 9450
+      "sha256": "c10d636d17071a151ea71fc031880d345254b887465025b880291951a03036da",
+      "size": 20099
     },
     {
       "executable": false,
@@ -2271,8 +2271,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/replay.go",
-      "sha256": "0687578644e9f521550c7ba69e257f3dc09ea8f84ff50beab9b53a5cd5e9e73c",
-      "size": 140641
+      "sha256": "5860b1cd432829b98ee5fdf645824fa3f0b5a55a2261285553cea2502fb3bbc0",
+      "size": 141678
     },
     {
       "executable": false,
@@ -5139,8 +5139,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/assessment_input.go",
-      "sha256": "4f8eec81d73155b0defd49a1f5b89f631e1e6a677974f00c23377d8b51506132",
-      "size": 34533
+      "sha256": "50f1009e2aad616ed9e5b3d642784c7261982928fdaea3b5d80e10e91f160df0",
+      "size": 34593
     },
     {
       "executable": false,
@@ -5715,8 +5715,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment.go",
-      "sha256": "8c199a51f47635c7fb75556eae3e9dfdd43046c059e8abbec63da18f9b15edf5",
-      "size": 25341
+      "sha256": "14e6caac56344b128953d78c2e1ee95e95e9e31fbe73f5abf26a2b1d08ac35c7",
+      "size": 26636
     },
     {
       "executable": false,
@@ -5763,8 +5763,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_status.go",
-      "sha256": "87913a4e18f2f7ac31f9520bfa699fb0e8a94886f0f9014ae0184c3c9f60718b",
-      "size": 2675
+      "sha256": "f00d4465e59ab27fe165992fa6afa2cac1e09c0b84ab07781102542d90102bcd",
+      "size": 3067
     },
     {
       "executable": false,
@@ -5799,8 +5799,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_ordered_backlog_integration_test.go",
-      "sha256": "3d133d24ad9d571b302a5ab98ec96b3aebcbdf7112a79f80ea7a26d835c2628d",
-      "size": 336
+      "sha256": "ddb74dbf701326ca3662add6f2013308d6e983348632353a46fcd77af571e1a1",
+      "size": 343
     },
     {
       "executable": false,
@@ -5811,8 +5811,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_ordered_publication_integration_test.go",
-      "sha256": "cecd92dc2f0ad8edbef6503b59c27a330ba064e5b3416d5564e1b63244b5c643",
-      "size": 13150
+      "sha256": "4fc2aa4d371c8fb6a8db4b8ba6fd3f1498a549413dc5ef537ddf86457e2978fb",
+      "size": 25386
     },
     {
       "executable": false,
@@ -7610,6 +7610,18 @@
     },
     {
       "executable": false,
+      "path": "migrations/000091_production_assessment_replay.down.sql",
+      "sha256": "70c8da8f57f7d0a05892bde9981ae8cbddcd166ce7fad17230bf6029305faaab",
+      "size": 478
+    },
+    {
+      "executable": false,
+      "path": "migrations/000091_production_assessment_replay.up.sql",
+      "sha256": "caf2b989fb529d22ef0bb57bd4ddc4ccadc0779409b9be7e702c918e8bbf0f9e",
+      "size": 283
+    },
+    {
+      "executable": false,
       "path": "next.md",
       "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
       "size": 7098
@@ -7821,7 +7833,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "8fe240a154c3a722f2267ae235fd4e219c5937a817e91add7852da45f12a5ff4",
+      "sha256": "df1da74fd4c7607a8b58d9a7ae3cc69e357f29b1c2fccddebade2ea8a969b44e",
       "size": 16457
     },
     {
