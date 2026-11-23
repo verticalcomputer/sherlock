@@ -69,12 +69,38 @@ type Descriptor struct {
 	Updates         []Update      `json:"updates"`
 	PayloadLimits   PayloadLimits `json:"payload_limits"`
 }
+
+// Category is a plugin evaluated by the host engine.
+//
+// Evaluation timing: during continuous operation the engine invokes a
+// category when its visible input changes (a fact becomes available, or a
+// fact's source boundary at or after that availability passes), at arm
+// deadlines, and at the first pass at or after a wake (a NextLogicalAt the
+// category requested, or one the engine sets to retry a failed call). Catch-up
+// after downtime also invokes at earlier source boundaries of facts that were
+// not yet visible, unless the category opts in through VisibleInputReplay.
 type Category interface {
 	Describe() Descriptor
 	ValidatePolicy(context.Context, Payload) error
 	Evaluate(context.Context, Request) (Result, error)
 	ValidateResult(context.Context, Request, Result) error
 }
+
+// VisibleInputReplay is implemented by a category whose results over an
+// unchanged visible fact set change only at arm deadlines and wakes, or as
+// samples leave the history window the engine sends. For such a category,
+// catch-up reconstructs only the instants continuous evaluation would act on,
+// which skips one invocation per hidden source boundary. Between reconstructed
+// instants the request differs only in logical time and in samples leaving
+// that window; continuous evaluation does not invoke there either. Catch-up
+// does not schedule wakes inside the gap.
+type VisibleInputReplay interface {
+	Category
+	// ReplaysVisibleInputOnly reports whether the conditions above hold. A
+	// wrapper whose own results depend on logical time must return false.
+	ReplaysVisibleInputOnly() bool
+}
+
 type FeatureRef struct {
 	ID          string    `json:"id"`
 	Value       float64   `json:"value"`

@@ -219,6 +219,10 @@ type Engine struct {
 	// The empty key applies to the entire existing run.
 	ExpiryFailure map[string]string
 	recoveryOnly  bool
+	// replayHiddenBoundaries restores the previous reconstruction, which also
+	// invoked at source boundaries before their fact was available. It exists
+	// only as the reference for differential tests.
+	replayHiddenBoundaries bool
 }
 
 func NewEngine(ctx context.Context, c Config, start time.Time, r *Registry) (*Engine, error) {
@@ -2119,10 +2123,21 @@ func (e *Engine) applyArmEvent(ctx context.Context, en *Enrollment, at, executed
 // Reconstruct each retained event after effective entry. Intermediate
 // nonterminal state is staged in this same pass; overdue arms receive their
 // final disposition before the pass commits.
+//
+// For a VisibleInputReplay category, events are the instants at which
+// continuous evaluation would act: each fact's availability, and its source
+// boundary only when that boundary is not earlier than the availability
+// (trackBoundary never schedules an earlier one). A boundary that precedes
+// availability falls where the fact is still invisible, so the visible input
+// there equals the preceding event's. Arm deadlines in between are applied
+// before every event, as before. Late catch-up samples are all available at
+// the pass time, so this avoids one tracker and arm invocation per missed
+// source slot over unchanged input. Other categories keep every boundary.
 func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, entered, at, executed, committed time.Time, faults []Fault, includeWake bool) {
 	e.attemptedGPUWork = true
 	times := []time.Time{}
 	samples := checkedSamples(ctx)
+	visibleOnly := e.visibleInputReplay()
 	if includeWake {
 		times = append(times, at)
 	}
@@ -2131,6 +2146,9 @@ func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, ente
 			continue
 		}
 		for _, t := range []time.Time{f.AvailableAt, rawBoundaryWithSamples(f, e.Config.Category, samples)} {
+			if visibleOnly && t.Before(f.AvailableAt) {
+				continue
+			}
 			if t.After(entered) && t.Before(at) {
 				times = append(times, t)
 			}
@@ -2165,6 +2183,18 @@ func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, ente
 		e.qualifiedTelemetry(ctx, en, event, priorSequence)
 		en.ProcessedAt = event
 	}
+}
+
+// visibleInputReplay reports whether the evaluated category opted into
+// reconstructing visible input only. It looks the category up by the same key
+// that Registry.Invoke uses for this engine's requests.
+func (e *Engine) visibleInputReplay() bool {
+	if e.replayHiddenBoundaries || e.Registry == nil {
+		return false
+	}
+	c, _, _, err := e.Registry.LookupVersion(e.Config.Category, e.Config.Implementation)
+	v, ok := c.(VisibleInputReplay)
+	return err == nil && ok && v.ReplaysVisibleInputOnly()
 }
 
 type ReplayError struct{ Code string }
