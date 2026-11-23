@@ -125,9 +125,10 @@ func loadProductionUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
  CASE WHEN pg_column_size(r.metric_fields)>65536 THEN
   CASE WHEN octet_length(r.metric_fields::text)<=65536 THEN r.metric_fields END
  ELSE r.metric_fields END AS metric_fields,
- p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at
+ p.profile_id,p.profile_hash,p.revision,i.revision_id,i.source_at,
+ CASE WHEN u.xmin=r.run_writer THEN u.xmin::text ELSE '' END AS upload_writer
  FROM prometheus_cooling_upload_receipts u JOIN prometheus_cooling_upload_profiles p ON p.profile_id=u.profile_id AND p.revision=u.profile_revision AND p.profile_hash=u.profile_hash AND p.collector_id=u.collector_id
- JOIN LATERAL (SELECT * FROM collection_runs WHERE run_id=u.run_id OFFSET 0) r
+ JOIN LATERAL (SELECT collection_runs.*,xmin AS run_writer FROM collection_runs WHERE run_id=u.run_id OFFSET 0) r
  ON r.cluster_id=p.cluster_id AND r.source_id=p.source_id
  LEFT JOIN LATERAL (SELECT revision_id,source_at FROM goodput_inventory_revisions WHERE cluster_id=$1 AND source_id=$2 AND inventory_class='EXPECTED' AND effective_at<=r.scheduled_for AND observed_at<=r.completed_at ORDER BY effective_at DESC,observed_at DESC,source_at DESC,revision_id DESC LIMIT 1)i ON true
  WHERE p.cluster_id=$1 AND p.source_id=$2 AND r.query_kind=$3 AND r.range_start IS NULL AND r.job_id IS NULL
@@ -142,7 +143,7 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,ob
  CASE WHEN profile_ordinal=1 THEN
   (SELECT p.profile FROM prometheus_cooling_upload_profiles p
    WHERE p.profile_id=projected.profile_id AND p.revision=projected.revision AND p.profile_hash=projected.profile_hash)
- END,profile_hash,revision,revision_id,source_at
+ END,profile_hash,revision,revision_id,source_at,upload_writer
  FROM projected ORDER BY received_at DESC,run_id DESC`, c.ClusterID, c.SourceID, query, from, at, b.UploadProfileID, b.ScheduleRevision, b.UploadCollectorID, c.InventoryRevision)
 	if err != nil {
 		return nil, nil, false, err
@@ -157,7 +158,7 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,ob
 		if len(ids) >= 256 {
 			return attempts, ids, true, nil
 		}
-		var id, hash string
+		var id, hash, writer string
 		var revision int64
 		var fieldsChanged bool
 		var slot, completed, received time.Time
@@ -166,7 +167,7 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,ob
 		var fieldsBody, profileBody []byte
 		var inventory *string
 		var inventoryAt *time.Time
-		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &lookupComplete, &fieldsBody, &fieldsChanged, &profileBody, &hash, &revision, &inventory, &inventoryAt); err != nil {
+		if err := rows.Scan(&id, &slot, &completed, &received, &status, &complete, &lookupComplete, &fieldsBody, &fieldsChanged, &profileBody, &hash, &revision, &inventory, &inventoryAt, &writer); err != nil {
 			return nil, nil, false, err
 		}
 		if err := ctx.Err(); err != nil {
@@ -201,7 +202,9 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,ob
 		}
 		p := a.Provenance{Mode: "upload", CollectionRunID: id, Operation: b.Operation, ScheduleRevision: profile.Revision, InventoryRevision: profile.InventoryRevision, CollectorID: string(profile.CollectorID), UploadProfileID: profile.ProfileID, UploadProfileHash: hash}
 		ids = append(ids, id)
-		attempts[id] = assessmentAttempt{completed: completed.UTC(), scheduled: slot.UTC(), provenance: p, usable: status == domain.ResultSucceeded && complete && supported && inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)}
+		inventoryOK := inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)
+		reportOK := status == domain.ResultSucceeded && complete && supported
+		attempts[id] = assessmentAttempt{received: received.UTC(), uploadWriter: writer, completed: completed.UTC(), scheduled: slot.UTC(), provenance: p, usable: reportOK && inventoryOK, originalNegative: !reportOK && inventoryOK}
 	}
 	return attempts, ids, false, rows.Err()
 }

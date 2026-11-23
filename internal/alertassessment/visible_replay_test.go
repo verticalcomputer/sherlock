@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -342,5 +343,150 @@ func TestVisibleReplayIsOptIn(t *testing.T) {
 	}
 	if opted := sc.run(t, false); opted.calls >= full.calls {
 		t.Fatalf("opted-in category did not skip hidden boundaries: %d >= %d", opted.calls, full.calls)
+	}
+}
+
+// A hidden source time can coincide with a change to previously visible
+// evidence: the oldest sample drops out, while the last endpoint is fresh.
+// Record exactly what the real cooling tracker sees between the two passes.
+type windowProbe struct {
+	cooling.ProductionCategory
+	edge, after               time.Time
+	expired, latest, incoming string
+	reached                   atomic.Bool
+}
+
+func (p *windowProbe) Evaluate(ctx context.Context, r a.Request) (a.Result, error) {
+	if r.Scope == "TRACKER" && r.Purpose == "FOLLOW_UP" && r.LogicalAt.Equal(p.after) {
+		contains := func(id string) bool {
+			return slices.ContainsFunc(r.Facts, func(f a.Fact) bool { return f.ID == id })
+		}
+		p.reached.Store(!contains(p.expired) && contains(p.latest) && !contains(p.incoming))
+	}
+	return p.ProductionCategory.Evaluate(ctx, r)
+}
+
+func TestVisibleReplayRevisitsTrackerWhenWindowShrinks(t *testing.T) {
+	rc := newReplayCase(t, false)
+	at := func(s int) time.Time { return rc.start.Add(time.Duration(s) * time.Second) }
+	probe := &windowProbe{edge: at(1050), after: at(1057)}
+	reg, err := a.NewRegistry(cooling.Category{}, probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc.r = reg
+	var raw []byte
+	for s := 0; s <= 1035; s += 15 {
+		temp := rc.sample(cooling.Temperature, at(s), at(s), 82)
+		if s == 150 {
+			probe.expired = temp.ID
+		}
+		if s == 1035 {
+			probe.latest = temp.ID
+		}
+		raw, _, _ = rc.pass(raw, at(s), []a.Fact{temp, rc.sample(cooling.Power, at(s), at(s), 200)})
+	}
+	raw, _, _ = rc.pass(raw, at(1045), nil)
+	end := at(1069)
+	first := rc.sample(cooling.Temperature, probe.edge, end, 83)
+	second := rc.sample(cooling.Temperature, probe.after, end, 84)
+	probe.incoming = second.ID
+	rc.pass(raw, end, []a.Fact{first, second})
+	if !probe.reached.Load() {
+		t.Fatal("tracker never saw the shortened history before the delayed samples became available")
+	}
+}
+
+func TestVisibleReplayPreservesInactiveDiscoveryRevision(t *testing.T) {
+	sc := visibleScenarios()[0]
+	sc.downtime = 540 * time.Second
+	sc.passes = 13
+	sc.cold = func(d time.Duration) float64 {
+		if d > 690*time.Second {
+			return 82
+		}
+		return 55
+	}
+	sc.lag = func(d time.Duration) time.Duration {
+		if d < 570*time.Second {
+			return 0
+		}
+		return time.Hour
+	}
+	full, opt := sc.run(t, true), sc.run(t, false)
+	for i := range full.snaps {
+		if string(full.snaps[i]) != string(opt.snaps[i]) || full.decisions[i] != opt.decisions[i] {
+			t.Fatalf("pass %d diverged after re-arm", i)
+		}
+	}
+}
+
+func TestVisibleReplayRetriesRearmAfterDisposition(t *testing.T) {
+	run := func(legacy bool) time.Duration {
+		rc := newReplayCase(t, legacy)
+		p := cooling.DefaultPolicy()
+		p.RearmSeconds, p.SettlingSeconds, p.PersistentConfirmSeconds = 15, 45, 120
+		rc.c.Assessment.Policy, _ = json.Marshal(p)
+		at := func(s int) time.Time { return rc.start.Add(time.Duration(s) * time.Second) }
+		var raw []byte
+		for s := 0; s <= 105; s += 15 {
+			temp := 55.
+			if s <= 60 {
+				temp = 82
+			}
+			raw, _, _ = rc.pass(raw, at(s), []a.Fact{rc.sample(cooling.Temperature, at(s), at(s), temp), rc.sample(cooling.Power, at(s), at(s), 200)})
+		}
+		var facts []a.Fact
+		for s := 120; s <= 195; s += 15 {
+			available := at(s)
+			if s%30 != 0 {
+				available = at(195)
+			}
+			facts = append(facts, rc.sample(cooling.Temperature, at(s), available, 55), rc.sample(cooling.Power, at(s), available, 200))
+		}
+		_, out, _ := rc.pass(raw, at(195), facts)
+		for _, line := range strings.Split(out, "\n") {
+			var d a.Decision
+			if json.Unmarshal([]byte(line), &d) == nil && d.Kind == "RECOVER" {
+				return d.LogicalAt.Sub(rc.start)
+			}
+		}
+		t.Fatal("missing recovery")
+		return 0
+	}
+	for _, legacy := range []bool{true, false} {
+		if when := run(legacy); when != 135*time.Second {
+			t.Fatalf("legacy=%t recovered at %s", legacy, when)
+		}
+	}
+}
+
+func TestVisibleReplayAfterEmptyPassFinalizesArm(t *testing.T) {
+	for _, legacy := range []bool{true, false} {
+		rc := newReplayCase(t, legacy)
+		p := cooling.DefaultPolicy()
+		p.RearmSeconds, p.SettlingSeconds, p.PersistentConfirmSeconds = 15, 240, 120
+		rc.c.Assessment.Policy, _ = json.Marshal(p)
+		at := func(s int) time.Time { return rc.start.Add(time.Duration(s) * time.Second) }
+		var raw []byte
+		for s := 0; s <= 120; s += 15 {
+			temp := 55.
+			if s <= 60 {
+				temp = 82
+			}
+			raw, _, _ = rc.pass(raw, at(s), []a.Fact{rc.sample(cooling.Temperature, at(s), at(s), temp), rc.sample(cooling.Power, at(s), at(s), 200)})
+		}
+		raw, _, _ = rc.pass(raw, at(151), nil)
+		_, out, _ := rc.pass(raw, at(181), []a.Fact{rc.sample(cooling.Power, at(152), at(181), 200)})
+		var recovered time.Time
+		for _, line := range strings.Split(out, "\n") {
+			var d a.Decision
+			if json.Unmarshal([]byte(line), &d) == nil && d.Kind == "RECOVER" {
+				recovered = d.LogicalAt
+			}
+		}
+		if !recovered.Equal(at(152)) {
+			t.Fatalf("legacy=%t recovered at %s, want %s", legacy, recovered, at(152))
+		}
 	}
 }

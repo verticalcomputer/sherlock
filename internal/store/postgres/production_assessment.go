@@ -18,9 +18,10 @@ import (
 // ProductionAssessmentStore has no collection or workload execution interface.
 // It consumes admitted receipts and publishes atomically via the shared outbox.
 type ProductionAssessmentStore struct {
-	pool     *pgxpool.Pool
-	registry *a.Registry
-	config   a.ProductionConfig
+	pool           *pgxpool.Pool
+	registry       *a.Registry
+	config         a.ProductionConfig
+	orderedCooling bool
 }
 
 func NewProductionAssessmentStore(ctx context.Context, pool *pgxpool.Pool, r *a.Registry, c a.ProductionConfig) (*ProductionAssessmentStore, error) {
@@ -31,7 +32,13 @@ func NewProductionAssessmentStore(ctx context.Context, pool *pgxpool.Pool, r *a.
 	if err != nil {
 		return nil, err
 	}
-	return &ProductionAssessmentStore{pool: pool, registry: r, config: c}, nil
+	category, _, _, err := r.LookupVersion(c.Assessment.Category, c.Assessment.Implementation)
+	if err != nil {
+		return nil, err
+	}
+	replay, ok := category.(a.VisibleInputReplay)
+	ordered := c.Assessment.Category == "gpu_cooling" && ok && replay.ReplaysVisibleInputOnly()
+	return &ProductionAssessmentStore{pool: pool, registry: r, config: c, orderedCooling: ordered}, nil
 }
 func (s *ProductionAssessmentStore) Start(ctx context.Context) error {
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
@@ -168,14 +175,37 @@ func (s *ProductionAssessmentStore) claimRefreshAttempt(ctx context.Context, ent
 	err = tx.Commit(ctx)
 	return tag.RowsAffected() == 1, assessmentTransactionError("production.claim_attempt", started, err, "unknown")
 }
-func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) (result error) {
+
+var errProductionDueInput = errors.New("failed to acquire input for a due assessment")
+
+func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) error {
+	if !dueOnly || !s.orderedCooling {
+		return s.refreshAssetTx(ctx, asset, dueOnly, false)
+	}
+	// Claims, speculative input and fallback all share the caller's GPU budget.
+	gpu, cancel := context.WithTimeout(ctx, a.ShadowGPUBudget)
+	defer cancel()
+	err := s.refreshAssetTx(gpu, asset, true, false)
+	if !errors.Is(err, errProductionDueInput) || gpu.Err() != nil {
+		return err
+	}
+	// A failed SQL statement can abort its transaction. Re-lock and re-read
+	// the current deadline, snapshot and notification controls before using
+	// retained proof. Reporting the original read error preserves accounting.
+	fallback := s.refreshAssetTx(gpu, asset, true, true)
+	return errors.Join(err, fallback)
+}
+
+func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.Asset, dueOnly, retainedOnly bool) (result error) {
 	stage, started, outcome := "production.begin", time.Now(), "not_attempted"
 	defer func() { result = assessmentTransactionError(stage, started, result, outcome) }()
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
 	if err != nil {
 		return err
 	}
-	defer rollbackMonitoringTx(tx)
+	// A failed acquisition may still need to release these locks before a
+	// retained-proof retry, within the same caller deadline.
+	defer func() { _ = tx.Rollback(ctx) }()
 	stage, started = "production.load", time.Now()
 	c := s.config.Assessment
 	var start, now time.Time
@@ -215,18 +245,46 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	stage, started = "production.input", time.Now()
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
-	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
-		facts, err = loadAssessmentInput(ctx, tx, c, asset, now, e.Facts)
+	canAcquire := admit || e.Enrollments[asset.EntityKey].Active
+	acquire := canAcquire && !retainedOnly && (!dueOnly || s.orderedCooling)
+	if acquire {
+		checkpoint := time.Time{}
+		if s.orderedCooling {
+			checkpoint = e.Enrollments[asset.EntityKey].ProcessedAt
+			// The first acquisition establishes the baseline. An enrollment
+			// creation timestamp alone does not prove a processed input view.
+			if !checkpoint.IsZero() && checkpoint.Before(start) {
+				checkpoint = start
+			}
+		}
+		readCtx := ctx
+		if dueOnly {
+			deadline, _ := ctx.Deadline()
+			var cancel context.CancelFunc
+			// Keep half the remaining time for an independent retained-proof
+			// transaction if the acquisition blocks or PostgreSQL cancels it.
+			readCtx, cancel = context.WithTimeout(ctx, time.Until(deadline)/2)
+			defer cancel()
+		}
+		facts, err = loadAssessmentInputAfter(readCtx, tx, c, asset, now, checkpoint, e.Facts)
 		if err != nil {
+			if dueOnly {
+				return errors.Join(err, errProductionDueInput)
+			}
 			return err
 		}
 	}
-	selected := []string{}
-	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
-		selected = []string{asset.EntityKey}
-	}
 	stage, started = "production.evaluate", time.Now()
-	if err = e.AdvanceAssets(ctx, now, now, now, facts, nil, selected); err != nil {
+	if acquire && s.orderedCooling {
+		err = e.AdvanceProductionBatch(ctx, asset.EntityKey, now, facts)
+	} else {
+		selected := []string{}
+		if acquire {
+			selected = []string{asset.EntityKey}
+		}
+		err = e.AdvanceAssets(ctx, now, now, now, facts, nil, selected)
+	}
+	if err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
@@ -437,10 +495,21 @@ type productionRefreshEntry struct {
 	due, dueAttempt, acquireAttempt *time.Time
 }
 
+// The durable attempt clock and stable rank in the enrollment's sorted
+// asset set give routine acquisition a repeatable phase across restarts.
+// An unattempted asset stays eligible until its first claim.
+const productionCoolingAcquisitionPeriod = 30 * time.Second
+
+func productionAcquisitionDue(now time.Time, last *time.Time, rank, total int) bool {
+	phase := time.Duration(rank*int(productionCoolingAcquisitionPeriod/time.Second)/total) * time.Second
+	boundary := now.Add(-phase).Truncate(productionCoolingAcquisitionPeriod).Add(phase)
+	return last == nil || last.Before(boundary)
+}
+
 func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]productionRefreshEntry, []productionRefreshEntry, error) {
 	bounded, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,clock_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset LIMIT 129`, s.config.Assessment.RunID)
+	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,statement_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset COLLATE "C" LIMIT 129`, s.config.Assessment.RunID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -450,6 +519,7 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 		assets[asset.EntityKey] = asset
 	}
 	due, acquisition := []productionRefreshEntry{}, []productionRefreshEntry{}
+	seen := 0
 	for rows.Next() {
 		var key string
 		var now time.Time
@@ -458,11 +528,14 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 			return nil, nil, err
 		}
 		asset, found := assets[key]
-		if !found || len(acquisition) >= a.MaxProductionGPUs {
+		if !found || seen >= a.MaxProductionGPUs {
 			return nil, nil, a.ErrInvalid
 		}
 		entry.asset = asset
-		acquisition = append(acquisition, entry)
+		if !s.orderedCooling || productionAcquisitionDue(now, entry.acquireAttempt, seen, len(assets)) {
+			acquisition = append(acquisition, entry)
+		}
+		seen++
 		if entry.due != nil && !entry.due.After(now) {
 			due = append(due, entry)
 		}
@@ -470,7 +543,7 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 	if err = rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	if len(acquisition) != len(assets) {
+	if seen != len(assets) {
 		return nil, nil, a.ErrInvalid
 	}
 	compareTime := func(x, y *time.Time) int {
