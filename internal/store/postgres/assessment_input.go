@@ -573,7 +573,7 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 }
 
 // Keep active OPENs and recoveries of retained OPENs. During ordered acquisition,
-// also read episodes wholly inside the unprocessed window so short episodes
+// also read recent episodes closing inside the unprocessed window so short episodes
 // survive polling. Earlier closed episodes stay outside the qualification budget.
 const assessmentQualifiedSQL = `
 WITH scope AS MATERIALIZED (
@@ -593,24 +593,24 @@ WITH scope AS MATERIALIZED (
  SELECT q.policy_id,q.occurrence,q.rule_id,q.rule_version,q.enrollment_revision
  FROM jsonb_to_recordset($6::jsonb) q(policy_id text,occurrence bigint,rule_id text,rule_version bigint,enrollment_revision bigint)
 ), transitions AS (
- SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot
+ SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot,e.closed_at
  FROM scope n
  JOIN gp09_monitor_episodes e ON e.cluster_id=n.cluster_id AND e.policy_id=n.policy_id AND e.enrollment_revision=n.enrollment_revision AND e.closed_at IS NULL
  JOIN gp09_monitor_transitions t ON t.cluster_id=e.cluster_id AND t.policy_id=e.policy_id AND t.occurrence=e.occurrence AND t.transition='OPEN'
  UNION ALL
- SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot
+ SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot,e.closed_at
  FROM retained r JOIN scope n USING (policy_id,rule_id,rule_version,enrollment_revision)
  JOIN gp09_monitor_episodes e ON e.cluster_id=n.cluster_id AND e.policy_id=n.policy_id AND e.enrollment_revision=n.enrollment_revision AND e.occurrence=r.occurrence
  JOIN gp09_monitor_transitions t ON t.cluster_id=e.cluster_id AND t.policy_id=e.policy_id AND t.occurrence=e.occurrence AND t.transition='RECOVER'
  UNION
- SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot
+ SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot,e.closed_at
  FROM scope n
  JOIN gp09_monitor_episodes e ON e.cluster_id=n.cluster_id AND e.policy_id=n.policy_id AND e.enrollment_revision=n.enrollment_revision
-  AND e.opened_at>$7::timestamptz AND e.closed_at<=$5
+  AND e.closed_at>$7::timestamptz AND e.closed_at<=$5 AND e.opened_at >= $5::timestamptz - interval '900 seconds'
  JOIN gp09_monitor_transitions t ON t.cluster_id=e.cluster_id AND t.policy_id=e.policy_id AND t.occurrence=e.occurrence
 )
 SELECT policy_id,occurrence,transition,rule_id,rule_version,enrollment_revision,severity,occurred_at,
-       CASE WHEN octet_length(snapshot::text)<=65536 THEN snapshot END
+       CASE WHEN octet_length(snapshot::text)<=65536 THEN snapshot END,coalesce(closed_at>$7::timestamptz AND closed_at<=$5,false)
 FROM transitions
 ORDER BY CASE WHEN transition='OPEN' AND severity='CRITICAL' THEN 0 WHEN transition='OPEN' THEN 1 ELSE 2 END,
          occurred_at,policy_id,occurrence,transition LIMIT 33`
@@ -651,7 +651,8 @@ func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a
 	for rows.Next() {
 		var q a.Qualified
 		var snapshot []byte
-		if err = rows.Scan(&q.PolicyID, &q.Occurrence, &q.Transition, &q.Rule, &q.RuleVersion, &q.EnrollmentRevision, &q.Severity, &q.QualifiedAt, &snapshot); err != nil {
+		var closedInWindow bool
+		if err = rows.Scan(&q.PolicyID, &q.Occurrence, &q.Transition, &q.Rule, &q.RuleVersion, &q.EnrollmentRevision, &q.Severity, &q.QualifiedAt, &snapshot, &closedInWindow); err != nil {
 			return nil, err
 		}
 		if len(out) >= 32 {
@@ -670,8 +671,17 @@ func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a
 			q.Snapshot = append(q.Snapshot, a.SnapshotEntry{Metric: s.Metric, SourceAt: s.Reference.ObservedAt, Value: s.Value, Unit: s.Unit, Support: support})
 		}
 		visible := at
-		if since != nil && q.QualifiedAt.After(*since) && !q.QualifiedAt.After(at) {
+		if since != nil && !q.QualifiedAt.After(at) && (q.QualifiedAt.After(*since) || closedInWindow) {
+			// The monitored transition has its own logical clock. A newly
+			// discovered OPEN can precede this checkpoint (e.g. a late commit).
+			// Preserve its order before RECOVER in the unprocessed interval.
 			visible = q.QualifiedAt
+			if !visible.After(*since) {
+				visible = since.Add(time.Microsecond)
+				if visible.After(at) {
+					visible = at
+				}
+			}
 		}
 		f, err := a.NewFact(c.Category, c.RunID, asset.EntityKey, "QUALIFIED", visible, q)
 		if err != nil {
