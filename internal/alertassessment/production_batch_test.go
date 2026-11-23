@@ -1,10 +1,12 @@
 package alertassessment_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -511,5 +513,67 @@ func TestProductionRejectsCorruptPendingReplay(t *testing.T) {
 				t.Fatalf("accepted corrupt replay: %v", err)
 			}
 		})
+	}
+}
+
+func TestProductionFreezeRejectsInvalidLaterReceipt(t *testing.T) {
+	rc := newReplayCase(t, false)
+	frontier := rc.start.Add(time.Minute)
+	now := frontier.Add(time.Minute)
+	later := rc.sample(cooling.Temperature, frontier, frontier, 72)
+	var sample a.Sample
+	if err := json.Unmarshal(later.Body, &sample); err != nil {
+		t.Fatal(err)
+	}
+	missing := rc.fact("PROVENANCE", frontier, a.ProvenanceFact{SampleID: strings.Repeat("b", 64), SourceRecord: sample.SourceRecord, Provenance: sample.Provenance})
+	mismatch := later
+	mismatch.ID = strings.Repeat("a", 64)
+	for _, tc := range []struct {
+		name string
+		bad  a.Fact
+	}{{"mismatched content identity", mismatch}, {"missing proof", missing}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := append(productionSamples(t, rc.c, rc.start, 55), tc.bad)
+			err = e.AdvanceProductionSlice(t.Context(), rc.asset, now, input, time.Now().Add(-time.Second), 1)
+			if !errors.Is(err, a.ErrInvalid) || e.ProductionBatchPending() || len(e.Facts) != 0 || len(e.Decisions) != 0 || !e.Enrollments[rc.asset].ProcessedAt.IsZero() {
+				t.Fatalf("invalid future receipt admitted or checkpointed: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductionFreezeOwnsEvidence(t *testing.T) {
+	rc := newReplayCase(t, false)
+	e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := rc.start.Add(time.Minute)
+	input := productionSamples(t, rc.c, rc.start, 55)
+	if err = e.AdvanceProductionSlice(t.Context(), rc.asset, now, input, time.Now().Add(-time.Second), 1); err != nil {
+		t.Fatal(err)
+	}
+	before, err := e.SnapshotProduction(rc.asset, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range input {
+		clear(f.Body)
+	}
+	after, err := e.SnapshotProduction(rc.asset, now)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("caller changed frozen evidence: %v", err)
+	}
+	if err = e.AdvanceProductionBatch(t.Context(), rc.asset, now, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range input {
+		if !json.Valid(e.Facts[f.ID].Body) {
+			t.Fatal("corrupted receipt reached the evaluator")
+		}
 	}
 }

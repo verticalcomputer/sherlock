@@ -194,26 +194,27 @@ type Engine struct {
 	exhausted     bool
 	lastPass      time.Time
 	// A production batch processes all earlier logical events before its frontier.
-	pendingReplay              *productionReplayBatch
-	productionSliceFailure     *Failure
-	orderedBatch               bool
-	batchWindowChanged         bool
-	previewComparisons         map[string]previewChange
-	endpointAvailability       map[string]string
-	descriptor                 Descriptor
-	descriptorHash, configHash string
-	policy                     Payload
-	UnknownFrom                *time.Time
-	UnknownThrough             *time.Time
-	archiveEvidence            *json.Encoder
-	archiveEvidenceErr         error
-	archiveSticky              [8][]archiveQualificationRef
-	archiveInputBound          map[string]time.Time
-	payloadReady               bool
-	factBytes                  int64
-	bundleBytes                int64
-	CoverageIntervals          []CoverageInterval
-	endpointConflictIDs        map[string][][32]byte
+	pendingReplay                 *productionReplayBatch
+	productionSliceFailure        *Failure
+	productionDiscoveryRestricted bool
+	orderedBatch                  bool
+	batchWindowChanged            bool
+	previewComparisons            map[string]previewChange
+	endpointAvailability          map[string]string
+	descriptor                    Descriptor
+	descriptorHash, configHash    string
+	policy                        Payload
+	UnknownFrom                   *time.Time
+	UnknownThrough                *time.Time
+	archiveEvidence               *json.Encoder
+	archiveEvidenceErr            error
+	archiveSticky                 [8][]archiveQualificationRef
+	archiveInputBound             map[string]time.Time
+	payloadReady                  bool
+	factBytes                     int64
+	bundleBytes                   int64
+	CoverageIntervals             []CoverageInterval
+	endpointConflictIDs           map[string][][32]byte
 	// ObserveGPU records one duration per asset advance that attempts evaluation,
 	// historical reconstruction or due fallback, including work before invocation.
 	ObserveGPU         func(asset string, elapsed time.Duration)
@@ -1068,6 +1069,13 @@ func (e *Engine) commitTime(fallback time.Time) time.Time {
 }
 
 func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact, error) {
+	return e.checkAdmission(ctx, at, facts, false)
+}
+
+// A frozen batch may outlive this transaction. Run its ordinary input and
+// proof checks before persisting any prefix, including proofs in later groups.
+// Validation leaves enrollment state, capacity, and evidence untouched.
+func (e *Engine) checkAdmission(ctx context.Context, at time.Time, facts []Fact, validateOnly bool) ([]Fact, error) {
 	if len(facts) == 0 {
 		return nil, nil
 	}
@@ -1119,6 +1127,9 @@ func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact,
 		}
 	}
 	for _, f := range ordered {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if f.Run != e.Config.RunID || e.Enrollments[f.Asset] == nil || f.AvailableAt.After(at) || f.AvailableAt.Before(e.StartAt) || !e.Config.production && !f.AvailableAt.Before(e.AdmissionEndAt) {
 			return nil, ErrInvalid
 		}
@@ -1175,12 +1186,15 @@ func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact,
 		}
 		added[f.ID] = f
 	}
-	if int64(len(e.Facts)+len(added)) > e.Config.Limits.FactCount {
+	if !validateOnly && int64(len(e.Facts)+len(added)) > e.Config.Limits.FactCount {
 		e.BeginDrain("CAPACITY")
 		e.recordFailure("CAPACITY", "", "fact_count", "", at, "", nil)
 		return nil, nil
 	}
 	for _, f := range added {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if !e.archiveInput && f.Kind == "TRACKER_CONTEXT" {
 			return nil, ErrInvalid
 		}
@@ -1195,12 +1209,15 @@ func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact,
 			}
 			closure[id] = ref
 		}
-		if err := ValidateFact(e.Config.Category, f, closure); err != nil {
+		if _, err := validateFact(ctx, e.Config.Category, f, closure); err != nil {
 			return nil, err
 		}
 		if f.Kind == "PROVENANCE" && !e.provenanceFactAuthorized(f, closure) {
 			return nil, ErrInvalid
 		}
+	}
+	if validateOnly {
+		return nil, ctx.Err()
 	}
 	var addedBytes int64
 	if !e.Shadow && !e.archiveInput {
@@ -1627,6 +1644,11 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 }
 
 func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, commit time.Time, faults []Fault, catchingUp bool) time.Time {
+	if e.productionDiscoveryRestricted {
+		en.DiscoveryFloor = at
+		en.NextLogicalAt = nil
+		return time.Time{}
+	}
 	e.attemptedGPUWork = true
 	if e.budgetSpent(ctx) {
 		e.fail("TIME_BUDGET", Request{Asset: en.Asset, Sequence: en.Sequence, Purpose: "DISCOVER", LogicalAt: at, ExecutedAt: executed, DiscoveryFloor: en.DiscoveryFloor})

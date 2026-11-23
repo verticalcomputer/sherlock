@@ -227,8 +227,7 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	var raw []byte
 	var due *time.Time
 	var pending bool
-	var lastInput *time.Time
-	err = tx.QueryRow(ctx, `SELECT snapshot,next_due_at,replay_pending,last_input_at FROM production_assessment_states WHERE enrollment_id=$1 AND asset=$2 FOR UPDATE`, c.RunID, asset.EntityKey).Scan(&raw, &due, &pending, &lastInput)
+	err = tx.QueryRow(ctx, `SELECT snapshot,next_due_at,replay_pending FROM production_assessment_states WHERE enrollment_id=$1 AND asset=$2 FOR UPDATE`, c.RunID, asset.EntityKey).Scan(&raw, &due, &pending)
 	if err != nil {
 		return err
 	}
@@ -253,9 +252,12 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	stage, started = "production.input", time.Now()
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
+	if !admit {
+		e.RestrictProductionDiscovery()
+	}
 	canAcquire := admit || e.Enrollments[asset.EntityKey].Active
 	acquire := !pending && canAcquire && !retainedOnly && (!dueOnly || s.orderedCooling)
-	var acquiredAt, gapEnd *time.Time
+	var acquiredAt, inputFrom *time.Time
 	if acquire {
 		checkpoint := time.Time{}
 		if s.orderedCooling {
@@ -285,9 +287,7 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 		if s.orderedCooling {
 			acquiredAt = &now
 			from := now.Add(-assessmentInputHistory)
-			if lastInput != nil && lastInput.Before(from) {
-				gapEnd = &from
-			}
+			inputFrom = &from
 		}
 	}
 	stage, started = "production.evaluate", time.Now()
@@ -397,9 +397,14 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	if failure := e.ProductionSliceFailure(); failure != nil {
 		code = failure.Code
 	}
+	// Legacy snapshots and queue attempts do not prove a successful source read.
+	// If no acquisition clock exists, coverage before this view is unknown
+	// from the enrollment start, including that first instant.
 	_, err = tx.Exec(ctx, `UPDATE production_assessment_states SET snapshot=$3,revision=revision+1,next_due_at=$4,replay_pending=$6,
-	last_input_gap=CASE WHEN $8::timestamptz IS NULL THEN last_input_gap ELSE tstzrange(last_input_at,$8,'()') END,
-	last_input_at=coalesce($7::timestamptz,last_input_at),last_attempt_at=clock_timestamp(),last_failure_code=$5,last_failure_at=CASE WHEN $5<>'' THEN clock_timestamp() ELSE last_failure_at END,failure_count=failure_count+CASE WHEN $5<>'' THEN 1 ELSE 0 END WHERE enrollment_id=$1 AND asset=$2`, c.RunID, asset.EntityKey, snapshot, nextDue, code, e.ProductionBatchPending(), acquiredAt, gapEnd)
+	last_input_gap=CASE WHEN $8::timestamptz > coalesce(last_input_at,$9::timestamptz)
+		THEN tstzrange(coalesce(last_input_at,$9),$8,CASE WHEN last_input_at IS NULL THEN '[)' ELSE '()' END)
+		ELSE last_input_gap END,
+	last_input_at=coalesce($7::timestamptz,last_input_at),last_attempt_at=clock_timestamp(),last_failure_code=$5,last_failure_at=CASE WHEN $5<>'' THEN clock_timestamp() ELSE last_failure_at END,failure_count=failure_count+CASE WHEN $5<>'' THEN 1 ELSE 0 END WHERE enrollment_id=$1 AND asset=$2`, c.RunID, asset.EntityKey, snapshot, nextDue, code, e.ProductionBatchPending(), acquiredAt, inputFrom, start)
 	if err != nil {
 		return err
 	}

@@ -21,10 +21,14 @@ import (
 )
 
 func TestProductionOrderedRecoveryAtomicRestart(t *testing.T) {
-	runOrderedRecoveryAtomicRestart(t, true)
+	runOrderedRecoveryAtomicRestart(t, true, true)
 }
 
-func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen bool) {
+func TestProductionOrderedFrozenInputsRespectAdmissionReserve(t *testing.T) {
+	runOrderedRecoveryAtomicRestart(t, false, true)
+}
+
+func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen, atCapacity bool) {
 	t.Helper()
 	f, store, config, profile, hash, now := productionFleetFixture(t, 1)
 	ctx := t.Context()
@@ -167,6 +171,34 @@ func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen bool) {
 	if !pending || bytes.Equal(checkpoint, before) || rows != baselineRows {
 		t.Fatalf("source acquisition failed to freeze input: pending=%t rows=%d", pending, rows)
 	}
+	if atCapacity {
+		// Simulate another asset using the last admission slot after the source
+		// read committed and before this asset resumes its accepted input.
+		f.exec(t, `UPDATE production_assessment_enrollments SET retained_events=9968 WHERE enrollment_id=$1`, run)
+		if !priorOpen {
+			for slice := 0; slice < 12; slice++ {
+				store = restart()
+				if err := store.refreshAsset(ctx, asset, false); err != nil {
+					t.Fatal(err)
+				}
+				checkpoint, pending, rows = state()
+				if rows != 0 {
+					t.Fatal("inactive asset opened a new occurrence using the active reserve")
+				}
+				if !pending {
+					break
+				}
+			}
+			var snap a.ProductionSnapshot
+			if err := json.Unmarshal(checkpoint, &snap); err != nil {
+				t.Fatal(err)
+			}
+			if pending || snap.Enrollment.Sequence != 0 || len(snap.Candidates) != 0 || len(snap.Facts) == 0 || snap.LastPass.Before(start.Add(525*time.Second)) {
+				t.Fatalf("inactive capacity replay did not consume its evidence: pending=%t sequence=%d facts=%d last=%v", pending, snap.Enrollment.Sequence, len(snap.Facts), snap.LastPass)
+			}
+			return
+		}
+	}
 	// Once input is frozen, exhausting a second slice before even one logical
 	// step must be observable and may not count as a successful checkpoint.
 	gpu, stop = context.WithTimeout(ctx, a.ShadowGPUBudget)
@@ -235,6 +267,11 @@ func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen bool) {
 			}
 		}
 		if attempt == 0 {
+			if atCapacity {
+				// Active recovery already committed using the reserve; allow the
+				// next acquisition to read the correction from the source.
+				f.exec(t, `UPDATE production_assessment_enrollments SET retained_events=(SELECT count(*) FROM production_assessment_decisions WHERE enrollment_id=$1) WHERE enrollment_id=$1`, run)
+			}
 			if err = lockTx.Rollback(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -492,4 +529,68 @@ func TestProductionOrderedReplayQueueFairness(t *testing.T) {
 		t.Fatal("healthy acquisition lost the historical coverage interval")
 	}
 
+}
+
+func TestProductionOrderedReplayInitialCoverageAndMigrationLocks(t *testing.T) {
+	f, s, c, _, _, now := productionFleetFixture(t, 2)
+	ctx := t.Context()
+	run := c.Assessment.RunID
+	old, fresh := c.Assessment.Assets[0], c.Assessment.Assets[1]
+	start := now.Add(-20 * time.Minute)
+	f.exec(t, `UPDATE production_assessment_enrollments SET created_at=$2 WHERE enrollment_id=$1`, run, start)
+	// An older evaluator left a recent snapshot; this proves an evaluation,
+	// but cannot establish when the source history was last read.
+	engine, err := a.NewProductionAssetEngine(ctx, c, start, s.registry, old.EntityKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = engine.Advance(ctx, now, now, now, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := engine.SnapshotProduction(old.EntityKey, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, `UPDATE production_assessment_states SET snapshot=$2,last_attempt_at=clock_timestamp() WHERE asset=$1`, old.EntityKey, raw)
+	// Both directions must back out promptly if a live reader holds the table.
+	// Retrying the same bytes after the reader commits must succeed.
+	for _, direction := range []string{"down", "up"} {
+		body, err := os.ReadFile("../../../migrations/000091_production_assessment_replay." + direction + ".sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		read, err := f.admin.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rollbackMonitoringTx(read)
+		if _, err = read.Exec(ctx, `LOCK TABLE production_assessment_states IN ACCESS SHARE MODE`); err != nil {
+			t.Fatal(err)
+		}
+		limited, cancel := context.WithTimeout(ctx, 4*time.Second)
+		_, err = f.admin.Exec(limited, string(body))
+		cancel()
+		var lockErr *pgconn.PgError
+		if !errors.As(err, &lockErr) || lockErr.Code != "55P03" {
+			t.Fatalf("%s migration lock: %v", direction, err)
+		}
+		if err = read.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		f.exec(t, string(body))
+	}
+	for _, asset := range []a.Asset{old, fresh} {
+		var unknown bool
+		if err := f.admin.QueryRow(ctx, `SELECT last_input_at IS NULL AND last_input_gap IS NULL FROM production_assessment_states WHERE asset=$1`, asset.EntityKey).Scan(&unknown); err != nil || !unknown {
+			t.Fatalf("invented source history during migration: %v", err)
+		}
+		if err := s.refreshAsset(ctx, asset, false); err != nil {
+			t.Fatal(err)
+		}
+		var gapIsExact bool
+		err := f.admin.QueryRow(ctx, `SELECT last_input_gap=tstzrange($2,last_input_at-interval '900 seconds','[)') FROM production_assessment_states WHERE asset=$1`, asset.EntityKey, start).Scan(&gapIsExact)
+		if err != nil || !gapIsExact {
+			t.Fatalf("first acquisition failed to expose unknown coverage from enrollment: %v", err)
+		}
+	}
 }

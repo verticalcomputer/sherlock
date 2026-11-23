@@ -1,6 +1,7 @@
 package alertassessment
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"time"
@@ -31,6 +32,11 @@ func (e *Engine) ProductionBatchPending() bool { return e.pendingReplay != nil }
 // ProductionSliceFailure reports the latest failure raised in this transaction.
 func (e *Engine) ProductionSliceFailure() *Failure { return e.productionSliceFailure }
 
+// RestrictProductionDiscovery reserves remaining publication capacity for
+// already admitted occurrences and their recovery. This applies to one engine
+// transaction and is deliberately omitted from the durable checkpoint.
+func (e *Engine) RestrictProductionDiscovery() { e.productionDiscoveryRestricted = e.Config.production }
+
 // AdvanceProductionSlice processes complete logical timestamps. A successful
 // soft yield must be committed with the pending agenda. A hard error requires
 // discarding the engine. Zero limits allow a caller to process the full batch.
@@ -60,7 +66,7 @@ func (e *Engine) AdvanceProductionSlice(ctx context.Context, asset string, now t
 	resuming := batch != nil
 	if !resuming {
 		var err error
-		batch, err = e.prepareProductionReplay(ctx, category, asset, now, facts)
+		batch, err = e.prepareProductionReplay(ctx, category, asset, now, facts, maxSteps > 0 || !stopBefore.IsZero())
 		if err != nil {
 			return err
 		}
@@ -123,7 +129,7 @@ func (e *Engine) AdvanceProductionSlice(ctx context.Context, asset string, now t
 	return ctx.Err()
 }
 
-func (e *Engine) prepareProductionReplay(ctx context.Context, category VisibleInputReplay, asset string, now time.Time, facts []Fact) (*productionReplayBatch, error) {
+func (e *Engine) prepareProductionReplay(ctx context.Context, category VisibleInputReplay, asset string, now time.Time, facts []Fact, mayYield bool) (*productionReplayBatch, error) {
 	history, freshness := category.ReplaySampleWindows(ctx, e.policy)
 	if history <= 0 || freshness <= 0 {
 		return nil, ErrInvalid
@@ -169,6 +175,10 @@ func (e *Engine) prepareProductionReplay(ctx context.Context, category VisibleIn
 	if len(facts) > MaxFacts {
 		return nil, ErrInvalid
 	}
+	var frozen []Fact
+	if mayYield {
+		frozen = make([]Fact, 0, len(facts))
+	}
 	inputBytes := 0
 	for _, f := range facts {
 		inputBytes += len(f.Body)
@@ -188,11 +198,20 @@ func (e *Engine) prepareProductionReplay(ctx context.Context, category VisibleIn
 			at = now
 			f.AvailableAt = now
 		}
+		if mayYield {
+			f.Body = bytes.Clone(f.Body)
+			frozen = append(frozen, f)
+		}
 		times[at] = true
 		receipts[at] = append(receipts[at], f)
 		schedule(f, at)
 	}
 
+	if mayYield {
+		if _, err := e.checkAdmission(ctx, now, frozen, true); err != nil {
+			return nil, err
+		}
+	}
 	agenda := make([]time.Time, 0, len(times))
 	for at := range times {
 		agenda = append(agenda, at)

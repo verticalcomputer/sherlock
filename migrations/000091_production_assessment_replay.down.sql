@@ -1,3 +1,4 @@
+SET LOCAL lock_timeout = '1s';
 -- Finish durable replay batches with the newer evaluator before downgrading.
 LOCK TABLE production_assessment_states IN ACCESS EXCLUSIVE MODE;
 DO $$
