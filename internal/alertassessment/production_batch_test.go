@@ -1,10 +1,12 @@
 package alertassessment_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -272,4 +274,306 @@ func TestProductionBatchStaleFinalPrefixMatchesEveryReceipt(t *testing.T) {
 		}
 		compare(t, raw, false)
 	})
+}
+
+// This models one delayed upload with paired sensors, a deadline, and a cool
+// sample during the gap. Every completed timestamp can be the last committed
+// one before a crash.
+func TestProductionSliceRestartMatchesUninterrupted(t *testing.T) {
+	rc := newReplayCase(t, false)
+	engine := func(raw []byte) *a.Engine {
+		t.Helper()
+		e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.RestoreProduction(rc.asset, raw); err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	snapshot := func(e *a.Engine, at time.Time) []byte {
+		t.Helper()
+		raw, err := e.SnapshotProduction(rc.asset, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	proofs := func(e *a.Engine) []string {
+		t.Helper()
+		var out []string
+		for _, d := range e.Decisions {
+			raw, err := e.ProductionEvidence(d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, string(raw))
+		}
+		return out
+	}
+	var inputs []a.Fact
+	for sec := 0; sec <= 510; sec += 15 {
+		temp := 80.0
+		if sec > 150 {
+			temp = 55
+		}
+		inputs = append(inputs, productionSamples(t, rc.c, rc.start.Add(time.Duration(sec)*time.Second), temp)...)
+	}
+	slices.Reverse(inputs)
+	through := rc.start.Add(520 * time.Second)
+	// Receipt/decision publication times stay fixed in this differential so the
+	// full immutable proofs, including their hashes and clocks, are comparable.
+	full := engine(nil)
+	if err := full.AdvanceProductionBatch(t.Context(), rc.asset, through, inputs); err != nil {
+		t.Fatal(err)
+	}
+	if len(full.Decisions) < 2 {
+		t.Fatalf("fixture lacks transitions: %+v", full.Decisions)
+	}
+	want := proofs(full)
+	e := engine(nil)
+	if err := e.AdvanceProductionSlice(t.Context(), rc.asset, through, inputs, time.Now().Add(-time.Second), 1); err != nil {
+		t.Fatal(err)
+	}
+	if !e.ProductionBatchPending() || len(e.Facts) != 0 {
+		t.Fatal("acquisition must checkpoint before evaluation")
+	}
+	var got []string
+	for i := 0; e.ProductionBatchPending(); i++ {
+		if i > 200 {
+			t.Fatal("cursor failed to advance")
+		}
+		// Pruning at a much later wall clock must not erase logical evidence.
+		raw := snapshot(e, through.Add(2*time.Hour))
+		e = engine(raw)
+		if err := e.AdvanceProductionSlice(t.Context(), rc.asset, through, inputs[:1], time.Time{}, 1); !errors.Is(err, a.ErrInvalid) {
+			t.Fatalf("accepted new facts while replaying: %v", err)
+		}
+		if err := e.AdvanceProductionSlice(t.Context(), rc.asset, through, nil, time.Time{}, 1); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, proofs(e)...)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("interrupted proofs differ: got %d want %d", len(got), len(want))
+	}
+	if string(snapshot(e, through)) != string(snapshot(full, through)) {
+		t.Fatal("interrupted snapshot differs")
+	}
+
+	// In service each slice has its own physical execution clock. No later
+	// publication can advance the frozen logical cutoff or change its decisions.
+	e = engine(nil)
+	if err := e.AdvanceProductionSlice(t.Context(), rc.asset, through, inputs, time.Time{}, 1); err != nil {
+		t.Fatal(err)
+	}
+	var delayed []a.Decision
+	delayed = append(delayed, e.Decisions...)
+	for i := 1; e.ProductionBatchPending(); i++ {
+		if i > 200 {
+			t.Fatal("delayed replay stuck")
+		}
+		physical := through.Add(time.Duration(i) * time.Minute)
+		e = engine(snapshot(e, physical))
+		if err := e.AdvanceProductionSlice(t.Context(), rc.asset, physical, nil, time.Time{}, 3); err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range e.Decisions {
+			if !d.ExecutedAt.Equal(physical) || !d.CommittedAt.Equal(physical) {
+				t.Fatal("backdated a delayed decision")
+			}
+		}
+		delayed = append(delayed, e.Decisions...)
+	}
+	if len(delayed) != len(full.Decisions) {
+		t.Fatalf("delayed replay lost transitions: %+v", delayed)
+	}
+	for i, d := range delayed {
+		ref := full.Decisions[i]
+		if d.ID != ref.ID || d.Kind != ref.Kind || d.Action != ref.Action || d.BundleID != ref.BundleID || !d.LogicalAt.Equal(ref.LogicalAt) || !slices.Equal(d.Support, ref.Support) {
+			t.Fatalf("delayed replay changed %s transition", ref.Kind)
+		}
+	}
+}
+
+func TestProductionSliceResumeAfterWallClockAdvances(t *testing.T) {
+	rc := newReplayCase(t, false)
+	fresh := func() *a.Engine {
+		t.Helper()
+		e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	e := fresh()
+	receipt := rc.start.Add(time.Minute)
+	through := receipt.Add(time.Minute)
+	resume := through.Add(time.Hour)
+	inputs := productionSamples(t, rc.c, receipt, 55)
+	inputs = append(inputs, rc.telemetryLoss("OPEN", 1, receipt, receipt), rc.telemetryLoss("RECOVER", 1, through, through))
+	inputs = append(inputs, rc.fact("COVERAGE", receipt, a.Coverage{Metric: cooling.Temperature, Code: "sparse", From: receipt, Through: receipt, SourceRecord: "gap"}))
+	if err := e.AdvanceProductionSlice(t.Context(), rc.asset, through, inputs, time.Time{}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if !e.ProductionBatchPending() || len(e.Telemetry) != 1 || e.ProductionSliceFailure() == nil {
+		t.Fatal("fixture did not produce both ledgers in its first timestamp")
+	}
+	for _, f := range inputs[:2] {
+		if _, ok := e.Facts[f.ID]; !ok {
+			t.Fatal("split a same-time receipt group")
+		}
+	}
+	snapshot, err := e.SnapshotProduction(rc.asset, resume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = fresh()
+	if err = e.RestoreProduction(rc.asset, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if e.ProductionSliceFailure() != nil {
+		t.Fatal("restored old failure as a fresh event")
+	}
+	if err = e.AdvanceProductionSlice(t.Context(), rc.asset, resume, nil, time.Now().Add(-time.Second), 1); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("silent no-progress retry: %v", err)
+	}
+	timedOut, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	if err = e.AdvanceProductionSlice(timedOut, rc.asset, resume, nil, time.Time{}, 1); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("hard timeout: %v", err)
+	}
+	for i := 0; e.ProductionBatchPending(); i++ {
+		if i > 20 {
+			t.Fatal("replay stuck")
+		}
+		if err = e.AdvanceProductionSlice(t.Context(), rc.asset, resume, nil, time.Time{}, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !e.Enrollments[rc.asset].ProcessedAt.Equal(through) {
+		t.Fatal("physical restart clock replaced frozen frontier")
+	}
+	for _, record := range e.Telemetry {
+		if record.RecoverFact != inputs[3].ID || !record.LastAt.Equal(through) || record.Count != 2 {
+			t.Fatalf("telemetry recovery lost: %+v", record)
+		}
+	}
+	if len(e.Telemetry) != 1 || e.ProductionSliceFailure() != nil {
+		t.Fatal("incorrect replay ledger")
+	}
+	late := rc.sample(cooling.Temperature, receipt.Add(time.Second), receipt.Add(time.Second), 56)
+	if err = e.AdvanceProductionBatch(t.Context(), rc.asset, resume, []a.Fact{late}); err != nil {
+		t.Fatal(err)
+	}
+	if f := e.Facts[late.ID]; !f.AvailableAt.Equal(resume) {
+		t.Fatalf("retroactive receipt %v", f.AvailableAt)
+	}
+}
+
+func TestProductionRejectsCorruptPendingReplay(t *testing.T) {
+	rc := newReplayCase(t, false)
+	engine := func() *a.Engine {
+		e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	e := engine()
+	now := rc.start.Add(time.Minute)
+	if err := e.AdvanceProductionSlice(t.Context(), rc.asset, now, productionSamples(t, rc.c, rc.start, 55), time.Now().Add(-time.Second), 1); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := e.SnapshotProduction(rc.asset, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(*a.ProductionSnapshot)
+	}{
+		{"missing horizon", func(s *a.ProductionSnapshot) { s.PendingReplay.Through = now.Add(time.Second) }},
+		{"unordered", func(s *a.ProductionSnapshot) { s.PendingReplay.Steps[0].At = now.Add(time.Second) }},
+		{"other asset", func(s *a.ProductionSnapshot) { s.PendingReplay.Steps[0].Facts[0].Asset = "other" }},
+		{"future fact", func(s *a.ProductionSnapshot) { s.PendingReplay.Steps[0].Facts[0].AvailableAt = now.Add(time.Second) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s a.ProductionSnapshot
+			if err := json.Unmarshal(raw, &s); err != nil {
+				t.Fatal(err)
+			}
+			tc.change(&s)
+			b, err := json.Marshal(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = engine().RestoreProduction(rc.asset, b); !errors.Is(err, a.ErrInvalid) {
+				t.Fatalf("accepted corrupt replay: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductionFreezeRejectsInvalidLaterReceipt(t *testing.T) {
+	rc := newReplayCase(t, false)
+	frontier := rc.start.Add(time.Minute)
+	now := frontier.Add(time.Minute)
+	later := rc.sample(cooling.Temperature, frontier, frontier, 72)
+	var sample a.Sample
+	if err := json.Unmarshal(later.Body, &sample); err != nil {
+		t.Fatal(err)
+	}
+	missing := rc.fact("PROVENANCE", frontier, a.ProvenanceFact{SampleID: strings.Repeat("b", 64), SourceRecord: sample.SourceRecord, Provenance: sample.Provenance})
+	mismatch := later
+	mismatch.ID = strings.Repeat("a", 64)
+	for _, tc := range []struct {
+		name string
+		bad  a.Fact
+	}{{"mismatched content identity", mismatch}, {"missing proof", missing}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := append(productionSamples(t, rc.c, rc.start, 55), tc.bad)
+			err = e.AdvanceProductionSlice(t.Context(), rc.asset, now, input, time.Now().Add(-time.Second), 1)
+			if !errors.Is(err, a.ErrInvalid) || e.ProductionBatchPending() || len(e.Facts) != 0 || len(e.Decisions) != 0 || !e.Enrollments[rc.asset].ProcessedAt.IsZero() {
+				t.Fatalf("invalid future receipt admitted or checkpointed: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductionFreezeOwnsEvidence(t *testing.T) {
+	rc := newReplayCase(t, false)
+	e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := rc.start.Add(time.Minute)
+	input := productionSamples(t, rc.c, rc.start, 55)
+	if err = e.AdvanceProductionSlice(t.Context(), rc.asset, now, input, time.Now().Add(-time.Second), 1); err != nil {
+		t.Fatal(err)
+	}
+	before, err := e.SnapshotProduction(rc.asset, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range input {
+		clear(f.Body)
+	}
+	after, err := e.SnapshotProduction(rc.asset, now)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("caller changed frozen evidence: %v", err)
+	}
+	if err = e.AdvanceProductionBatch(t.Context(), rc.asset, now, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range input {
+		if !json.Valid(e.Facts[f.ID].Body) {
+			t.Fatal("corrupted receipt reached the evaluator")
+		}
+	}
 }

@@ -197,3 +197,23 @@ func TestCoolingPersistentOnlySettlesAtDeadlineWithoutEarlierEndpoint(t *testing
 		t.Fatalf("persistent-only transient lacks its expected action or current endpoint: %+v", result)
 	}
 }
+
+func TestCoolingSupportLookupUsesVisibleValidSamples(t *testing.T) {
+	valid := sample(t, Temperature, clock(10), clock(10), 54)
+	sentinel := sample(t, Temperature, clock(12), clock(12), 140737488355328)
+	future := sample(t, Temperature, clock(11), clock(30), 57)
+	r := a.Request{Category: CategoryID, Scope: "ARM", Purpose: "ASSESS", LogicalAt: clock(20), AvailabilityCutoff: clock(20), Facts: []a.Fact{valid, sentinel, future}}
+	h, err := loadHistory(t.Context(), r, DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := evidence{ctx: t.Context(), h: h, req: r}
+	if got, ok := e.supportSample(valid.ID); !ok || got.Value != 54 {
+		t.Fatalf("visible support = %+v, %v", got, ok)
+	}
+	for _, id := range []string{sentinel.ID, future.ID, "missing"} {
+		if _, ok := e.supportSample(id); ok {
+			t.Fatal("accepted ineligible support")
+		}
+	}
+}

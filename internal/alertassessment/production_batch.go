@@ -1,6 +1,7 @@
 package alertassessment
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"time"
@@ -10,8 +11,39 @@ import (
 // order. The caller persists the resulting snapshot, decision proofs and input
 // progress in one transaction and discards the engine if that transaction fails.
 func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now time.Time, facts []Fact) error {
+	return e.AdvanceProductionSlice(ctx, asset, now, facts, time.Time{}, 0)
+}
+
+// A frozen agenda separates the physical time of a retry from the logical time
+// when its evidence was first seen. Dynamic candidate wakes are picked afresh
+// from the restored enrollment before each static step.
+type productionReplayStep struct {
+	At            time.Time `json:"at"`
+	WindowChanged bool      `json:"window_changed,omitempty"`
+	Facts         []Fact    `json:"facts,omitempty"`
+}
+type productionReplayBatch struct {
+	Through time.Time              `json:"through"`
+	Steps   []productionReplayStep `json:"steps"`
+}
+
+func (e *Engine) ProductionBatchPending() bool { return e.pendingReplay != nil }
+
+// ProductionSliceFailure reports the latest failure raised in this transaction.
+func (e *Engine) ProductionSliceFailure() *Failure { return e.productionSliceFailure }
+
+// RestrictProductionDiscovery reserves remaining publication capacity for
+// already admitted occurrences and their recovery. This applies to one engine
+// transaction and is deliberately omitted from the durable checkpoint.
+func (e *Engine) RestrictProductionDiscovery() { e.productionDiscoveryRestricted = e.Config.production }
+
+// AdvanceProductionSlice processes complete logical timestamps. A successful
+// soft yield must be committed with the pending agenda. A hard error requires
+// discarding the engine. Zero limits allow a caller to process the full batch.
+func (e *Engine) AdvanceProductionSlice(ctx context.Context, asset string, now time.Time, facts []Fact, stopBefore time.Time, maxSteps int) error {
+	e.productionSliceFailure = nil
 	now = clock(now)
-	if !e.Config.production || len(e.Config.Assets) != 1 || e.Enrollments[asset] == nil || now.Before(e.StartAt) || now.Before(e.lastPass) {
+	if !e.Config.production || len(e.Config.Assets) != 1 || e.Enrollments[asset] == nil || now.Before(e.StartAt) || now.Before(e.lastPass) || maxSteps < 0 {
 		return ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(ctx, ShadowGPUBudget)
@@ -22,16 +54,86 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 	ctx = withFactValidationCache(ctx)
 	category := e.visibleReplayCategory()
 	if category == nil {
+		if e.pendingReplay != nil {
+			return ErrInvalid
+		}
 		if err := e.AdvanceAssets(ctx, now, now, now, facts, nil, []string{asset}); err != nil {
 			return err
 		}
 		return ctx.Err()
 	}
-	history, freshness := category.ReplaySampleWindows(ctx, e.policy)
-	if history <= 0 || freshness <= 0 {
+	batch := e.pendingReplay
+	resuming := batch != nil
+	if !resuming {
+		var err error
+		batch, err = e.prepareProductionReplay(ctx, category, asset, now, facts, maxSteps > 0 || !stopBefore.IsZero())
+		if err != nil {
+			return err
+		}
+		e.pendingReplay = batch
+	} else if len(facts) != 0 || now.Before(batch.Through) {
 		return ErrInvalid
 	}
+	cursor := maxTime(e.StartAt, batch.Through.Add(-requestFactWindow)).Add(-time.Microsecond)
+	cursor = maxTime(cursor, e.lastPass)
+	e.orderedBatch = true
+	defer func() {
+		e.orderedBatch = false
+		e.batchWindowChanged = false
+	}()
+	for steps := 0; len(batch.Steps) > 0; steps++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if maxSteps > 0 && steps >= maxSteps || !stopBefore.IsZero() && !time.Now().Before(stopBefore) {
+			if resuming && steps == 0 {
+				return context.DeadlineExceeded
+			}
+			return nil
+		}
+		step := batch.Steps[0]
+		at := step.At
+		wake := func(t time.Time) {
+			if t.After(cursor) && t.Before(at) {
+				at = t
+			}
+		}
+		en := e.Enrollments[asset]
+		if en.NextLogicalAt != nil {
+			wake(*en.NextLogicalAt)
+		}
+		for _, c := range e.Candidates {
+			if c.Phase == "OBSERVING" {
+				wake(maxTime(c.DueAt, cursor.Add(time.Microsecond)))
+				if c.NextLogicalAt != nil {
+					wake(*c.NextLogicalAt)
+				}
+			}
+		}
+		var input []Fact
+		e.batchWindowChanged = false
+		if at.Equal(step.At) {
+			input = step.Facts
+			e.batchWindowChanged = step.WindowChanged
+			batch.Steps = batch.Steps[1:]
+		}
+		if err := e.AdvanceAssets(ctx, at, now, now, input, nil, []string{asset}); err != nil {
+			return err
+		}
+		cursor = at
+		if e.State == "CLOSED" {
+			break
+		}
+	}
+	e.pendingReplay = nil
+	return ctx.Err()
+}
 
+func (e *Engine) prepareProductionReplay(ctx context.Context, category VisibleInputReplay, asset string, now time.Time, facts []Fact, mayYield bool) (*productionReplayBatch, error) {
+	history, freshness := category.ReplaySampleWindows(ctx, e.policy)
+	if history <= 0 || freshness <= 0 {
+		return nil, ErrInvalid
+	}
 	// After a prolonged outage, the acquisition and snapshot contracts retain
 	// only one host history window. Keep older observing deadlines actionable.
 	cursor := maxTime(e.StartAt, now.Add(-requestFactWindow)).Add(-time.Microsecond)
@@ -66,16 +168,28 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 	}
 	for _, f := range e.Facts {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		schedule(f, f.AvailableAt)
 	}
+	if len(facts) > MaxFacts {
+		return nil, ErrInvalid
+	}
+	var frozen []Fact
+	if mayYield {
+		frozen = make([]Fact, 0, len(facts))
+	}
+	inputBytes := 0
 	for _, f := range facts {
-		if err := ctx.Err(); err != nil {
-			return err
+		inputBytes += len(f.Body)
+		if inputBytes > MaxInputBytes {
+			return nil, ErrInvalid
 		}
-		if f.Asset != asset || f.AvailableAt.IsZero() || f.AvailableAt.After(now) {
-			return ErrInvalid
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if f.Run != e.Config.RunID || f.Asset != asset || f.AvailableAt.IsZero() || f.AvailableAt.After(now) {
+			return nil, ErrInvalid
 		}
 		at := clock(f.AvailableAt)
 		if !at.After(cursor) {
@@ -84,57 +198,31 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 			at = now
 			f.AvailableAt = now
 		}
+		if mayYield {
+			f.Body = bytes.Clone(f.Body)
+			frozen = append(frozen, f)
+		}
 		times[at] = true
 		receipts[at] = append(receipts[at], f)
 		schedule(f, at)
 	}
 
+	if mayYield {
+		if _, err := e.checkAdmission(ctx, now, frozen, true); err != nil {
+			return nil, err
+		}
+	}
 	agenda := make([]time.Time, 0, len(times))
 	for at := range times {
 		agenda = append(agenda, at)
 	}
 	slices.SortFunc(agenda, time.Time.Compare)
 	agenda = e.coalesceStalePrefix(ctx, category, asset, cursor, freshness, agenda, receipts)
-	e.orderedBatch = true
-	defer func() {
-		e.orderedBatch = false
-		e.batchWindowChanged = false
-	}()
-	for len(agenda) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		at := agenda[0]
-		wake := func(t time.Time) {
-			if t.After(cursor) && t.Before(at) {
-				at = t
-			}
-		}
-		en := e.Enrollments[asset]
-		if en.NextLogicalAt != nil {
-			wake(*en.NextLogicalAt)
-		}
-		for _, c := range e.Candidates {
-			if c.Phase == "OBSERVING" {
-				wake(maxTime(c.DueAt, cursor.Add(time.Microsecond)))
-				if c.NextLogicalAt != nil {
-					wake(*c.NextLogicalAt)
-				}
-			}
-		}
-		if at.Equal(agenda[0]) {
-			agenda = agenda[1:]
-		}
-		e.batchWindowChanged = windowChanges[at]
-		if err := e.AdvanceAssets(ctx, at, now, now, receipts[at], nil, []string{asset}); err != nil {
-			return err
-		}
-		cursor = at
-		if e.State == "CLOSED" {
-			break
-		}
+	batch := &productionReplayBatch{Through: now, Steps: make([]productionReplayStep, 0, len(agenda))}
+	for _, at := range agenda {
+		batch.Steps = append(batch.Steps, productionReplayStep{At: at, WindowChanged: windowChanges[at], Facts: receipts[at]})
 	}
-	return ctx.Err()
+	return batch, ctx.Err()
 }
 
 // Admit stale facts together at the last stale instant, preserving every

@@ -453,9 +453,10 @@ func (s cachedFactBody) matches(category string, f Fact) bool {
 // temporal eligibility are always revalidated against the current request.
 // Cached bodies are private, read-only host values, never category arguments.
 type factBodyCache struct {
-	mu    sync.Mutex
-	items map[string]cachedFactBody
-	bytes int
+	mu       sync.Mutex
+	items    map[string]cachedFactBody
+	payloads map[string]Payload // last host-validated envelope per payload kind
+	bytes    int
 }
 
 func withFactValidationCache(ctx context.Context) context.Context {
@@ -934,11 +935,32 @@ func entryView(ctx context.Context, r Request, at time.Time) (Request, error) {
 	return view, err
 }
 
-func validateBoundedPayload(p Payload, category, kind string, schema, limit int64) error {
-	if int64(len(p.Body)) > limit {
+// validatePayload reuses only the host's structural, canonical-body and hash
+// checks. Descriptor bounds and exact metadata are checked on every call, and
+// the category still performs its own policy and result validation.
+func (c *factBodyCache) validatePayload(p Payload, category, kind string, schema, limit int64) error {
+	if int64(len(p.Body)) > limit || p.Category != category || p.Kind != kind || p.Schema != schema {
 		return ErrInvalid
 	}
-	return ValidatePayload(p, category, kind, schema)
+	if c == nil {
+		return ValidatePayload(p, category, kind, schema)
+	}
+	c.mu.Lock()
+	prev, ok := c.payloads[kind]
+	c.mu.Unlock()
+	if ok && prev.Category == category && prev.Schema == schema && prev.Hash == p.Hash && bytes.Equal(prev.Body, p.Body) {
+		return nil
+	}
+	if err := ValidatePayload(p, category, kind, schema); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	if c.payloads == nil {
+		c.payloads = make(map[string]Payload)
+	}
+	c.payloads[kind] = copyPayload(p)
+	c.mu.Unlock()
+	return nil
 }
 
 func stateDeclaration(r Request, d Descriptor) (kind string, version, limit int64) {
@@ -1055,7 +1077,7 @@ func matchSharedContext(r Request, d Descriptor, g *factGraph) bool {
 	return false
 }
 
-func boundedRequestMetadata(r Request, d Descriptor) bool {
+func boundedRequestMetadata(r Request, d Descriptor, samples *factBodyCache) bool {
 	if !validBundleEnvelope(r.Bundle) || r.Bundle.Run != r.Run || r.Bundle.Asset != r.Asset || !r.Bundle.LogicalAt.Equal(r.LogicalAt) || !r.Bundle.AvailabilityCutoff.Equal(r.AvailabilityCutoff) {
 		return false
 	}
@@ -1075,7 +1097,7 @@ func boundedRequestMetadata(r Request, d Descriptor) bool {
 		}
 	}
 	if s := r.SharedContext; s != nil {
-		if !ValidHash(s.BundleID) || validateBoundedPayload(s.Payload, d.Category, "tracker", d.TrackerSchema, d.PayloadLimits.Tracker) != nil {
+		if !ValidHash(s.BundleID) || samples.validatePayload(s.Payload, d.Category, "tracker", d.TrackerSchema, d.PayloadLimits.Tracker) != nil {
 			return false
 		}
 	}
@@ -1147,16 +1169,16 @@ func validateRequest(r Request, d Descriptor, hash string, samples *factBodyCach
 			return nil, ErrInvalid
 		}
 	}
-	if validateBoundedPayload(r.Policy, d.Category, "policy", d.PolicySchema, d.PayloadLimits.Policy) != nil {
+	if samples.validatePayload(r.Policy, d.Category, "policy", d.PolicySchema, d.PayloadLimits.Policy) != nil {
 		return nil, ErrInvalid
 	}
 	if r.State != nil {
 		kind, version, limit := stateDeclaration(r, d)
-		if validateBoundedPayload(*r.State, d.Category, kind, version, limit) != nil {
+		if samples.validatePayload(*r.State, d.Category, kind, version, limit) != nil {
 			return nil, ErrInvalid
 		}
 	}
-	if !boundedRequestMetadata(r, d) || !boundedRequestBytes(r) {
+	if !boundedRequestMetadata(r, d, samples) || !boundedRequestBytes(r) {
 		return nil, ErrInvalid
 	}
 	idx := make(map[string]Fact, len(r.Facts))
@@ -1315,7 +1337,7 @@ func (r *Registry) Invoke(ctx context.Context, req Request) (result Result, mate
 	if ctx.Err() != nil {
 		return Result{}, Request{}, fmt.Errorf("TIME_BUDGET")
 	}
-	if err := validateResultSize(req, x, d); err != nil {
+	if err := validateResultSize(req, x, d, samples); err != nil {
 		return Result{}, Request{}, fmt.Errorf("MALFORMED_RESULT: %w", ErrInvalid)
 	}
 	x = copyResult(x)
@@ -1388,7 +1410,7 @@ func materialize(r Request, result Result, g *factGraph) (Request, error) {
 	return r, nil
 }
 
-func validateResultSize(r Request, x Result, d Descriptor) error {
+func validateResultSize(r Request, x Result, d Descriptor, samples *factBodyCache) error {
 	if Set(x.UpdateCodes, 8) != nil || Set(x.Reasons, 8) != nil || hashSet(x.Support, 32) != nil || !boundedSummary(x.Summary) ||
 		x.ProposedFeatures == nil || len(x.ProposedFeatures) > 8 ||
 		(x.Kind != "ASSESSMENT" && x.Kind != "UPDATE" && x.Kind != "REARM" && x.Kind != "UNCHANGED") ||
@@ -1402,14 +1424,14 @@ func validateResultSize(r Request, x Result, d Descriptor) error {
 	}
 	if x.State != nil {
 		kind, version, limit := stateDeclaration(r, d)
-		if validateBoundedPayload(*x.State, d.Category, kind, version, limit) != nil {
+		if samples.validatePayload(*x.State, d.Category, kind, version, limit) != nil {
 			return ErrInvalid
 		}
 	}
-	if x.InitialCandidateState != nil && validateBoundedPayload(*x.InitialCandidateState, d.Category, "candidate", d.CandidateSchema, d.PayloadLimits.Candidate) != nil {
+	if x.InitialCandidateState != nil && samples.validatePayload(*x.InitialCandidateState, d.Category, "candidate", d.CandidateSchema, d.PayloadLimits.Candidate) != nil {
 		return ErrInvalid
 	}
-	if x.Details != nil && validateBoundedPayload(*x.Details, d.Category, "details", d.DetailsSchema, d.PayloadLimits.Details) != nil {
+	if x.Details != nil && samples.validatePayload(*x.Details, d.Category, "details", d.DetailsSchema, d.PayloadLimits.Details) != nil {
 		return ErrInvalid
 	}
 	b, err := Canonical(x.ProposedFeatures)
@@ -1427,7 +1449,7 @@ func validateResultSize(r Request, x Result, d Descriptor) error {
 }
 
 func ValidateResult(r Request, x Result, d Descriptor) error {
-	if err := validateResultSize(r, x, d); err != nil {
+	if err := validateResultSize(r, x, d, nil); err != nil {
 		return err
 	}
 	return validateResult(r, x, d, newFactGraph(r.Category, indexFacts(r.Facts)))

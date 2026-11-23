@@ -121,7 +121,7 @@ func (Category) Evaluate(ctx context.Context, r a.Request) (a.Result, error) {
 	if err != nil {
 		return a.Result{}, err
 	}
-	e := evidence{h: h, req: r, policy: p}
+	e := evidence{ctx: ctx, h: h, req: r, policy: p}
 	if r.Purpose == "DISCOVER" {
 		return e.discover(ctx)
 	}

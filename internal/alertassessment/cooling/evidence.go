@@ -44,8 +44,7 @@ type history struct {
 	conflicts     map[string]map[time.Time]time.Time
 	opens         []qualified
 	recoveries    map[a.Occurrence]qualified
-	index         map[string]a.Fact
-	samples       map[string]a.Sample
+	index         map[string]*a.Fact
 	events        []time.Time
 }
 
@@ -56,8 +55,7 @@ func loadHistory(ctx context.Context, r a.Request, p Policy) (*history, error) {
 		negatives:  make(map[string][]negative),
 		conflicts:  map[string]map[time.Time]time.Time{Temperature: {}, Power: {}},
 		recoveries: make(map[a.Occurrence]qualified),
-		index:      make(map[string]a.Fact, len(r.Facts)),
-		samples:    make(map[string]a.Sample),
+		index:      make(map[string]*a.Fact, len(r.Facts)),
 	}
 	floor := r.DiscoveryFloor
 	if r.Purpose == "FOLLOW_UP" {
@@ -70,7 +68,8 @@ func loadHistory(ctx context.Context, r a.Request, p Policy) (*history, error) {
 	}
 	addEvent(floor)
 	addEvent(r.LogicalAt)
-	for _, f := range r.Facts {
+	for i := range r.Facts {
+		f := &r.Facts[i]
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -80,7 +79,7 @@ func loadHistory(ctx context.Context, r a.Request, p Policy) (*history, error) {
 		h.index[f.ID] = f
 		switch f.Kind {
 		case "SAMPLE":
-			s, err := a.DecodeSample(ctx, r.Category, f)
+			s, err := a.DecodeSample(ctx, r.Category, *f)
 			if err != nil {
 				return nil, err
 			}
@@ -91,9 +90,6 @@ func loadHistory(ctx context.Context, r a.Request, p Policy) (*history, error) {
 			if !validSampleValue(s.Metric, s.Value) {
 				h.negatives[s.Metric] = append(h.negatives[s.Metric], negative{s.SourceAt, s.SourceAt, f.AvailableAt})
 				continue
-			}
-			if r.Purpose != "DISCOVER" {
-				h.samples[f.ID] = s
 			}
 			pt := point{f.ID, s.SourceAt, f.AvailableAt, s.Value}
 			switch {
@@ -169,6 +165,7 @@ func later(a, b time.Time) time.Time {
 func seconds(v int64) time.Duration { return time.Duration(v) * time.Second }
 
 type evidence struct {
+	ctx             context.Context
 	h               *history
 	req             a.Request
 	policy          Policy
@@ -412,6 +409,17 @@ func (e evidence) warmInterval(cur endpoint, duration, minimum int64, threshold 
 	return ps
 }
 
+// Support references are usually sparse. Resolve them against this request's
+// visible fact index and reuse the host-checked sample decode on demand.
+func (e evidence) supportSample(id string) (a.Sample, bool) {
+	f := e.h.index[id]
+	if f == nil || f.Kind != "SAMPLE" || e.req.Purpose == "DISCOVER" {
+		return a.Sample{}, false
+	}
+	s, err := a.DecodeSample(e.ctx, e.req.Category, *f)
+	return s, err == nil && validSampleValue(s.Metric, s.Value)
+}
+
 func (e evidence) referenceValid(ref *a.FeatureRef) bool {
 	if ref == nil || ref.SourceAt.After(e.logical) || ref.AvailableAt.After(e.cutoff) {
 		return false
@@ -428,7 +436,7 @@ func (e evidence) referenceValid(ref *a.FeatureRef) bool {
 	from := ref.SourceAt.Add(-seconds(e.policy.EndpointSeconds))
 	ps := make([]point, 0, len(b.Support))
 	for _, id := range b.Support {
-		s, ok := e.h.samples[id]
+		s, ok := e.supportSample(id)
 		if !ok || s.Metric != Temperature || s.Unit != "celsius" || s.SourceAt.Before(from) || s.SourceAt.After(ref.SourceAt) {
 			return false
 		}
@@ -464,7 +472,7 @@ func (e evidence) reboundValid(r *Rebound) bool {
 			return false
 		}
 		for _, raw := range b.Support {
-			s, ok := e.h.samples[raw]
+			s, ok := e.supportSample(raw)
 			if !ok || s.SourceAt.After(e.logical) || e.unknown(s.Metric, s.SourceAt, s.SourceAt, false) {
 				return false
 			}
