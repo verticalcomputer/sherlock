@@ -187,12 +187,15 @@ type Engine struct {
 	passMissing   map[string]bool
 	// LookupAdmittedFact only returns already-admitted facts. The archive reader
 	// exposes its full index through LookupFact for validation, not admission.
-	archiveInput               bool
-	proposalBytes              int
-	passFeatures               map[string]time.Time
-	boundaries                 map[string][]time.Time
-	exhausted                  bool
-	lastPass                   time.Time
+	archiveInput  bool
+	proposalBytes int
+	passFeatures  map[string]time.Time
+	boundaries    map[string][]time.Time
+	exhausted     bool
+	lastPass      time.Time
+	// A production batch processes all earlier logical events before its frontier.
+	orderedBatch               bool
+	batchWindowChanged         bool
 	previewComparisons         map[string]previewChange
 	endpointAvailability       map[string]string
 	descriptor                 Descriptor
@@ -443,7 +446,7 @@ func (e *Engine) request(ctx context.Context, en *Enrollment, at, executed time.
 	index := map[string]Fact{}
 	samples := checkedSamples(ctx)
 	inputBytes := 0
-	lower := at.Add(-900 * time.Second)
+	lower := at.Add(-requestFactWindow)
 	var add func(string) error
 	add = func(id string) error {
 		if err := ctx.Err(); err != nil {
@@ -676,21 +679,33 @@ func factRefs(f Fact) []string {
 	return nil
 }
 
+const requestFactWindow = 900 * time.Second
+
 func recentFact(f Fact, lower time.Time) bool {
-	switch f.Kind {
-	case "SAMPLE":
+	// Preserve the lightweight cutoff check for ordinary retained samples.
+	if f.Kind == "SAMPLE" {
 		var v Sample
 		return json.Unmarshal(f.Body, &v) == nil && !v.SourceAt.Before(lower)
-	case "COVERAGE":
-		var v Coverage
-		return json.Unmarshal(f.Body, &v) == nil && !v.Through.Before(lower)
+	}
+	t := historyBoundary(f, rawBoundary(f))
+	return !t.IsZero() && !t.Before(lower)
+}
+
+// historyBoundary is the timestamp used for a raw fact's rolling-window
+// cutoff. Request construction and historical replay must agree on it.
+func historyBoundary(f Fact, source time.Time) time.Time {
+	switch f.Kind {
+	case "SAMPLE", "COVERAGE":
+		return source
 	case "QUALIFIED":
-		return !maxTime(f.AvailableAt, rawBoundary(f)).Before(lower)
+		return maxTime(f.AvailableAt, source)
 	case "CONFLICT":
 		var v Conflict
-		return json.Unmarshal(f.Body, &v) == nil && !v.SourceAt.Before(lower)
+		if json.Unmarshal(f.Body, &v) == nil {
+			return v.SourceAt
+		}
 	}
-	return false
+	return time.Time{}
 }
 
 func (e *Engine) retain(r Request) {
@@ -1503,6 +1518,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 	if c.Phase != "OBSERVING" {
 		return
 	}
+	historicalStep := e.orderedBatch || len(catchingUp) > 0 && catchingUp[0]
 	code := e.expiryCause(c.Asset)
 	if code != "" && at.Before(c.DueAt) {
 		return
@@ -1522,7 +1538,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 		r := Request{CandidateID: c.ID, Asset: c.Asset, LogicalAt: at, ExecutedAt: executed, Purpose: "ASSESS"}
 		committed := e.commitTime(commit)
 		e.fail("TIME_BUDGET", r)
-		historical := len(catchingUp) > 0 && catchingUp[0] && at.Before(c.DueAt)
+		historical := historicalStep && at.Before(c.DueAt)
 		if historical || committed.Before(c.DueAt) {
 			return
 		}
@@ -1567,7 +1583,7 @@ func (e *Engine) assess(ctx context.Context, en *Enrollment, c *Candidate, at, e
 			e.terminal(ctx, c, m, x, "", committed)
 			return
 		}
-		if !committed.Before(c.DueAt) && !(len(catchingUp) > 0 && catchingUp[0] && at.Before(c.DueAt)) {
+		if !committed.Before(c.DueAt) && !(historicalStep && at.Before(c.DueAt)) {
 			if at.Before(c.DueAt) && ctx.Err() == nil && !e.exhausted {
 				at = c.DueAt
 				executed = committed
@@ -1698,7 +1714,7 @@ func (e *Engine) discover(ctx context.Context, en *Enrollment, at, executed, com
 			e.terminal(ctx, c, view, final, "", e.commitTime(commit))
 		} else {
 			armAt := qualified
-			if budget > 0 && !catchingUp && !qualified.Before(at) && !e.commitTime(commit).Before(due) {
+			if budget > 0 && !catchingUp && !e.orderedBatch && !qualified.Before(at) && !e.commitTime(commit).Before(due) {
 				armAt = due
 			}
 			e.assess(ctx, en, c, armAt, executed, commit, faults, catchingUp || qualified.Before(at))
@@ -1984,7 +2000,9 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 func (e *Engine) advanceAsset(ctx context.Context, en *Enrollment, at, executed, committed time.Time, admitted []Fact, faults []Fault, requested bool) {
 	suppression := e.expiryCause(en.Asset)
 	selected := requested && suppression == ""
-	if selected && e.State == "ACTIVE" && en.Active && !en.ProcessedAt.IsZero() && at.Sub(en.ProcessedAt) > time.Second {
+	// Ordered production has already visited all visible boundaries since its
+	// previous substep, including expiries and pending deadlines.
+	if !e.orderedBatch && selected && e.State == "ACTIVE" && en.Active && !en.ProcessedAt.IsZero() && at.Sub(en.ProcessedAt) > time.Second {
 		e.reconstructAfterEntry(ctx, en, en.ProcessedAt, at, executed, committed, faults, false)
 	}
 
@@ -2013,7 +2031,7 @@ func (e *Engine) advanceAsset(ctx context.Context, en *Enrollment, at, executed,
 		}
 		return
 	}
-	changed := e.lastPass.IsZero()
+	changed := e.lastPass.IsZero() || e.batchWindowChanged
 	for _, f := range admitted {
 		if f.Asset != en.Asset {
 			continue
@@ -2124,39 +2142,81 @@ func (e *Engine) applyArmEvent(ctx context.Context, en *Enrollment, at, executed
 // nonterminal state is staged in this same pass; overdue arms receive their
 // final disposition before the pass commits.
 //
-// For a VisibleInputReplay category, events are the instants at which
-// continuous evaluation would act: each fact's availability, and its source
-// boundary only when that boundary is not earlier than the availability
-// (trackBoundary never schedules an earlier one). A boundary that precedes
-// availability falls where the fact is still invisible, so the visible input
-// there equals the preceding event's. Arm deadlines in between are applied
-// before every event, as before. Late catch-up samples are all available at
-// the pass time, so this avoids one tracker and arm invocation per missed
-// source slot over unchanged input. Other categories keep every boundary.
+// A hidden source boundary can still matter when an earlier, already-visible
+// fact has left the history window. Keep the first such boundary after an
+// expiry unless a regular event already observed that change.
 func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, entered, at, executed, committed time.Time, faults []Fault, includeWake bool) {
 	e.attemptedGPUWork = true
-	times := []time.Time{}
-	samples := checkedSamples(ctx)
-	visibleOnly := e.visibleInputReplay()
-	if includeWake {
-		times = append(times, at)
+	type event struct {
+		at     time.Time
+		hidden bool
 	}
+	var events []event
+	var sampleEnds, otherEnds []time.Time
+	var lastFresh time.Time
+	category := e.visibleReplayCategory()
+	var horizon, freshness time.Duration
+	if category != nil {
+		horizon, freshness = category.ReplaySampleWindows(ctx, e.policy)
+	}
+	visibleOnly := horizon > 0 && freshness > 0
+	if includeWake {
+		events = append(events, event{at: at})
+	}
+	samples := checkedSamples(ctx)
 	for _, f := range e.Facts {
 		if f.Asset != en.Asset || f.AvailableAt.After(at) {
 			continue
 		}
-		for _, t := range []time.Time{f.AvailableAt, rawBoundaryWithSamples(f, e.Config.Category, samples)} {
-			if visibleOnly && t.Before(f.AvailableAt) {
+		source := rawBoundaryWithSamples(f, e.Config.Category, samples)
+		if f.AvailableAt.After(entered) && f.AvailableAt.Before(at) {
+			events = append(events, event{at: f.AvailableAt})
+		}
+		if source.After(entered) && source.Before(at) {
+			events = append(events, event{at: source, hidden: visibleOnly && source.Before(f.AvailableAt)})
+		}
+		// Facts first admitted at this pass cannot expire from an earlier
+		// historical view. Pinned samples may remain in request closures
+		// after the host window ends, until the category clips its own view.
+		if visibleOnly && f.AvailableAt.Before(at) {
+			boundary := historyBoundary(f, source)
+			if boundary.IsZero() {
 				continue
 			}
-			if t.After(entered) && t.Before(at) {
-				times = append(times, t)
+			end := boundary.Add(requestFactWindow)
+			if f.Kind == "SAMPLE" {
+				lastFresh = maxTime(lastFresh, source.Add(freshness))
+				for _, expiry := range []time.Time{end, source.Add(horizon)} {
+					if !expiry.Before(f.AvailableAt) && !expiry.Before(entered) && expiry.Before(at) {
+						sampleEnds = append(sampleEnds, expiry)
+					}
+				}
+			} else if !end.Before(f.AvailableAt) && !end.Before(entered) && end.Before(at) {
+				otherEnds = append(otherEnds, end)
 			}
 		}
 	}
-	slices.SortFunc(times, time.Time.Compare)
-	times = slices.CompactFunc(times, time.Time.Equal)
-	for _, event := range times {
+	slices.SortFunc(events, func(a, b event) int { return a.at.Compare(b.at) })
+	slices.SortFunc(sampleEnds, time.Time.Compare)
+	slices.SortFunc(otherEnds, time.Time.Compare)
+	previous := entered
+	// The persisted cursor does not say whether the last tracker evaluation
+	// ran before the arms finalized. Establish that fact on the first event.
+	trackerMayBeBlocked := true
+	for i := 0; i < len(events); {
+		event, hidden := events[i].at, events[i].hidden
+		i++
+		for i < len(events) && events[i].at.Equal(event) {
+			hidden = hidden && events[i].hidden
+			i++
+		}
+		observing, due := e.replayArms(en, event)
+		if hidden && en.Active && !due && !(trackerMayBeBlocked && !observing) &&
+			!windowChanged(otherEnds, previous, event) &&
+			(event.After(lastFresh) || !windowChanged(sampleEnds, previous, event)) {
+			continue
+		}
+		previous = event
 		for {
 			var next time.Time
 			for _, c := range e.Candidates {
@@ -2175,9 +2235,11 @@ func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, ente
 		priorSequence := int64(0)
 		if en.Active {
 			priorSequence = en.Sequence
+			trackerMayBeBlocked, _ = e.replayArms(en, event)
 			e.followTracker(ctx, en, event, executed, faults)
 			e.applyArmEvent(ctx, en, event, executed, committed, faults, true, event.Before(at))
 		} else {
+			trackerMayBeBlocked = true
 			e.discover(ctx, en, event, executed, committed, faults, event.Before(at))
 		}
 		e.qualifiedTelemetry(ctx, en, event, priorSequence)
@@ -2185,16 +2247,41 @@ func (e *Engine) reconstructAfterEntry(ctx context.Context, en *Enrollment, ente
 	}
 }
 
-// visibleInputReplay reports whether the evaluated category opted into
+// Tracker re-arm is blocked until every observing arm has a disposition.
+// Deadlines strictly before the event run first; those exactly at the event
+// run after the tracker. Record the arm state at the actual tracker call.
+func (e *Engine) replayArms(en *Enrollment, event time.Time) (observing, due bool) {
+	for _, c := range e.Candidates {
+		if c.Asset == en.Asset && c.Sequence == en.Sequence && c.Phase == "OBSERVING" {
+			observing = true
+			if !c.DueAt.After(event) {
+				return true, true
+			}
+		}
+	}
+	return observing, false
+}
+
+// Request window lower bounds are inclusive. An expiry exactly at the
+// previous evaluation can change this event; one exactly at this event cannot.
+func windowChanged(ends []time.Time, previous, event time.Time) bool {
+	i, _ := slices.BinarySearchFunc(ends, previous, time.Time.Compare)
+	return i < len(ends) && ends[i].Before(event)
+}
+
+// visibleReplayCategory reports whether the evaluated category opted into
 // reconstructing visible input only. It looks the category up by the same key
 // that Registry.Invoke uses for this engine's requests.
-func (e *Engine) visibleInputReplay() bool {
+func (e *Engine) visibleReplayCategory() VisibleInputReplay {
 	if e.replayHiddenBoundaries || e.Registry == nil {
-		return false
+		return nil
 	}
 	c, _, _, err := e.Registry.LookupVersion(e.Config.Category, e.Config.Implementation)
 	v, ok := c.(VisibleInputReplay)
-	return err == nil && ok && v.ReplaysVisibleInputOnly()
+	if err == nil && ok && v.ReplaysVisibleInputOnly() {
+		return v
+	}
+	return nil
 }
 
 type ReplayError struct{ Code string }
@@ -3995,7 +4082,7 @@ func (e *Engine) trimArchiveRing(ctx context.Context, at time.Time) {
 		delete(e.Bundles, id)
 	}
 	raw := []Fact{}
-	lower := at.Add(-900 * time.Second)
+	lower := at.Add(-requestFactWindow)
 	for id, f := range e.Facts {
 		if f.Kind == "FEATURE" || f.Kind == "TRACKER_CONTEXT" {
 			if !frozen[id] {

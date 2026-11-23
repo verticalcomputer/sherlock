@@ -106,7 +106,7 @@ client rollout.
 
 ## Database isolation
 
-Migration 82 creates seven assessment tables, validation/accounting helpers and a dependency view. Production tables receive no new assessment write path. The dedicated pool is bounded to two connections; production source queries use ordinary snapshots, not monitoring authority locks. Each serial wake selects one GPU for new work, ordered by due time and last attempt; already-due arms run first regardless of that selection. The per-GPU work limit is 250 ms and the whole serial refresh limit is 2 seconds, including source loading and persistence. The one-second ticker does not overlap refreshes; slow passes coalesce ticks. Database statements remain limited to 200 ms and lock waits to 50 ms. These execution limits do not extend the 0/15/30/60/120-second observation arms or change shadow notification behavior.
+Migration 82 creates seven assessment tables, validation/accounting helpers and a dependency view. Production tables receive no new assessment write path. The dedicated pool is bounded to two connections; production source queries use ordinary snapshots, not monitoring authority locks. Each serial wake selects one GPU for new work, ordered by due time and last attempt; already-due arms run first regardless of that selection. The per-GPU work limit is 500 ms and the whole serial refresh limit is 2 seconds, including source loading and persistence. The one-second ticker does not overlap refreshes; slow passes coalesce ticks. Database statements remain limited to 200 ms and lock waits to 50 ms. These execution limits do not extend the 0/15/30/60/120-second observation arms or change shadow notification behavior.
 
 `scripts/assessment-grants.sql` creates a NOLOGIN group and explicitly scoped grants. An authorized database owner provisions the login, password, CONNECT permission and membership. Admission examines effective privileges, including PUBLIC, authenticated/effective identities and reachable roles. Application routines beyond the exact reviewed validators, production mutation/maintenance privileges, schema creation, temporary-object creation and credential/receiver access are incompatible.
 
@@ -259,7 +259,7 @@ old occurrences retain their identities. Initial deployment must keep
 The 120-second observation ceiling permits early decisions; it is not a guarantee
 that an unreachable Slack receiver accepts a message in two minutes.
 Use a separate explicitly scoped evaluator and Slack worker per cluster rather
-than one process per GPU. Execution limits remain 250 ms/GPU, two seconds per
+than one process per GPU. Execution limits remain 500 ms/GPU, two seconds per
 serial refresh and two connections per evaluator,
 200 ms SQL statements and 50 ms locks. Retention has an independent 250 ms
 opportunity at startup and once per minute, sharing the same two-connection pool;
@@ -376,7 +376,7 @@ commit retires it without adding counts, coverage, or overflow again; confirmed
 abort permits retry. In-progress or unavailable outcome pauses refresh writes
 until a later bounded check resolves it. The normal successful flush performs no
 extra outcome query. This uses PostgreSQL `pg_xact_status`, not a new table or
-migration. Existing 250 ms GPU, 2-second refresh, 200 ms statement, and 50 ms lock
+migration. Existing 500 ms GPU, 2-second refresh, 200 ms statement, and 50 ms lock
 limits remain unchanged.
 
 Pending uncommitted summaries remain process-local; a process exit can lose
@@ -433,7 +433,18 @@ Start with notifications disabled. Compare per-slot outcomes with raw evidence,
 including partial reports and missing samples. Verify successful acquisitions
 for every enrolled asset and check new failure counters, full sweep time,
 intake lag, storage and WAL growth under simultaneous collection. The production
-limits remain 250 ms per GPU, 2 seconds per refresh and 15 seconds for a healthy
-fleet sweep. Enable the scoped Slack workers only after live coverage and timing
+evaluator budgets are 500 ms per GPU and 2 seconds per refresh. Continuous
+collectors still sample temperature and power every 15 seconds. The evaluator
+schedules routine acquisition every 30 seconds and processes intermediate
+evidence in order. An outstanding confirmation deadline can wake it earlier.
+For an original upload, the logical clock is the server-assigned receipt time
+when the committed receipt, collection run and observation share a writer and
+the receipt falls after the asset’s checkpoint. A correction or a newly
+discovered report from before that checkpoint takes effect at discovery.
+The receipt time describes when the server accepted the report within its
+transaction. Decision execution and persistence have their own timestamps.
+Measure the time from source observation to decision separately from the time
+spent waiting for qualification, confirmation, and delivery. A late actionable
+decision remains eligible for delivery. Enable the scoped Slack workers only after live coverage and timing
 pass. Keep the schema and receipt history in place if the evaluator needs to
 be stopped or the application rolled back.

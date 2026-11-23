@@ -5,4 +5,4 @@ package alertassessment
 func SetReplayHiddenBoundaries(e *Engine, on bool) { e.replayHiddenBoundaries = on }
 
 // VisibleInputReplayEnabled reports the engine's opt-in decision.
-func VisibleInputReplayEnabled(e *Engine) bool { return e.visibleInputReplay() }
+func VisibleInputReplayEnabled(e *Engine) bool { return e.visibleReplayCategory() != nil }

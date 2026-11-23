@@ -86,19 +86,19 @@ type Category interface {
 	ValidateResult(context.Context, Request, Result) error
 }
 
-// VisibleInputReplay is implemented by a category whose results over an
-// unchanged visible fact set change only at arm deadlines and wakes, or as
-// samples leave the history window the engine sends. For such a category,
-// catch-up reconstructs only the instants continuous evaluation would act on,
-// which skips one invocation per hidden source boundary. Between reconstructed
-// instants the request differs only in logical time and in samples leaving
-// that window; continuous evaluation does not invoke there either. Catch-up
-// does not schedule wakes inside the gap.
+// VisibleInputReplay opts a category into skipping hidden source events whose
+// rolling input has not changed. Deadlines, availability and eligible source
+// events still run. Categories with additional time-driven behavior must opt out.
 type VisibleInputReplay interface {
 	Category
 	// ReplaysVisibleInputOnly reports whether the conditions above hold. A
 	// wrapper whose own results depend on logical time must return false.
 	ReplaysVisibleInputOnly() bool
+	// ReplaySampleWindows returns the category's rolling sample history
+	// length and maximum endpoint age. While tracking an active occurrence
+	// with no fresh sample, losing older samples cannot change its result.
+	// Zero disables pruning.
+	ReplaySampleWindows(context.Context, Payload) (history, freshness time.Duration)
 }
 
 type FeatureRef struct {

@@ -242,7 +242,7 @@ func (e *Engine) SnapshotProductionContext(ctx context.Context, asset string, at
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if f.Asset == asset && recentFact(f, at.Add(-900*time.Second)) {
+		if f.Asset == asset && recentFact(f, at.Add(-requestFactWindow)) {
 			ids = append(ids, id)
 		}
 	}

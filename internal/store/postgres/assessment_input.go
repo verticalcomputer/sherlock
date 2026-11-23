@@ -226,23 +226,25 @@ const assessmentObservationSQL = assessmentObservationColumnsSQL + `
 // lookups parameterized so even a generic plan fetches evidence by its primary
 // key instead of scanning retained observations by run or by GPU. Recheck raw
 // scope before the global ordering and 257th-row truncation sentinel.
-const productionUploadObservationSQL = assessmentObservationColumnsSQL + `
+const productionUploadObservationSQL = assessmentObservationColumnsSQL + `,observation_writer
  FROM (SELECT DISTINCT unnest($3::text[]) AS selected_run) ids
  CROSS JOIN LATERAL (
   SELECT observation_id AS selected_id FROM public.prometheus_cooling_receipt_observations
   WHERE run_id=ids.selected_run AND entity_key=$5 OFFSET 0
  ) refs
  CROSS JOIN LATERAL (
-  SELECT * FROM public.observations WHERE observation_id=refs.selected_id OFFSET 0
+  SELECT observations.*,xmin::text AS observation_writer FROM public.observations WHERE observation_id=refs.selected_id OFFSET 0
  ) o` + assessmentObservationScopeSQL + `
  AND o.run_id=ids.selected_run AND o.entity_key=$5
  AND starts_with(ids.selected_run,'` + domain.CoolingUploadRunPrefix + `')` + assessmentObservationOrderSQL
 
 type assessmentAttempt struct {
-	completed  time.Time
-	scheduled  time.Time
-	usable     bool
-	provenance a.Provenance
+	received     time.Time
+	uploadWriter string
+	completed    time.Time
+	scheduled    time.Time
+	usable       bool
+	provenance   a.Provenance
 }
 
 func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, auth assessmentAuthority, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
@@ -345,7 +347,7 @@ func loadAssessmentUploadAttempts(ctx context.Context, tx pgx.Tx, c a.Config, as
 	return attempts, ids, false, rows.Err()
 }
 
-func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time, attempts map[string]assessmentAttempt, ids []string, known map[string]a.Sample) ([]a.Fact, bool, error) {
+func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, query domain.QueryKind, from, at time.Time, attempts map[string]assessmentAttempt, ids []string, known map[string]a.Sample, orderedAfter ...time.Time) ([]a.Fact, bool, error) {
 	if len(ids) == 0 {
 		return nil, false, nil
 	}
@@ -378,7 +380,12 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 		var run string
 		var labels, semantics []byte
 		var sourceClockQualified bool
-		if err := rows.Scan(&o.ID, &run, &o.ClusterID, &o.SourceID, &o.SchemaVersion, &o.Kind, &o.EntityKey, &o.Metric, &labels, &o.Value, &o.Unit, &o.ObservedAt, &o.CollectedAt, &semantics, &sourceClockQualified); err != nil {
+		var writer string
+		dest := []any{&o.ID, &run, &o.ClusterID, &o.SourceID, &o.SchemaVersion, &o.Kind, &o.EntityKey, &o.Metric, &labels, &o.Value, &o.Unit, &o.ObservedAt, &o.CollectedAt, &semantics, &sourceClockQualified}
+		if statement == productionUploadObservationSQL {
+			dest = append(dest, &writer)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, false, err
 		}
 		attempt := attempts[run]
@@ -415,16 +422,35 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 		p.SourceRecord = string(o.ID)
 		sensor, _ := domain.GPUHealthSensor(o.Metric)
 		sample := a.Sample{Metric: o.Metric, Unit: sensor.Unit, SourceAt: o.ObservedAt.UTC(), CollectedAt: o.CollectedAt.UTC(), CompletedAt: attempt.completed, Value: o.Value, SourceRecord: p.SourceRecord, Provenance: p}
-		if previous, ok := known[p.SourceRecord]; ok && sameAssessmentSample(previous, sample) {
+		previous, seenBefore := known[p.SourceRecord]
+		if seenBefore && sameAssessmentSample(previous, sample) {
 			continue
 		}
-		f, err := a.NewFact(c.Category, c.RunID, asset.EntityKey, "SAMPLE", at, sample)
+		visible := at
+		if len(orderedAfter) > 0 {
+			visible = productionSampleAdmission(attempt, writer, seenBefore, orderedAfter[0], at)
+		}
+		f, err := a.NewFact(c.Category, c.RunID, asset.EntityKey, "SAMPLE", visible, sample)
 		if err != nil {
 			return nil, false, err
 		}
 		out = append(out, f)
 	}
 	return out, truncated, rows.Err()
+}
+
+// A verified upload writes the observation, collection run and immutable receipt in
+// one transaction. Its server-assigned receipt timestamp is the logical event
+// time of that report, not a PostgreSQL commit timestamp. Only a committed
+// report visible to the reader and newer than this asset's checkpoint can
+// supply a historical event. Late commits and separately written or corrected
+// observations take effect at discovery and never change a published decision.
+func productionSampleAdmission(attempt assessmentAttempt, writer string, seenBefore bool, checkpoint, at time.Time) time.Time {
+	if checkpoint.IsZero() || seenBefore || writer == "" || writer != attempt.uploadWriter ||
+		!attempt.received.After(checkpoint) || attempt.received.After(at) || attempt.received.Before(attempt.completed) {
+		return at
+	}
+	return attempt.received
 }
 
 func sameAssessmentSample(previous, current a.Sample) bool {
@@ -437,6 +463,10 @@ func sameAssessmentSample(previous, current a.Sample) bool {
 }
 
 func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
+	return loadAssessmentInputAfter(ctx, tx, c, asset, at, time.Time{}, admitted...)
+}
+
+func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at, checkpoint time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
 	out := []a.Fact{}
 	// An equivalent repeat already has canonical bytes and first availability
 	// in this immutable snapshot. Still recheck the source attempt, inventory,
@@ -473,7 +503,7 @@ func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Ass
 			return nil, err
 		}
 		started = time.Now()
-		samples, sampleTruncated, err := loadAssessmentSamples(ctx, tx, c, asset, binding, authority.query, from, at, attempts, ids, known)
+		samples, sampleTruncated, err := loadAssessmentSamples(ctx, tx, c, asset, binding, authority.query, from, at, attempts, ids, known, checkpoint)
 		if err != nil {
 			if c.Production() && binding.UploadProfileID != "" {
 				err = assessmentTransactionError("production.input.samples", started, err, "not_attempted")

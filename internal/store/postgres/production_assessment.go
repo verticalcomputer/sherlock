@@ -18,9 +18,10 @@ import (
 // ProductionAssessmentStore has no collection or workload execution interface.
 // It consumes admitted receipts and publishes atomically via the shared outbox.
 type ProductionAssessmentStore struct {
-	pool     *pgxpool.Pool
-	registry *a.Registry
-	config   a.ProductionConfig
+	pool           *pgxpool.Pool
+	registry       *a.Registry
+	config         a.ProductionConfig
+	orderedCooling bool
 }
 
 func NewProductionAssessmentStore(ctx context.Context, pool *pgxpool.Pool, r *a.Registry, c a.ProductionConfig) (*ProductionAssessmentStore, error) {
@@ -31,7 +32,13 @@ func NewProductionAssessmentStore(ctx context.Context, pool *pgxpool.Pool, r *a.
 	if err != nil {
 		return nil, err
 	}
-	return &ProductionAssessmentStore{pool: pool, registry: r, config: c}, nil
+	category, _, _, err := r.LookupVersion(c.Assessment.Category, c.Assessment.Implementation)
+	if err != nil {
+		return nil, err
+	}
+	replay, ok := category.(a.VisibleInputReplay)
+	ordered := c.Assessment.Category == "gpu_cooling" && ok && replay.ReplaysVisibleInputOnly()
+	return &ProductionAssessmentStore{pool: pool, registry: r, config: c, orderedCooling: ordered}, nil
 }
 func (s *ProductionAssessmentStore) Start(ctx context.Context) error {
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
@@ -215,18 +222,39 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	stage, started = "production.input", time.Now()
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
-	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
-		facts, err = loadAssessmentInput(ctx, tx, c, asset, now, e.Facts)
+	canAcquire := admit || e.Enrollments[asset.EntityKey].Active
+	acquire := canAcquire && (!dueOnly || s.orderedCooling)
+	if acquire {
+		checkpoint := time.Time{}
+		if s.orderedCooling {
+			checkpoint = e.Enrollments[asset.EntityKey].ProcessedAt
+			if checkpoint.Before(start) {
+				checkpoint = start
+			}
+		}
+		facts, err = loadAssessmentInputAfter(ctx, tx, c, asset, now, checkpoint, e.Facts)
 		if err != nil {
-			return err
+			// A deadline already admitted under the original authority must
+			// still close on retained proof through a directory cutover or a
+			// lost authority. Routine acquisition reports the distinct cause.
+			if !dueOnly || !(errors.Is(err, errReceiptLookupIncomplete) || errors.Is(err, ErrMonitoringAuthority)) {
+				return err
+			}
+			acquire = false
+			facts = nil
 		}
 	}
-	selected := []string{}
-	if !dueOnly && (admit || e.Enrollments[asset.EntityKey].Active) {
-		selected = []string{asset.EntityKey}
-	}
 	stage, started = "production.evaluate", time.Now()
-	if err = e.AdvanceAssets(ctx, now, now, now, facts, nil, selected); err != nil {
+	if acquire && s.orderedCooling {
+		err = e.AdvanceProductionBatch(ctx, asset.EntityKey, now, facts)
+	} else {
+		selected := []string{}
+		if acquire {
+			selected = []string{asset.EntityKey}
+		}
+		err = e.AdvanceAssets(ctx, now, now, now, facts, nil, selected)
+	}
+	if err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
@@ -437,6 +465,17 @@ type productionRefreshEntry struct {
 	due, dueAttempt, acquireAttempt *time.Time
 }
 
+// The durable attempt clock and stable rank in the enrollment's sorted
+// asset set give routine acquisition a repeatable phase across restarts.
+// An unattempted asset stays eligible until its first claim.
+const productionCoolingAcquisitionPeriod = 30 * time.Second
+
+func productionAcquisitionDue(now time.Time, last *time.Time, rank, total int) bool {
+	phase := time.Duration(rank*int(productionCoolingAcquisitionPeriod/time.Second)/total) * time.Second
+	boundary := now.Add(-phase).Truncate(productionCoolingAcquisitionPeriod).Add(phase)
+	return last == nil || last.Before(boundary)
+}
+
 func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]productionRefreshEntry, []productionRefreshEntry, error) {
 	bounded, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
@@ -450,6 +489,7 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 		assets[asset.EntityKey] = asset
 	}
 	due, acquisition := []productionRefreshEntry{}, []productionRefreshEntry{}
+	seen := 0
 	for rows.Next() {
 		var key string
 		var now time.Time
@@ -458,11 +498,14 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 			return nil, nil, err
 		}
 		asset, found := assets[key]
-		if !found || len(acquisition) >= a.MaxProductionGPUs {
+		if !found || seen >= a.MaxProductionGPUs {
 			return nil, nil, a.ErrInvalid
 		}
 		entry.asset = asset
-		acquisition = append(acquisition, entry)
+		if !s.orderedCooling || productionAcquisitionDue(now, entry.acquireAttempt, seen, len(assets)) {
+			acquisition = append(acquisition, entry)
+		}
+		seen++
 		if entry.due != nil && !entry.due.After(now) {
 			due = append(due, entry)
 		}
@@ -470,7 +513,7 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 	if err = rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	if len(acquisition) != len(assets) {
+	if seen != len(assets) {
 		return nil, nil, a.ErrInvalid
 	}
 	compareTime := func(x, y *time.Time) int {
