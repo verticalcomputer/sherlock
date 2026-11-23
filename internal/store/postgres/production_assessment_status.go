@@ -24,6 +24,10 @@ type ProductionAssessmentAssetStatus struct {
 	LastAttempt   *time.Time `json:"last_attempt_at,omitempty"`
 	LastFailure   string     `json:"last_failure_code"`
 	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
+	ReplayPending bool       `json:"replay_pending,omitempty"`
+	LastInputAt   *time.Time `json:"last_input_at,omitempty"`
+	InputGapFrom  *time.Time `json:"last_input_gap_from,omitempty"`
+	InputGapUntil *time.Time `json:"last_input_gap_until,omitempty"`
 	FailureCount  int64      `json:"failure_count"`
 }
 
@@ -38,14 +42,14 @@ func ReadProductionAssessmentStatus(ctx context.Context, pool *pgxpool.Pool, clu
 	if err != nil {
 		return s, err
 	}
-	rows, err := pool.Query(ctx, `SELECT asset,revision,next_due_at,last_attempt_at,last_failure_code,last_failure_at,failure_count FROM production_assessment_states WHERE cluster_id=$1 AND enrollment_id=$2 ORDER BY asset LIMIT 129`, cluster, enrollment)
+	rows, err := pool.Query(ctx, `SELECT asset,revision,next_due_at,last_attempt_at,last_failure_code,last_failure_at,failure_count,replay_pending,last_input_at,lower(last_input_gap),upper(last_input_gap) FROM production_assessment_states WHERE cluster_id=$1 AND enrollment_id=$2 ORDER BY asset LIMIT 129`, cluster, enrollment)
 	if err != nil {
 		return s, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var x ProductionAssessmentAssetStatus
-		if err = rows.Scan(&x.Asset, &x.Revision, &x.NextDue, &x.LastAttempt, &x.LastFailure, &x.LastFailureAt, &x.FailureCount); err != nil {
+		if err = rows.Scan(&x.Asset, &x.Revision, &x.NextDue, &x.LastAttempt, &x.LastFailure, &x.LastFailureAt, &x.FailureCount, &x.ReplayPending, &x.LastInputAt, &x.InputGapFrom, &x.InputGapUntil); err != nil {
 			return s, err
 		}
 		s.Assets = append(s.Assets, x)

@@ -179,24 +179,27 @@ func (s *ProductionAssessmentStore) claimRefreshAttempt(ctx context.Context, ent
 var errProductionDueInput = errors.New("failed to acquire input for a due assessment")
 
 func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) error {
-	if !dueOnly || !s.orderedCooling {
-		return s.refreshAssetTx(ctx, asset, dueOnly, false)
-	}
-	// Claims, speculative input and fallback all share the caller's GPU budget.
+	// Claims, speculative input, replay and fallback share the caller's GPU budget.
 	gpu, cancel := context.WithTimeout(ctx, a.ShadowGPUBudget)
 	defer cancel()
-	err := s.refreshAssetTx(gpu, asset, true, false)
+	deadline, _ := gpu.Deadline()
+	// Reserve time for snapshot, outbox and commit under the hard deadline.
+	stopBefore := deadline.Add(-100 * time.Millisecond)
+	if !dueOnly || !s.orderedCooling {
+		return s.refreshAssetTx(gpu, asset, dueOnly, false, stopBefore)
+	}
+	err := s.refreshAssetTx(gpu, asset, true, false, stopBefore)
 	if !errors.Is(err, errProductionDueInput) || gpu.Err() != nil {
 		return err
 	}
 	// A failed SQL statement can abort its transaction. Re-lock and re-read
 	// the current deadline, snapshot and notification controls before using
 	// retained proof. Reporting the original read error preserves accounting.
-	fallback := s.refreshAssetTx(gpu, asset, true, true)
+	fallback := s.refreshAssetTx(gpu, asset, true, true, stopBefore)
 	return errors.Join(err, fallback)
 }
 
-func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.Asset, dueOnly, retainedOnly bool) (result error) {
+func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.Asset, dueOnly, retainedOnly bool, stopBefore time.Time) (result error) {
 	stage, started, outcome := "production.begin", time.Now(), "not_attempted"
 	defer func() { result = assessmentTransactionError(stage, started, result, outcome) }()
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
@@ -223,7 +226,9 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	}
 	var raw []byte
 	var due *time.Time
-	err = tx.QueryRow(ctx, `SELECT snapshot,next_due_at FROM production_assessment_states WHERE enrollment_id=$1 AND asset=$2 FOR UPDATE`, c.RunID, asset.EntityKey).Scan(&raw, &due)
+	var pending bool
+	var lastInput *time.Time
+	err = tx.QueryRow(ctx, `SELECT snapshot,next_due_at,replay_pending,last_input_at FROM production_assessment_states WHERE enrollment_id=$1 AND asset=$2 FOR UPDATE`, c.RunID, asset.EntityKey).Scan(&raw, &due, &pending, &lastInput)
 	if err != nil {
 		return err
 	}
@@ -241,12 +246,16 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	if err = e.RestoreProduction(asset.EntityKey, raw); err != nil {
 		return err
 	}
+	if pending != e.ProductionBatchPending() || pending && !s.orderedCooling {
+		return fmt.Errorf("inconsistent production replay checkpoint: %w", a.ErrInvalid)
+	}
 	e.CommitClock = assessmentDatabaseClock(now)
 	stage, started = "production.input", time.Now()
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
 	canAcquire := admit || e.Enrollments[asset.EntityKey].Active
-	acquire := canAcquire && !retainedOnly && (!dueOnly || s.orderedCooling)
+	acquire := !pending && canAcquire && !retainedOnly && (!dueOnly || s.orderedCooling)
+	var acquiredAt, gapEnd *time.Time
 	if acquire {
 		checkpoint := time.Time{}
 		if s.orderedCooling {
@@ -273,10 +282,17 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 			}
 			return err
 		}
+		if s.orderedCooling {
+			acquiredAt = &now
+			from := now.Add(-assessmentInputHistory)
+			if lastInput != nil && lastInput.Before(from) {
+				gapEnd = &from
+			}
+		}
 	}
 	stage, started = "production.evaluate", time.Now()
-	if acquire && s.orderedCooling {
-		err = e.AdvanceProductionBatch(ctx, asset.EntityKey, now, facts)
+	if (acquire || pending) && s.orderedCooling {
+		err = e.AdvanceProductionSlice(ctx, asset.EntityKey, now, facts, stopBefore, 32)
 	} else {
 		selected := []string{}
 		if acquire {
@@ -378,10 +394,12 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	if !admit {
 		code = "CAPACITY"
 	}
-	if len(e.Failures) > 0 {
-		code = e.Failures[len(e.Failures)-1].Code
+	if failure := e.ProductionSliceFailure(); failure != nil {
+		code = failure.Code
 	}
-	_, err = tx.Exec(ctx, `UPDATE production_assessment_states SET snapshot=$3,revision=revision+1,next_due_at=$4,last_attempt_at=clock_timestamp(),last_failure_code=$5,last_failure_at=CASE WHEN $5<>'' THEN clock_timestamp() ELSE last_failure_at END,failure_count=failure_count+CASE WHEN $5<>'' THEN 1 ELSE 0 END WHERE enrollment_id=$1 AND asset=$2`, c.RunID, asset.EntityKey, snapshot, nextDue, code)
+	_, err = tx.Exec(ctx, `UPDATE production_assessment_states SET snapshot=$3,revision=revision+1,next_due_at=$4,replay_pending=$6,
+	last_input_gap=CASE WHEN $8::timestamptz IS NULL THEN last_input_gap ELSE tstzrange(last_input_at,$8,'()') END,
+	last_input_at=coalesce($7::timestamptz,last_input_at),last_attempt_at=clock_timestamp(),last_failure_code=$5,last_failure_at=CASE WHEN $5<>'' THEN clock_timestamp() ELSE last_failure_at END,failure_count=failure_count+CASE WHEN $5<>'' THEN 1 ELSE 0 END WHERE enrollment_id=$1 AND asset=$2`, c.RunID, asset.EntityKey, snapshot, nextDue, code, e.ProductionBatchPending(), acquiredAt, gapEnd)
 	if err != nil {
 		return err
 	}
@@ -509,7 +527,7 @@ func productionAcquisitionDue(now time.Time, last *time.Time, rank, total int) b
 func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]productionRefreshEntry, []productionRefreshEntry, error) {
 	bounded, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,statement_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset COLLATE "C" LIMIT 129`, s.config.Assessment.RunID)
+	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,replay_pending,statement_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset COLLATE "C" LIMIT 129`, s.config.Assessment.RunID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -523,8 +541,9 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 	for rows.Next() {
 		var key string
 		var now time.Time
+		var pending bool
 		var entry productionRefreshEntry
-		if err := rows.Scan(&key, &entry.due, &entry.dueAttempt, &entry.acquireAttempt, &now); err != nil {
+		if err := rows.Scan(&key, &entry.due, &entry.dueAttempt, &entry.acquireAttempt, &pending, &now); err != nil {
 			return nil, nil, err
 		}
 		asset, found := assets[key]
@@ -532,7 +551,7 @@ func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]produc
 			return nil, nil, a.ErrInvalid
 		}
 		entry.asset = asset
-		if !s.orderedCooling || productionAcquisitionDue(now, entry.acquireAttempt, seen, len(assets)) {
+		if pending || !s.orderedCooling || productionAcquisitionDue(now, entry.acquireAttempt, seen, len(assets)) {
 			acquisition = append(acquisition, entry)
 		}
 		seen++

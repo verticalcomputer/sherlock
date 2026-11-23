@@ -886,3 +886,67 @@ func TestAssessmentFactBodyCacheRemainsBounded(t *testing.T) {
 		})
 	}
 }
+
+func TestPassPayloadCacheRejectsAlteredInputs(t *testing.T) {
+	c := checkedSamples(withFactValidationCache(t.Context()))
+	original := testPayload(t, "test", "policy", map[string]any{"a": 1})
+	if err := c.validatePayload(original, "test", "policy", 1, 128); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name           string
+		change         func(*Payload)
+		category, kind string
+		schema, limit  int64
+	}{
+		{"mutated bytes", func(p *Payload) { p.Body[5] = '2' }, "test", "policy", 1, 128},
+		{"unmatched digest", func(p *Payload) { p.Hash = strings.Repeat("a", 64) }, "test", "policy", 1, 128},
+		{"other category", func(p *Payload) { p.Category = "elsewhere" }, "elsewhere", "policy", 1, 128},
+		{"other kind", func(p *Payload) { p.Kind = "tracker" }, "test", "tracker", 1, 128},
+		{"other schema", func(p *Payload) { p.Schema++ }, "test", "policy", 2, 128},
+		{"lower descriptor limit", func(*Payload) {}, "test", "policy", 1, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := copyPayload(original)
+			tc.change(&p)
+			if c.validatePayload(p, tc.category, tc.kind, tc.schema, tc.limit) == nil {
+				t.Fatal("accepted invalid payload after cache warm-up")
+			}
+		})
+	}
+	// Mutate the original backing array, leaving its digest intact.
+	original.Body[5] = '2'
+	if c.validatePayload(original, "test", "policy", 1, 128) == nil {
+		t.Fatal("cache retained caller-owned bytes")
+	}
+}
+
+func TestPassPayloadReuseStillInvokesCategoryPolicy(t *testing.T) {
+	d := testDescriptor()
+	req := testRequest(t, d)
+	state := testPayload(t, d.Category, "tracker", map[string]any{})
+	result := testAssessment("NO_CANDIDATE", "test/none", "NONE")
+	result.State = &state
+	calls := 0
+	category := &testAdapter{descriptor: d,
+		policy: func(context.Context, Payload) error {
+			calls++
+			if calls > 1 {
+				return ErrInvalid
+			}
+			return nil
+		},
+		evaluate: func(context.Context, Request) (Result, error) { return result, nil },
+	}
+	r, err := NewRegistry(category)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := withFactValidationCache(t.Context())
+	if _, _, err := r.Invoke(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Invoke(ctx, req); err == nil || calls != 2 {
+		t.Fatalf("second call err=%v policy calls=%d", err, calls)
+	}
+}

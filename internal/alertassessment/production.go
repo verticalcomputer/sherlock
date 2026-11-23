@@ -105,16 +105,30 @@ func NewProductionAssetEngine(ctx context.Context, c ProductionConfig, start tim
 	return e, ctx.Err()
 }
 
+// Production snapshots normally discard closed history after publication. A
+// suspended logical batch still uses these ledgers for capacity, conflict and
+// qualified telemetry decisions on its remaining timestamps.
+type replayLedger struct {
+	Telemetry       []*TelemetryRecord `json:"telemetry,omitempty"`
+	Failures        []Failure          `json:"failures,omitempty"`
+	Coverage        []CoverageInterval `json:"coverage,omitempty"`
+	UnknownFrom     *time.Time         `json:"unknown_from,omitempty"`
+	UnknownThrough  *time.Time         `json:"unknown_through,omitempty"`
+	FailureOverflow int64              `json:"failure_overflow,omitempty"`
+}
+
 type ProductionSnapshot struct {
-	Schema      int64        `json:"schema"`
-	Enrollment  *Enrollment  `json:"enrollment"`
-	ProcessedAt time.Time    `json:"processed_at"`
-	LastPass    time.Time    `json:"last_pass"`
-	State       string       `json:"state"`
-	StopReason  string       `json:"stop_reason"`
-	Candidates  []*Candidate `json:"candidates"`
-	Facts       []Fact       `json:"facts"`
-	Bundles     []Bundle     `json:"bundles"`
+	ReplayLedger  *replayLedger          `json:"replay_ledger,omitempty"`
+	PendingReplay *productionReplayBatch `json:"pending_replay,omitempty"`
+	Schema        int64                  `json:"schema"`
+	Enrollment    *Enrollment            `json:"enrollment"`
+	ProcessedAt   time.Time              `json:"processed_at"`
+	LastPass      time.Time              `json:"last_pass"`
+	State         string                 `json:"state"`
+	StopReason    string                 `json:"stop_reason"`
+	Candidates    []*Candidate           `json:"candidates"`
+	Facts         []Fact                 `json:"facts"`
+	Bundles       []Bundle               `json:"bundles"`
 }
 
 // RestoreProduction confines each stored snapshot to exactly one admitted GPU.
@@ -135,11 +149,51 @@ func (e *Engine) RestoreProduction(asset string, raw []byte) error {
 	if err := DecodeStrict(raw, &s, ProductionSnapshotLimit); err != nil {
 		return err
 	}
-	if s.Schema != 1 || s.Enrollment == nil || s.Enrollment.Asset != asset || s.Enrollment.Revision < 1 || s.Enrollment.Sequence < 0 || s.Facts == nil || s.Bundles == nil || len(s.Candidates) > 1 || (s.State != "ACTIVE" && s.State != "DRAINING" && s.State != "CLOSED") {
+	if s.Schema != 1 || s.Enrollment == nil || s.Enrollment.Asset != asset || s.Enrollment.Revision < 1 || s.Enrollment.Sequence < 0 || s.Facts == nil || s.Bundles == nil || (s.State != "ACTIVE" && s.State != "DRAINING" && s.State != "CLOSED") {
 		return ErrInvalid
 	}
+	if s.PendingReplay == nil {
+		if s.ReplayLedger != nil || len(s.Candidates) > 1 {
+			return ErrInvalid
+		}
+	} else {
+		l := s.ReplayLedger
+		if l == nil || len(l.Failures)+len(l.Telemetry) > 1024 || len(l.Coverage) > 1024 || l.FailureOverflow < 0 || int64(len(s.Candidates)) > e.Config.Limits.PhysicalCandidates {
+			return ErrInvalid
+		}
+		for i, r := range l.Telemetry {
+			if r == nil || r.ID == "" || r.Asset != asset || i > 0 && l.Telemetry[i-1].ID >= r.ID {
+				return ErrInvalid
+			}
+		}
+		for _, f := range l.Failures {
+			if f.Asset != "" && f.Asset != asset {
+				return ErrInvalid
+			}
+		}
+	}
+	if batch := s.PendingReplay; batch != nil {
+		if e.visibleReplayCategory() == nil || batch.Through.Before(e.StartAt) || len(batch.Steps) == 0 || len(batch.Steps) > 5*(4096+MaxFacts)+1 || !batch.Steps[len(batch.Steps)-1].At.Equal(batch.Through) {
+			return ErrInvalid
+		}
+		count := 0
+		for i, step := range batch.Steps {
+			if step.At.Before(e.StartAt) || step.At.Before(s.LastPass) || i > 0 && !step.At.After(batch.Steps[i-1].At) {
+				return ErrInvalid
+			}
+			count += len(step.Facts)
+			if count > MaxFacts {
+				return ErrInvalid
+			}
+			for _, f := range step.Facts {
+				if f.Run != e.Config.RunID || f.Asset != asset || f.AvailableAt.IsZero() || f.AvailableAt.After(step.At) {
+					return ErrInvalid
+				}
+			}
+		}
+	}
 	for _, c := range s.Candidates {
-		if c.Asset != asset || c.Sequence != s.Enrollment.Sequence || c.BudgetMS != 120000 {
+		if c == nil || c.Asset != asset || (s.PendingReplay == nil && c.Sequence != s.Enrollment.Sequence || c.Sequence < 1 || c.Sequence > s.Enrollment.Sequence) || c.BudgetMS != 120000 {
 			return ErrInvalid
 		}
 	}
@@ -163,6 +217,13 @@ func (e *Engine) RestoreProduction(asset string, raw []byte) error {
 		}
 		bundles[b.ID] = b
 	}
+	if l := s.ReplayLedger; l != nil {
+		for _, r := range l.Telemetry {
+			e.Telemetry[r.ID] = r
+		}
+		e.Failures, e.CoverageIntervals, e.UnknownFrom, e.UnknownThrough, e.FailureOverflow = l.Failures, l.Coverage, l.UnknownFrom, l.UnknownThrough, l.FailureOverflow
+	}
+	e.pendingReplay = s.PendingReplay
 	e.Enrollments[asset] = s.Enrollment
 	s.Enrollment.ProcessedAt = s.ProcessedAt
 	e.Candidates, e.Facts, e.Bundles = s.Candidates, facts, bundles
@@ -209,6 +270,42 @@ func (e *Engine) SnapshotProductionContext(ctx context.Context, asset string, at
 	if !e.Config.production || e.Enrollments[asset] == nil {
 		return nil, ErrInvalid
 	}
+	// Prune against the logical frontier of the snapshot. Wall time can
+	// advance by many slots before all slices of a frozen batch commit.
+	if !e.lastPass.IsZero() && e.lastPass.Before(at) {
+		at = e.lastPass
+	}
+	s, err := e.productionWorkingSnapshot(ctx, asset, at)
+	if err != nil {
+		return nil, err
+	}
+	// The snapshot itself is not content-addressed. Encode the typed envelope
+	// directly while preserving canonical opaque bodies and sorted fact IDs.
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(s)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	b := bytes.TrimSuffix(out.Bytes(), []byte("\n"))
+	if err != nil || len(b) > ProductionSnapshotLimit {
+		return nil, fmt.Errorf("CAPACITY: production snapshot")
+	}
+	return b, nil
+}
+func (e *Engine) productionWorkingSnapshot(ctx context.Context, asset string, at time.Time) (ProductionSnapshot, error) {
+	if e.pendingReplay != nil {
+		telemetry := make([]*TelemetryRecord, 0, len(e.Telemetry))
+		for _, r := range e.Telemetry {
+			telemetry = append(telemetry, r)
+		}
+		slices.SortFunc(telemetry, func(a, b *TelemetryRecord) int { return strings.Compare(a.ID, b.ID) })
+		return ProductionSnapshot{Schema: 1, PendingReplay: e.pendingReplay,
+			ReplayLedger: &replayLedger{Telemetry: telemetry, Failures: e.Failures, Coverage: e.CoverageIntervals, UnknownFrom: e.UnknownFrom, UnknownThrough: e.UnknownThrough, FailureOverflow: e.FailureOverflow},
+			Enrollment:   e.Enrollments[asset], ProcessedAt: e.Enrollments[asset].ProcessedAt, LastPass: e.lastPass,
+			State: e.State, StopReason: e.StopReason, Candidates: e.Candidates, Facts: productionFactSlice(e.Facts), Bundles: productionBundleSlice(e.Bundles)}, ctx.Err()
+	}
 	en := e.Enrollments[asset]
 	candidates := []*Candidate{}
 	roots := []string{}
@@ -227,7 +324,7 @@ func (e *Engine) SnapshotProductionContext(ctx context.Context, asset string, at
 			roots = append(roots, en.SharedContext.BundleID)
 			for id, f := range e.Facts {
 				if err := ctx.Err(); err != nil {
-					return nil, err
+					return ProductionSnapshot{}, err
 				}
 				if f.Kind == "TRACKER_CONTEXT" {
 					var tc TrackerContext
@@ -240,7 +337,7 @@ func (e *Engine) SnapshotProductionContext(ctx context.Context, asset string, at
 	}
 	for id, f := range e.Facts {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return ProductionSnapshot{}, err
 		}
 		if f.Asset == asset && recentFact(f, at.Add(-requestFactWindow)) {
 			ids = append(ids, id)
@@ -248,23 +345,9 @@ func (e *Engine) SnapshotProductionContext(ctx context.Context, asset string, at
 	}
 	facts, bundles, err := e.productionClosure(ctx, roots, ids)
 	if err != nil {
-		return nil, err
+		return ProductionSnapshot{}, err
 	}
-	s := ProductionSnapshot{Schema: 1, Enrollment: en, ProcessedAt: en.ProcessedAt, LastPass: e.lastPass, State: e.State, StopReason: e.StopReason, Candidates: candidates, Facts: productionFactSlice(facts), Bundles: productionBundleSlice(bundles)}
-	// The snapshot itself is not content-addressed. Encode the typed envelope
-	// directly while preserving canonical opaque bodies and sorted fact IDs.
-	var out bytes.Buffer
-	encoder := json.NewEncoder(&out)
-	encoder.SetEscapeHTML(false)
-	err = encoder.Encode(s)
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	b := bytes.TrimSuffix(out.Bytes(), []byte("\n"))
-	if err != nil || len(b) > ProductionSnapshotLimit {
-		return nil, fmt.Errorf("CAPACITY: production snapshot")
-	}
-	return b, nil
+	return ProductionSnapshot{Schema: 1, Enrollment: en, ProcessedAt: en.ProcessedAt, LastPass: e.lastPass, State: e.State, StopReason: e.StopReason, Candidates: candidates, Facts: productionFactSlice(facts), Bundles: productionBundleSlice(bundles)}, nil
 }
 func (e *Engine) productionClosure(ctx context.Context, roots, ids []string) (map[string]Fact, map[string]Bundle, error) {
 	facts := map[string]Fact{}

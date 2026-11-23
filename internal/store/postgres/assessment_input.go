@@ -471,6 +471,8 @@ func loadAssessmentInput(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Ass
 	return loadAssessmentInputAfter(ctx, tx, c, asset, at, time.Time{}, admitted...)
 }
 
+const assessmentInputHistory = 900 * time.Second
+
 func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at, checkpoint time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
 	out := []a.Fact{}
 	// An equivalent repeat already has canonical bytes and first availability
@@ -491,7 +493,7 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 		}
 	}
 	uncertainCoverage := false
-	from := at.Add(-900 * time.Second)
+	from := at.Add(-assessmentInputHistory)
 	for _, binding := range c.Bindings {
 		authority, err := validateAssessmentAuthority(ctx, tx, c, asset, binding, at)
 		if err != nil {
@@ -636,7 +638,7 @@ func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a
 	// or a shadow read must not import unrelated closed incidents.
 	var since *time.Time
 	if c.Production() && !checkpoint.IsZero() {
-		from := at.Add(-900 * time.Second)
+		from := at.Add(-assessmentInputHistory)
 		if checkpoint.After(from) {
 			from = checkpoint
 		}

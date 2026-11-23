@@ -194,6 +194,8 @@ type Engine struct {
 	exhausted     bool
 	lastPass      time.Time
 	// A production batch processes all earlier logical events before its frontier.
+	pendingReplay              *productionReplayBatch
+	productionSliceFailure     *Failure
 	orderedBatch               bool
 	batchWindowChanged         bool
 	previewComparisons         map[string]previewChange
@@ -854,6 +856,9 @@ func (e *Engine) recordFailureWindow(code, asset, scope, candidate string, at ti
 	for i := range e.Failures {
 		f := &e.Failures[i]
 		if f.ID == id {
+			if e.Config.production {
+				e.productionSliceFailure = f
+			}
 			f.At, f.Count = maxTime(at, f.At), f.Count+1
 			if f.LogicalFrom == nil || from.Before(*f.LogicalFrom) {
 				f.LogicalFrom = &from
@@ -873,6 +878,9 @@ func (e *Engine) recordFailureWindow(code, asset, scope, candidate string, at ti
 		kind = "COVERAGE"
 	}
 	e.Failures = append(e.Failures, Failure{ID: id, Kind: kind, ScopeKey: scope, Asset: asset, CandidateID: candidate, Code: code, FirstAt: at, At: at, Count: 1, BundleID: bundle, FactIDs: append([]string{}, refs...), LogicalFrom: &from, LogicalThrough: &through})
+	if e.Config.production {
+		e.productionSliceFailure = &e.Failures[len(e.Failures)-1]
+	}
 }
 
 func failureCode(err error) string {
