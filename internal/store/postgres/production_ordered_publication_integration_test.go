@@ -14,11 +14,17 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/domain"
 )
 
 func TestProductionOrderedRecoveryAtomicRestart(t *testing.T) {
+	runOrderedRecoveryAtomicRestart(t, true)
+}
+
+func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen bool) {
+	t.Helper()
 	f, store, config, profile, hash, now := productionFleetFixture(t, 1)
 	ctx := t.Context()
 	asset := config.Assessment.Assets[0]
@@ -56,7 +62,57 @@ func TestProductionOrderedRecoveryAtomicRestart(t *testing.T) {
 	if err = engine.Advance(ctx, start, start, start, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	before, err := engine.SnapshotProduction(asset.EntityKey, start)
+	processedSec := 0
+	baselineRows := 0
+	if priorOpen {
+		// Stage the previous checkpoint with its real occurrence, incident and
+		// outbox. Only the last few readings arrive in the acquisition under test.
+		processedSec = 450
+		for sec := 15; sec <= processedSec; sec += 15 {
+			at := start.Add(time.Duration(sec) * time.Second)
+			facts := productionStoreSamples(t, config, at)
+			for i, fact := range facts {
+				var sample a.Sample
+				if err := json.Unmarshal(fact.Body, &sample); err != nil {
+					t.Fatal(err)
+				}
+				if sample.Metric == "DCGM_FI_DEV_GPU_TEMP" && sec >= 165 {
+					sample.Value = 60
+					facts[i], err = a.NewFact(config.Assessment.Category, run, asset.EntityKey, "SAMPLE", at, sample)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if err = engine.Advance(ctx, at, at, at, facts, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(engine.Decisions) != 1 {
+			t.Fatalf("fixture should have one open occurrence: %d decisions", len(engine.Decisions))
+		}
+		d := engine.Decisions[0]
+		evidence, err := engine.ProductionEvidenceContext(ctx, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := f.admin.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rollbackMonitoringTx(tx)
+		if _, err = tx.Exec(ctx, `INSERT INTO production_assessment_decisions(event_id,enrollment_id,occurrence_id,asset,kind,logical_at,evidence,evidence_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, d.ID, run, d.CandidateID, asset.EntityKey, d.Kind, d.LogicalAt, []byte(evidence), a.Hash("production_evidence", config.Assessment.Category, 1, evidence)); err != nil {
+			t.Fatal(err)
+		}
+		if err = PublishProductionAssessment(ctx, tx, ProductionAssessmentEvent{EnrollmentID: run, ClusterID: config.Assessment.ClusterID, SourceID: config.Assessment.SourceID, Category: config.Assessment.Category, Asset: asset.EntityKey, OccurrenceID: d.CandidateID, EventID: d.ID, Kind: "OPEN", Summary: d.Summary, At: d.LogicalAt, Evidence: evidence}); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		baselineRows = 4 // One assessment decision, notification event, incident and outbox row.
+	}
+	before, err := engine.SnapshotProduction(asset.EntityKey, start.Add(time.Duration(processedSec)*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +124,11 @@ func TestProductionOrderedRecoveryAtomicRestart(t *testing.T) {
 	}
 	// A hot interval followed by a covered recovery and then a renewed rise.
 	// Reading only the newest point would hide the intermediate recovery.
-	for sec := 15; sec <= 525; sec += 15 {
+	for sec := processedSec + 15; sec <= 525; sec += 15 {
 		slot := start.Add(time.Duration(sec) * time.Second)
 		for _, query := range domain.CoolingUploadQueries() {
-			report := fleetHistoryReport(profile, hash, query, slot)
+			report := assessmentUploadReport(profile, hash, query, slot)
+			report.Version = profile.Version
 			if query == domain.QueryGPUTemperature {
 				v := 80.0
 				if sec >= 165 && sec <= 495 {
@@ -96,7 +153,7 @@ func TestProductionOrderedRecoveryAtomicRestart(t *testing.T) {
 	if err = f.admin.QueryRow(ctx, `SELECT snapshot, (SELECT count(*) FROM production_assessment_decisions)+(SELECT count(*) FROM production_notification_events)+(SELECT count(*) FROM incidents)+(SELECT count(*) FROM gp09_alert_outbox) FROM production_assessment_states WHERE enrollment_id=$1`, run).Scan(&checkpoint, &rows); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, checkpoint) || rows != 0 {
+	if !bytes.Equal(before, checkpoint) || rows != baselineRows {
 		t.Fatalf("partial commit after publication failure: checkpoint changed=%t rows=%d", !bytes.Equal(before, checkpoint), rows)
 	}
 	f.exec(t, `DROP TRIGGER fixture_reject_recovery ON gp09_alert_outbox`)
@@ -135,20 +192,21 @@ func TestProductionOrderedLateCommitAndCorrection(t *testing.T) {
 	f.exec(t, `UPDATE prometheus_cooling_upload_profiles SET registered_at=starts_at-interval '1 second' WHERE profile_id=$1 AND revision=$2`, profile.ProfileID, profile.Revision)
 	f.exec(t, `ALTER TABLE prometheus_cooling_upload_profiles ENABLE TRIGGER prometheus_cooling_upload_profile_guard`)
 	ready, release := make(chan struct{}), make(chan struct{})
-	writer, err := NewCollectionStore(fleetHistoryTracePool(t, f.admin, fleetHistoryTrace{before: func(ctx context.Context, query pgx.TraceQueryStartData) {
-		if query.SQL == "commit" {
-			close(ready)
-			select {
-			case <-release:
-			case <-ctx.Done():
-			}
-		}
-	}}))
+	poolConfig := f.admin.Config()
+	poolConfig.ConnConfig.Tracer = orderedCommitBarrier{ready, release}
+	writerPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(writerPool.Close)
+	writer, err := NewCollectionStore(writerPool)
 	if err != nil {
 		t.Fatal(err)
 	}
 	upload := func(w *CollectionStore, query domain.QueryKind) error {
-		ok, err := w.RecordCoolingUpload(ctx, profile.CollectorID, profile.ClusterID, fleetHistoryReport(profile, hash, query, slot))
+		report := assessmentUploadReport(profile, hash, query, slot)
+		report.Version = profile.Version
+		ok, err := w.RecordCoolingUpload(ctx, profile.CollectorID, profile.ClusterID, report)
 		if err == nil && !ok {
 			return fmt.Errorf("fixture upload %s declined", query)
 		}
@@ -231,3 +289,17 @@ func TestProductionOrderedLateCommitAndCorrection(t *testing.T) {
 		t.Fatalf("expected a single conflict after correcting retained evidence, got %d", conflicts)
 	}
 }
+
+type orderedCommitBarrier struct{ ready, release chan struct{} }
+
+func (b orderedCommitBarrier) TraceQueryStart(ctx context.Context, _ *pgx.Conn, q pgx.TraceQueryStartData) context.Context {
+	if q.SQL == "commit" {
+		close(b.ready)
+		select {
+		case <-b.release:
+		case <-ctx.Done():
+		}
+	}
+	return ctx
+}
+func (orderedCommitBarrier) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}

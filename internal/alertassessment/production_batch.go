@@ -19,6 +19,7 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	ctx = withFactValidationCache(ctx)
 	category := e.visibleReplayCategory()
 	if category == nil {
 		if err := e.AdvanceAssets(ctx, now, now, now, facts, nil, []string{asset}); err != nil {
@@ -39,7 +40,7 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 	windowChanges := map[time.Time]bool{}
 	times := map[time.Time]bool{now: true}
 	schedule := func(f Fact, visible time.Time) {
-		source := rawBoundary(f)
+		source := rawBoundaryWithSamples(f, e.Config.Category, checkedSamples(ctx))
 		// A clock-qualified source may be slightly ahead of the receipt.
 		if source.After(cursor) && source.After(visible) && !source.After(now) {
 			times[source] = true
@@ -93,6 +94,7 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 		agenda = append(agenda, at)
 	}
 	slices.SortFunc(agenda, time.Time.Compare)
+	agenda = e.coalesceStalePrefix(ctx, category, asset, cursor, freshness, agenda, receipts)
 	e.orderedBatch = true
 	defer func() {
 		e.orderedBatch = false
@@ -133,4 +135,69 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 		}
 	}
 	return ctx.Err()
+}
+
+// The first potentially effective event receives all preceding stale facts in
+// their original visibility order. This avoids materializing identical tracker
+// and final-arm requests for each stale receipt in a delayed upload burst.
+func (e *Engine) coalesceStalePrefix(ctx context.Context, category VisibleInputReplay, asset string, cursor time.Time, freshness time.Duration, agenda []time.Time, receipts map[time.Time][]Fact) []time.Time {
+	capability, ok := category.(StaleSampleReplay)
+	en := e.Enrollments[asset]
+	if !ok || !capability.CoalescesStaleFinalSamples() || !en.Active || en.NextLogicalAt != nil || len(e.Candidates) != 1 || e.Candidates[0].Phase != "FINAL" || len(agenda) < 2 {
+		return agenda
+	}
+	type sampleKey struct {
+		metric string
+		at     time.Time
+	}
+	seen := map[sampleKey]bool{}
+	isStale := func(f Fact, at time.Time) bool {
+		if f.Kind != "SAMPLE" {
+			return false
+		}
+		s, err := checkedSamples(ctx).decodeForSelection(e.Config.Category, f)
+		if err != nil || !s.SourceAt.Add(freshness).Before(at) {
+			return false
+		}
+		key := sampleKey{s.Metric, s.SourceAt}
+		if seen[key] {
+			return false
+		}
+		seen[key] = true
+		return true
+	}
+	for _, f := range e.Facts {
+		switch f.Kind {
+		case "SAMPLE":
+			if !isStale(f, cursor) {
+				return agenda
+			}
+		case "TRACKER_CONTEXT", "FEATURE", "PROVENANCE":
+		default:
+			return agenda
+		}
+	}
+	for i, at := range agenda {
+		barrier := i == len(agenda)-1
+		for _, f := range receipts[at] {
+			if !isStale(f, at) {
+				barrier = true
+				break
+			}
+		}
+		if barrier {
+			// Keep the last stale instant distinct from the barrier, so that
+			// conflicts and independent events enter against the prior state.
+			if i < 2 {
+				return agenda
+			}
+			last := agenda[i-1]
+			for _, earlier := range agenda[:i-1] {
+				receipts[last] = append(receipts[last], receipts[earlier]...)
+				delete(receipts, earlier)
+			}
+			return agenda[i-1:]
+		}
+	}
+	return agenda
 }

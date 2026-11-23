@@ -101,6 +101,15 @@ type VisibleInputReplay interface {
 	ReplaySampleWindows(context.Context, Payload) (history, freshness time.Duration)
 }
 
+// StaleSampleReplay lets a category coalesce sample-only changes while an
+// active, finalized occurrence has no fresh samples, timers or qualified
+// evidence. In that state admitting stale samples or losing them from history
+// must leave both tracker and arm unchanged.
+type StaleSampleReplay interface {
+	VisibleInputReplay
+	CoalescesStaleFinalSamples() bool
+}
+
 type FeatureRef struct {
 	ID          string    `json:"id"`
 	Value       float64   `json:"value"`

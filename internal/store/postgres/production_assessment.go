@@ -228,7 +228,9 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 		checkpoint := time.Time{}
 		if s.orderedCooling {
 			checkpoint = e.Enrollments[asset.EntityKey].ProcessedAt
-			if checkpoint.Before(start) {
+			// The first acquisition establishes the baseline. An enrollment
+			// creation timestamp alone does not prove a processed input view.
+			if !checkpoint.IsZero() && checkpoint.Before(start) {
 				checkpoint = start
 			}
 		}
@@ -479,7 +481,7 @@ func productionAcquisitionDue(now time.Time, last *time.Time, rank, total int) b
 func (s *ProductionAssessmentStore) refreshQueues(ctx context.Context) ([]productionRefreshEntry, []productionRefreshEntry, error) {
 	bounded, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,clock_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset LIMIT 129`, s.config.Assessment.RunID)
+	rows, err := s.pool.Query(bounded, `SELECT asset,next_due_at,last_due_attempt_at,last_acquire_attempt_at,statement_timestamp() FROM production_assessment_states WHERE enrollment_id=$1 ORDER BY asset COLLATE "C" LIMIT 129`, s.config.Assessment.RunID)
 	if err != nil {
 		return nil, nil, err
 	}

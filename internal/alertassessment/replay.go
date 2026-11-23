@@ -1093,8 +1093,8 @@ func (e *Engine) admit(ctx context.Context, at time.Time, facts []Fact) ([]Fact,
 	for _, f := range e.Facts {
 		switch f.Kind {
 		case "SAMPLE":
-			var v Sample
-			if json.Unmarshal(f.Body, &v) != nil {
+			v, err := checkedSamples(ctx).decodeForSelection(e.Config.Category, f)
+			if err != nil {
 				return nil, ErrInvalid
 			}
 			k := sampleKey{f.Asset, v.Metric, clock(v.SourceAt)}
@@ -1957,7 +1957,9 @@ func (e *Engine) AdvanceAssets(ctx context.Context, at, executed, committed time
 		if e.Shadow {
 			pass, cancel = context.WithTimeout(pass, ShadowGPUBudget)
 		}
-		pass = withFactValidationCache(pass)
+		if checkedSamples(pass) == nil {
+			pass = withFactValidationCache(pass)
+		}
 		e.proposalBytes, e.exhausted = 0, false
 		e.passFeatures = map[string]time.Time{}
 		e.passMissing = map[string]bool{}

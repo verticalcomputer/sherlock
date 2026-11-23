@@ -178,3 +178,98 @@ func TestProductionBatchCommitClockCannotCrossEvidenceFrontier(t *testing.T) {
 		t.Fatalf("incorrect deadline: %+v", e.Decisions)
 	}
 }
+
+type uncoalescedCooling struct{ recordingCooling }
+
+func (uncoalescedCooling) CoalescesStaleFinalSamples() bool { return false }
+
+func TestProductionBatchStaleFinalPrefixMatchesEveryReceipt(t *testing.T) {
+	rc := newReplayCase(t, false)
+	warm, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, rc.r, rc.asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for sec := 0; sec <= 150; sec += 15 {
+		at := rc.start.Add(time.Duration(sec) * time.Second)
+		if err := warm.AdvanceProductionBatch(t.Context(), rc.asset, at, productionSamples(t, rc.c, at, 80)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(warm.Candidates) != 1 || warm.Candidates[0].Phase != "FINAL" {
+		t.Fatal("expected finalized tracker")
+	}
+	snapshot, err := warm.SnapshotProduction(rc.asset, rc.start.Add(150*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := rc.start.Add(30 * time.Minute)
+	var facts []a.Fact
+	for i := 0; i < 8; i++ {
+		received := now.Add(time.Duration(i) * time.Second)
+		src := received.Add(-12*time.Minute + time.Duration(i)*15*time.Second)
+		facts = append(facts, rc.sample(cooling.Power, src, received, 0), rc.sample(cooling.Temperature, src, received, 68))
+	}
+	// A fresh power sample is a conservative barrier even if temperature is
+	// still stale. A later temperature sample must observe the admitted power.
+	facts = append(facts, rc.sample(cooling.Power, now.Add(8*time.Second), now.Add(8*time.Second), 0), rc.sample(cooling.Temperature, now.Add(9*time.Second), now.Add(9*time.Second), 90))
+	compare := func(t *testing.T, raw []byte, wantSavings bool) {
+		run := func(coalesce bool) ([]byte, []string, int) {
+			var calls []time.Time
+			rec := recordingCooling{calls: &calls}
+			var category a.Category = rec
+			if !coalesce {
+				category = uncoalescedCooling{rec}
+			}
+			reg, err := a.NewRegistry(cooling.Category{}, category)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, err := a.NewProductionAssetEngine(t.Context(), rc.c, rc.start, reg, rc.asset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.RestoreProduction(rc.asset, raw); err != nil {
+				t.Fatal(err)
+			}
+			at := now.Add(10 * time.Second)
+			if err := e.AdvanceProductionBatch(t.Context(), rc.asset, at, facts); err != nil {
+				t.Fatal(err)
+			}
+			var decisions []string
+			for _, d := range e.Decisions {
+				proof, err := e.ProductionEvidence(d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				decisions = append(decisions, string(proof))
+			}
+			output, err := e.SnapshotProduction(rc.asset, at)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return output, decisions, len(calls)
+		}
+		want, proofs, oldCalls := run(false)
+		got, actual, newCalls := run(true)
+		if string(got) != string(want) || !slices.Equal(actual, proofs) {
+			t.Fatal("coalescing changed proof or durable state")
+		}
+		if wantSavings && newCalls >= oldCalls || !wantSavings && newCalls != oldCalls {
+			t.Fatalf("expected savings %t: calls %d vs %d", wantSavings, newCalls, oldCalls)
+		}
+	}
+	t.Run("stale prefix and fresh barrier", func(t *testing.T) { compare(t, snapshot, true) })
+	t.Run("tracker wake inside stale prefix", func(t *testing.T) {
+		var s a.ProductionSnapshot
+		if err := json.Unmarshal(snapshot, &s); err != nil {
+			t.Fatal(err)
+		}
+		wake := now.Add(4 * time.Second)
+		s.Enrollment.NextLogicalAt = &wake
+		raw, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		compare(t, raw, false)
+	})
+}

@@ -140,7 +140,11 @@ func (Category) ReplaySampleWindows(ctx context.Context, policy a.Payload) (time
 	return seconds(p.HistorySeconds + p.FreshSeconds), seconds(p.FreshSeconds)
 }
 
-var _ a.VisibleInputReplay = Category{}
+// track and followArm both require a current temperature or an independent
+// qualified thermal event to change a finalized occurrence.
+func (Category) CoalescesStaleFinalSamples() bool { return true }
+
+var _ a.StaleSampleReplay = Category{}
 
 func (Category) Describe() a.Descriptor {
 	outcomes := []a.Outcome{}
