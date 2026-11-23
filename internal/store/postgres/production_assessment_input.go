@@ -202,7 +202,9 @@ SELECT run_id,scheduled_for,completed_at,received_at,status,coverage_complete,ob
 		}
 		p := a.Provenance{Mode: "upload", CollectionRunID: id, Operation: b.Operation, ScheduleRevision: profile.Revision, InventoryRevision: profile.InventoryRevision, CollectorID: string(profile.CollectorID), UploadProfileID: profile.ProfileID, UploadProfileHash: hash}
 		ids = append(ids, id)
-		attempts[id] = assessmentAttempt{received: received.UTC(), uploadWriter: writer, completed: completed.UTC(), scheduled: slot.UTC(), provenance: p, usable: status == domain.ResultSucceeded && complete && supported && inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)}
+		inventoryOK := inventory != nil && *inventory == c.InventoryRevision && inventoryAt != nil && !inventoryAt.After(completed)
+		reportOK := status == domain.ResultSucceeded && complete && supported
+		attempts[id] = assessmentAttempt{received: received.UTC(), uploadWriter: writer, completed: completed.UTC(), scheduled: slot.UTC(), provenance: p, usable: reportOK && inventoryOK, originalNegative: !reportOK && inventoryOK}
 	}
 	return attempts, ids, false, rows.Err()
 }

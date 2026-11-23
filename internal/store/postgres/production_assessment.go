@@ -175,14 +175,37 @@ func (s *ProductionAssessmentStore) claimRefreshAttempt(ctx context.Context, ent
 	err = tx.Commit(ctx)
 	return tag.RowsAffected() == 1, assessmentTransactionError("production.claim_attempt", started, err, "unknown")
 }
-func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) (result error) {
+
+var errProductionDueInput = errors.New("failed to acquire input for a due assessment")
+
+func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.Asset, dueOnly bool) error {
+	if !dueOnly || !s.orderedCooling {
+		return s.refreshAssetTx(ctx, asset, dueOnly, false)
+	}
+	// Claims, speculative input and fallback all share the caller's GPU budget.
+	gpu, cancel := context.WithTimeout(ctx, a.ShadowGPUBudget)
+	defer cancel()
+	err := s.refreshAssetTx(gpu, asset, true, false)
+	if !errors.Is(err, errProductionDueInput) || gpu.Err() != nil {
+		return err
+	}
+	// A failed SQL statement can abort its transaction. Re-lock and re-read
+	// the current deadline, snapshot and notification controls before using
+	// retained proof. Reporting the original read error preserves accounting.
+	fallback := s.refreshAssetTx(gpu, asset, true, true)
+	return errors.Join(err, fallback)
+}
+
+func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.Asset, dueOnly, retainedOnly bool) (result error) {
 	stage, started, outcome := "production.begin", time.Now(), "not_attempted"
 	defer func() { result = assessmentTransactionError(stage, started, result, outcome) }()
 	tx, err := beginProductionAssessmentTx(ctx, s.pool)
 	if err != nil {
 		return err
 	}
-	defer rollbackMonitoringTx(tx)
+	// A failed acquisition may still need to release these locks before a
+	// retained-proof retry, within the same caller deadline.
+	defer func() { _ = tx.Rollback(ctx) }()
 	stage, started = "production.load", time.Now()
 	c := s.config.Assessment
 	var start, now time.Time
@@ -223,7 +246,7 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 	facts := []a.Fact{}
 	admit := eventCount < 9968 && retainedBytes < 384<<20
 	canAcquire := admit || e.Enrollments[asset.EntityKey].Active
-	acquire := canAcquire && (!dueOnly || s.orderedCooling)
+	acquire := canAcquire && !retainedOnly && (!dueOnly || s.orderedCooling)
 	if acquire {
 		checkpoint := time.Time{}
 		if s.orderedCooling {
@@ -234,16 +257,21 @@ func (s *ProductionAssessmentStore) refreshAsset(ctx context.Context, asset a.As
 				checkpoint = start
 			}
 		}
-		facts, err = loadAssessmentInputAfter(ctx, tx, c, asset, now, checkpoint, e.Facts)
+		readCtx := ctx
+		if dueOnly {
+			deadline, _ := ctx.Deadline()
+			var cancel context.CancelFunc
+			// Keep half the remaining time for an independent retained-proof
+			// transaction if the acquisition blocks or PostgreSQL cancels it.
+			readCtx, cancel = context.WithTimeout(ctx, time.Until(deadline)/2)
+			defer cancel()
+		}
+		facts, err = loadAssessmentInputAfter(readCtx, tx, c, asset, now, checkpoint, e.Facts)
 		if err != nil {
-			// A deadline already admitted under the original authority must
-			// still close on retained proof through a directory cutover or a
-			// lost authority. Routine acquisition reports the distinct cause.
-			if !dueOnly || !(errors.Is(err, errReceiptLookupIncomplete) || errors.Is(err, ErrMonitoringAuthority)) {
-				return err
+			if dueOnly {
+				return errors.Join(err, errProductionDueInput)
 			}
-			acquire = false
-			facts = nil
+			return err
 		}
 	}
 	stage, started = "production.evaluate", time.Now()

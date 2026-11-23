@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -11,10 +12,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
 	"github.com/verticalcomputer/sherlock/internal/domain"
+	"github.com/verticalcomputer/sherlock/internal/monitoring"
 )
 
 func productionStoreFixture(t *testing.T, evidenceOrigin ...string) (*assessmentFixture, *ProductionAssessmentStore, a.ProductionConfig, time.Time) {
@@ -134,6 +137,69 @@ func seedProductionDue(t *testing.T, f *assessmentFixture, s *ProductionAssessme
 	f.exec(t, `UPDATE production_assessment_states SET snapshot=$3,next_due_at=$4 WHERE enrollment_id=$1 AND asset=$2`, c.Assessment.RunID, asset, raw, e.Candidates[0].DueAt)
 	return e.Candidates[0].ID, e.Candidates[0].DueAt
 }
+func TestProductionDuePersistsRetainedDeadlineAfterInputFailure(t *testing.T) {
+	for _, mode := range []string{"capacity", "aborted transaction"} {
+		t.Run(mode, func(t *testing.T) {
+			f, s, c, now := productionStoreFixture(t)
+			occurrence, deadline := seedProductionDue(t, f, s, c, now)
+			asset := c.Assessment.Assets[0]
+			if mode == "capacity" {
+				// The qualified-input reader must reject the entire batch
+				// on its 33rd active transition, even when all rows are valid.
+				tx, err := f.admin.Begin(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer rollbackMonitoringTx(tx)
+				for n := 0; n < 33; n++ {
+					id := fmt.Sprintf("fixture-qualified-%d", n)
+					_, err = tx.Exec(t.Context(), `INSERT INTO gp09_monitor_enrollments(policy_id,cluster_id,source_id,entity_key,rule_id,rule_version,operation,scope_key,policy,evaluator_state)
+ VALUES($1,$2,$3,$4,'gpu_thermal',1,'temperature',$5,'{}','{}')`, id, c.Assessment.ClusterID, c.Assessment.SourceID, asset.EntityKey, fmt.Sprintf("%064d", n))
+					if err != nil {
+						t.Fatal(err)
+					}
+					policy := monitoring.Policy{ID: id, ClusterID: domain.ClusterID(c.Assessment.ClusterID), SourceID: domain.SourceID(c.Assessment.SourceID), EntityKey: asset.EntityKey, Rule: monitoring.RuleGPUThermal, RuleVersion: 1, Revision: 1}
+					err = publishMonitoringTransition(t.Context(), tx, policy, monitoring.Transition{Kind: monitoring.TransitionOpen, Occurrence: 1, At: now, Severity: domain.HealthSeverityWarning, Reason: monitoring.ReasonThermalThreshold}, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err = tx.Commit(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				tx, err := f.admin.Begin(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer rollbackMonitoringTx(tx)
+				_, err = tx.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "prometheus-cooling-profile-family:"+c.Assessment.Bindings[0].UploadProfileID)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := errors.Join(s.refreshLane(t.Context(), []productionRefreshEntry{{asset: asset}}, true, time.Now().Add(a.ShadowRefreshBudget))...)
+			if mode == "capacity" && !errors.Is(err, ErrAssessmentCapacity) {
+				t.Fatalf("capacity failure lost: %v", err)
+			}
+			var pg *pgconn.PgError
+			if mode == "aborted transaction" && (!errors.As(err, &pg) || pg.Code != "55P03") {
+				t.Fatalf("profile lock failure lost: %v", err)
+			}
+			if err = s.refreshAsset(t.Context(), asset, true); err != nil {
+				t.Fatalf("duplicate due attempt: %v", err)
+			}
+			var count, failures int
+			var settled bool
+			err = f.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM production_assessment_decisions WHERE occurrence_id=$2 AND kind='TERMINAL' AND logical_at=$3),
+ failure_count, next_due_at IS NULL AND last_acquire_attempt_at IS NULL FROM production_assessment_states WHERE asset=$1`, asset.EntityKey, occurrence, deadline).Scan(&count, &failures, &settled)
+			if err != nil || count != 1 || failures != 1 || !settled {
+				t.Fatalf("terminals=%d failed reads=%d settled=%t err=%v", count, failures, settled, err)
+			}
+		})
+	}
+}
+
 func TestProductionAssessmentAtomicDeadlineAndRestart(t *testing.T) {
 	f, s, c, now := productionStoreFixture(t)
 	id, due := seedProductionDue(t, f, s, c, now)

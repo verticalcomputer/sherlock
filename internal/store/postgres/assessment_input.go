@@ -239,12 +239,13 @@ const productionUploadObservationSQL = assessmentObservationColumnsSQL + `,obser
  AND starts_with(ids.selected_run,'` + domain.CoolingUploadRunPrefix + `')` + assessmentObservationOrderSQL
 
 type assessmentAttempt struct {
-	received     time.Time
-	uploadWriter string
-	completed    time.Time
-	scheduled    time.Time
-	usable       bool
-	provenance   a.Provenance
+	received         time.Time
+	uploadWriter     string
+	originalNegative bool // immutable upload run proves unusable coverage for this historically authorized asset
+	completed        time.Time
+	scheduled        time.Time
+	usable           bool
+	provenance       a.Provenance
 }
 
 func loadAssessmentAttempts(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, b a.Binding, auth assessmentAuthority, from, at time.Time) (map[string]assessmentAttempt, []string, bool, error) {
@@ -446,11 +447,15 @@ func loadAssessmentSamples(ctx context.Context, tx pgx.Tx, c a.Config, asset a.A
 // supply a historical event. Late commits and separately written or corrected
 // observations take effect at discovery and never change a published decision.
 func productionSampleAdmission(attempt assessmentAttempt, writer string, seenBefore bool, checkpoint, at time.Time) time.Time {
-	if checkpoint.IsZero() || seenBefore || writer == "" || writer != attempt.uploadWriter ||
-		!attempt.received.After(checkpoint) || attempt.received.After(at) || attempt.received.Before(attempt.completed) {
+	if seenBefore || writer != attempt.uploadWriter || !attempt.historicalReceipt(checkpoint, at) {
 		return at
 	}
 	return attempt.received
+}
+
+func (attempt assessmentAttempt) historicalReceipt(checkpoint, at time.Time) bool {
+	return !checkpoint.IsZero() && attempt.uploadWriter != "" && attempt.received.After(checkpoint) &&
+		!attempt.received.After(at) && !attempt.received.Before(attempt.completed)
 }
 
 func sameAssessmentSample(previous, current a.Sample) bool {
@@ -485,6 +490,7 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 			known[sample.SourceRecord] = sample
 		}
 	}
+	uncertainCoverage := false
 	from := at.Add(-900 * time.Second)
 	for _, binding := range c.Bindings {
 		authority, err := validateAssessmentAuthority(ctx, tx, c, asset, binding, at)
@@ -512,6 +518,7 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 		}
 		out = append(out, samples...)
 		if truncated || sampleTruncated {
+			uncertainCoverage = true
 			f, err := assessmentCoverage(c, asset, binding.Metric, "TRUNCATED", "history", from, at, at)
 			if err != nil {
 				return nil, err
@@ -523,14 +530,32 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 			if attempt.usable {
 				continue
 			}
-			f, err := assessmentCoverage(c, asset, binding.Metric, "UNSUPPORTED", id, attempt.completed, attempt.completed, at)
+			visible := at
+			ordered := attempt.originalNegative && attempt.historicalReceipt(checkpoint, at)
+			if ordered {
+				visible = attempt.received
+			}
+			f, err := assessmentCoverage(c, asset, binding.Metric, "UNSUPPORTED", id, attempt.completed, attempt.completed, visible)
 			if err != nil {
 				return nil, err
+			}
+			if !ordered && (len(admitted) == 0 || admitted[0][f.ID].ID == "") {
+				uncertainCoverage = true
 			}
 			out = append(out, f)
 		}
 	}
-	qualified, err := loadAssessmentQualified(ctx, tx, c, asset, at, admitted...)
+	if c.Production() && uncertainCoverage {
+		// This acquisition cannot prove when newly discovered missing evidence
+		// became visible. Admit new readings together with that uncertainty.
+		// Facts already checkpointed keep their original first availability.
+		for i := range out {
+			if out[i].Kind == "SAMPLE" {
+				out[i].AvailableAt = at
+			}
+		}
+	}
+	qualified, err := loadAssessmentQualified(ctx, tx, c, asset, at, checkpoint, admitted...)
 	if err != nil {
 		return nil, err
 	}
@@ -547,9 +572,9 @@ func loadAssessmentInputAfter(ctx context.Context, tx pgx.Tx, c a.Config, asset 
 	return out, nil
 }
 
-// Active OPENs and recoveries of an OPEN already admitted in this run are
-// the only eligible transitions. A long history of unrelated closed episodes
-// cannot consume the current qualification budget or create a late preview.
+// Keep active OPENs and recoveries of retained OPENs. During ordered acquisition,
+// also read episodes wholly inside the unprocessed window so short episodes
+// survive polling. Earlier closed episodes stay outside the qualification budget.
 const assessmentQualifiedSQL = `
 WITH scope AS MATERIALIZED (
  SELECT policy_id,cluster_id,rule_id,rule_version,enrollment_revision
@@ -577,6 +602,12 @@ WITH scope AS MATERIALIZED (
  FROM retained r JOIN scope n USING (policy_id,rule_id,rule_version,enrollment_revision)
  JOIN gp09_monitor_episodes e ON e.cluster_id=n.cluster_id AND e.policy_id=n.policy_id AND e.enrollment_revision=n.enrollment_revision AND e.occurrence=r.occurrence
  JOIN gp09_monitor_transitions t ON t.cluster_id=e.cluster_id AND t.policy_id=e.policy_id AND t.occurrence=e.occurrence AND t.transition='RECOVER'
+ UNION
+ SELECT n.policy_id,e.occurrence,t.transition,n.rule_id,n.rule_version,n.enrollment_revision,e.severity,t.occurred_at,t.snapshot
+ FROM scope n
+ JOIN gp09_monitor_episodes e ON e.cluster_id=n.cluster_id AND e.policy_id=n.policy_id AND e.enrollment_revision=n.enrollment_revision
+  AND e.opened_at>$7::timestamptz AND e.closed_at<=$5
+ JOIN gp09_monitor_transitions t ON t.cluster_id=e.cluster_id AND t.policy_id=e.policy_id AND t.occurrence=e.occurrence
 )
 SELECT policy_id,occurrence,transition,rule_id,rule_version,enrollment_revision,severity,occurred_at,
        CASE WHEN octet_length(snapshot::text)<=65536 THEN snapshot END
@@ -584,7 +615,7 @@ FROM transitions
 ORDER BY CASE WHEN transition='OPEN' AND severity='CRITICAL' THEN 0 WHEN transition='OPEN' THEN 1 ELSE 2 END,
          occurred_at,policy_id,occurrence,transition LIMIT 33`
 
-func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
+func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a.Asset, at, checkpoint time.Time, admitted ...map[string]a.Fact) ([]a.Fact, error) {
 	retained := []map[string]any{}
 	if c.Production() && len(admitted) > 0 {
 		for _, f := range admitted[0] {
@@ -601,7 +632,17 @@ func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a
 	if c.Production() {
 		query = strings.Replace(query, "FROM assessment_facts f", "FROM (SELECT NULL::text AS run_id,NULL::text AS asset,NULL::text AS kind,NULL::timestamptz AS available_at,NULL::bytea AS body WHERE false) f", 1)
 	}
-	rows, err := tx.Query(ctx, query, c.ClusterID, c.SourceID, asset.EntityKey, c.RunID, at, body)
+	// Only ordered production reads have a proven lower bound. A first read
+	// or a shadow read must not import unrelated closed incidents.
+	var since *time.Time
+	if c.Production() && !checkpoint.IsZero() {
+		from := at.Add(-900 * time.Second)
+		if checkpoint.After(from) {
+			from = checkpoint
+		}
+		since = &from
+	}
+	rows, err := tx.Query(ctx, query, c.ClusterID, c.SourceID, asset.EntityKey, c.RunID, at, body, since)
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +669,11 @@ func loadAssessmentQualified(ctx context.Context, tx pgx.Tx, c a.Config, asset a
 			}
 			q.Snapshot = append(q.Snapshot, a.SnapshotEntry{Metric: s.Metric, SourceAt: s.Reference.ObservedAt, Value: s.Value, Unit: s.Unit, Support: support})
 		}
-		f, err := a.NewFact(c.Category, c.RunID, asset.EntityKey, "QUALIFIED", at, q)
+		visible := at
+		if since != nil && q.QualifiedAt.After(*since) && !q.QualifiedAt.After(at) {
+			visible = q.QualifiedAt
+		}
+		f, err := a.NewFact(c.Category, c.RunID, asset.EntityKey, "QUALIFIED", visible, q)
 		if err != nil {
 			return nil, err
 		}

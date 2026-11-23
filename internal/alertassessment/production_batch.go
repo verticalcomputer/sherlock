@@ -137,13 +137,22 @@ func (e *Engine) AdvanceProductionBatch(ctx context.Context, asset string, now t
 	return ctx.Err()
 }
 
-// The first potentially effective event receives all preceding stale facts in
-// their original visibility order. This avoids materializing identical tracker
-// and final-arm requests for each stale receipt in a delayed upload burst.
+// Admit stale facts together at the last stale instant, preserving every
+// original availability. This avoids materializing unchanged tracker and
+// final-arm requests for each stale receipt in a delayed upload burst.
 func (e *Engine) coalesceStalePrefix(ctx context.Context, category VisibleInputReplay, asset string, cursor time.Time, freshness time.Duration, agenda []time.Time, receipts map[time.Time][]Fact) []time.Time {
 	capability, ok := category.(StaleSampleReplay)
 	en := e.Enrollments[asset]
-	if !ok || !capability.CoalescesStaleFinalSamples() || !en.Active || en.NextLogicalAt != nil || len(e.Candidates) != 1 || e.Candidates[0].Phase != "FINAL" || len(agenda) < 2 {
+	if !ok || !e.Shadow || e.State != "ACTIVE" || !capability.CoalescesStaleFinalSamples() || !en.Active || en.NextLogicalAt != nil || len(e.Candidates) != 1 || e.Candidates[0].Phase != "FINAL" || len(agenda) < 2 {
+		return agenda
+	}
+	// Replaying near a host capacity guard can itself produce a transition
+	// at the first overflowing receipt. Preserve individual admission there.
+	count := len(e.Facts)
+	for _, group := range receipts {
+		count += len(group)
+	}
+	if int64(count) > e.Config.Limits.FactCount || count > MaxFacts {
 		return agenda
 	}
 	type sampleKey struct {
@@ -152,7 +161,7 @@ func (e *Engine) coalesceStalePrefix(ctx context.Context, category VisibleInputR
 	}
 	seen := map[sampleKey]bool{}
 	isStale := func(f Fact, at time.Time) bool {
-		if f.Kind != "SAMPLE" {
+		if ctx.Err() != nil || f.Kind != "SAMPLE" {
 			return false
 		}
 		s, err := checkedSamples(ctx).decodeForSelection(e.Config.Category, f)

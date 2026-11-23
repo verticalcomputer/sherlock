@@ -1160,7 +1160,7 @@ func TestAssessmentQualifiedSourceIgnoresUnadmittedHistoricalRecoveries(t *testi
 		t.Fatal(err)
 	}
 	defer rollbackMonitoringTx(tx)
-	facts, err := loadAssessmentQualified(ctx, tx, f.config, asset, at)
+	facts, err := loadAssessmentQualified(ctx, tx, f.config, asset, at, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}

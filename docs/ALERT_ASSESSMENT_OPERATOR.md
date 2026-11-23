@@ -441,6 +441,11 @@ For an original upload, the logical clock is the server-assigned receipt time
 when the committed receipt, collection run and observation share a writer and
 the receipt falls after the asset’s checkpoint. A correction or a newly
 discovered report from before that checkpoint takes effect at discovery.
+A failed original report contributes missing-coverage evidence on the same
+receipt clock. Short qualified thermal episodes can contribute both their open
+and recovery transitions within one acquisition. If fresh input fails at a
+confirmation deadline, the evaluator rechecks the deadline and can settle it
+from retained evidence while recording the input failure.
 The receipt time describes when the server accepted the report within its
 transaction. Decision execution and persistence have their own timestamps.
 Measure the time from source observation to decision separately from the time
