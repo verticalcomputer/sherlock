@@ -8,7 +8,10 @@ DynamicUser=yes
 LoadCredential=enrollment:/var/lib/sherlock-cooling-config/%i.json
 LoadCredential=db-pass:/etc/sherlock/cooling-baseline/db-pass
 Environment=PGHOST=127.0.0.1 PGPORT=5432 PGDATABASE=sherlock PGUSER=sherlock_baseline_writer PGAPPNAME=cooling-baseline
-Environment=PGPASSFILE=%d/db-pass
+RuntimeDirectory=sherlock-baseline-%i
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/bin/install -m 0600 %d/db-pass /run/sherlock-baseline-%i/db-pass
+Environment=PGPASSFILE=/run/sherlock-baseline-%i/db-pass
 ExecStart=/usr/bin/python3 -B /opt/sherlock-cooling-baseline/current/database_cooling_profiles.py --enrollment %d/enrollment
 NoNewPrivileges=yes
 ProtectSystem=strict
