@@ -13,55 +13,105 @@ import (
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
 )
 
-// queueWarming retains the original nonurgent OPEN and fixes its reference.
+// queueWarming retains the original nonurgent OPEN and its source-time anchor.
 // A missing terminal reading does not authorize immediate delivery.
-func queueWarming(ctx context.Context, tx pgx.Tx, d a.Decision, initial a.Payload, revision int64) (bool, error) {
+func queueWarming(ctx context.Context, tx pgx.Tx, d a.Decision, initial a.Payload, entered time.Time, revision int64) (bool, error) {
 	hostFallback := d.DecisionSource == "HOST_FALLBACK" && d.HostCause == "DEADLINE_FALLBACK" && d.Outcome == ""
-	if d.Kind != "TERMINAL" || d.Action != "INVESTIGATE" || (!hostFallback && d.Outcome != cooling.CategoryID+"/UNRESOLVED_WARMING") || len(d.UrgentOccurrences) != 0 {
+	unresolved := d.Kind == "TERMINAL" && (hostFallback || d.Outcome == cooling.CategoryID+"/UNRESOLVED_WARMING")
+	firstWorsening := d.Kind == "UPDATE" && slices.Contains(d.Codes, "higher_temperature")
+	if d.Action != "INVESTIGATE" || len(d.UrgentOccurrences) != 0 || (!unresolved && !firstWorsening) {
 		return false, nil
 	}
-	var state cooling.State
-	if err := json.Unmarshal(initial.Body, &state); err != nil {
-		return false, err
+	var anchor *time.Time
+	if firstWorsening {
+		// UPDATE carries no terminal endpoint. The engine's logical boundary
+		// is when its proof first established actionable worsening. Use that
+		// proof and time even if the original benign entry is long past.
+		anchor = &d.LogicalAt
+		entered = d.LogicalAt
+	} else {
+		var state cooling.State
+		if err := json.Unmarshal(initial.Body, &state); err != nil {
+			return false, err
+		}
+		if state.EntryEndpoint != nil && !state.EntryEndpoint.SourceAt.IsZero() && !state.EntryEndpoint.SourceAt.After(d.LogicalAt) {
+			anchor = &state.EntryEndpoint.SourceAt
+		}
 	}
-	if !slices.Equal(state.Branches, []string{"SLOW"}) {
-		return false, nil
-	}
-	var refAt, anchor *time.Time
-	var refC *float64
-	if state.Reference != nil && state.EntryEndpoint != nil && !state.Reference.SourceAt.IsZero() && state.Reference.SourceAt.Before(state.EntryEndpoint.SourceAt) && !state.EntryEndpoint.SourceAt.After(d.LogicalAt) {
-		refAt, refC, anchor = &state.Reference.SourceAt, &state.Reference.Value, &state.EntryEndpoint.SourceAt
-	}
-	_, err := tx.Exec(ctx, `UPDATE production_assessment_decisions SET warming_revision=$2,warming_reference_at=$3,warming_reference_c=$4,warming_anchor=$5,warming_next_at=CASE WHEN $3::timestamptz IS NOT NULL THEN clock_timestamp() END WHERE event_id=$1 AND warming_revision IS NULL`, d.ID, revision, refAt, refC, anchor)
+	_, err := tx.Exec(ctx, `UPDATE production_assessment_decisions SET warming_revision=$2,warming_comparable=true,warming_anchor=$3,warming_known_at=$4,warming_gate=jsonb_build_object('status', CASE WHEN $3::timestamptz IS NULL THEN 'missing_entry' ELSE 'awaiting_confirmation' END),warming_next_at=CASE WHEN $3::timestamptz IS NOT NULL THEN clock_timestamp() END WHERE event_id=$1 AND warming_revision IS NULL`, d.ID, revision, anchor, entered)
 	return true, err
 }
 
-type warmingWork struct {
-	id, occurrence, asset        string
-	at, referenceAt, anchor, now time.Time
-	referenceC                   float64
-	last                         *time.Time
-	attempt                      int64
-	evidence, snapshot           []byte
+func warmingOpenHeld(ctx context.Context, tx pgx.Tx, enrollment, occurrence string) (bool, error) {
+	var held bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM production_assessment_decisions WHERE enrollment_id=$1 AND occurrence_id=$2 AND warming_revision IS NOT NULL AND warming_result IS DISTINCT FROM 'NOTIFY')`, enrollment, occurrence).Scan(&held)
+	return held, err
 }
 
-func (w warmingWork) confirmation() (cooling.WarmingContext, bool, error) {
-	var ledger, working struct {
+func retireWarmingForUrgent(ctx context.Context, tx pgx.Tx, enrollment string, d a.Decision) error {
+	_, err := tx.Exec(ctx, `UPDATE production_assessment_decisions
+ SET warming_urgent_event=$3,warming_next_at=NULL,
+ warming_gate=coalesce(warming_gate,'{}'::jsonb) || jsonb_build_object('closed_by','independent_urgent_route')
+ WHERE enrollment_id=$1 AND occurrence_id=$2 AND warming_revision IS NOT NULL
+ AND warming_result IS DISTINCT FROM 'NOTIFY' AND warming_urgent_event IS NULL AND closed_at IS NULL`,
+		enrollment, d.CandidateID, d.ID)
+	return err
+}
+
+type warmingWork struct {
+	id, occurrence, asset                 string
+	at, referenceAt, anchor, knownAt, now time.Time
+	referenceC                            float64
+	last                                  *time.Time
+	attempt                               int64
+	comparable                            bool
+	evidence, snapshot, profile           []byte
+	entryIDs                              map[string]struct{}
+	entrySamples                          []cooling.WarmingSample
+	entryNegatives                        []cooling.WarmingNegative
+}
+
+// Decode the immutable decision proof once per attempt, outside either
+// transaction. It is the only source allowed to establish the entry baseline.
+func (w *warmingWork) prepareEntry() error {
+	var ledger struct {
 		Facts []a.Fact `json:"facts"`
 	}
 	if err := json.Unmarshal(w.evidence, &ledger); err != nil {
-		return cooling.WarmingContext{}, false, err
+		return err
+	}
+	w.entryIDs = make(map[string]struct{}, len(ledger.Facts))
+	for _, f := range ledger.Facts {
+		if f.Asset == w.asset && f.ID != "" {
+			w.entryIDs[f.ID] = struct{}{}
+		}
+	}
+	var err error
+	w.entrySamples, w.entryNegatives, err = cooling.WarmingInputsFromFacts(ledger.Facts, w.asset)
+	return err
+}
+
+func (w warmingWork) confirmation() (cooling.WarmingContext, bool, error) {
+	var working struct {
+		Facts []a.Fact `json:"facts"`
 	}
 	if err := json.Unmarshal(w.snapshot, &working); err != nil {
 		return cooling.WarmingContext{}, false, err
 	}
-	samples, negatives, err := cooling.WarmingInputsFromFacts(append(ledger.Facts, working.Facts...), w.asset)
+	newFacts := slices.DeleteFunc(working.Facts, func(f a.Fact) bool { _, known := w.entryIDs[f.ID]; return known })
+	extraSamples, extraNegatives, err := cooling.WarmingInputsFromFacts(newFacts, w.asset)
 	if err != nil {
 		return cooling.WarmingContext{}, false, err
 	}
+	samples := append(w.entrySamples, extraSamples...)
+	negatives := append(w.entryNegatives, extraNegatives...)
 	var last time.Time
 	if w.last != nil {
 		last = *w.last
+	}
+	if w.comparable {
+		payload, ok := cooling.ConfirmedComparableWarmingFromEvidence(w.entrySamples, w.entryNegatives, samples, w.anchor, w.knownAt, w.now, last, negatives...)
+		return payload, ok, nil
 	}
 	payload, ok := cooling.ConfirmedWarming(samples, w.referenceAt, w.referenceC, w.anchor, w.now, last, negatives...)
 	return payload, ok, nil
@@ -84,7 +134,7 @@ func (s *ProductionAssessmentStore) claimWarming(ctx context.Context) (w warming
  ORDER BY d.warming_next_at,d.event_id FOR UPDATE OF d SKIP LOCKED LIMIT 1
 ) UPDATE production_assessment_decisions d SET warming_attempt=warming_attempt+1,warming_next_at=clock_timestamp()+interval '90 seconds'
  FROM due,production_assessment_states s WHERE due.event_id=d.event_id AND s.enrollment_id=d.enrollment_id AND s.asset=d.asset
- RETURNING d.event_id,d.occurrence_id,d.asset,d.logical_at,d.warming_reference_at,d.warming_reference_c,d.warming_anchor,d.warming_last_endpoint,d.warming_attempt,d.evidence,s.snapshot,clock_timestamp()`, s.config.Assessment.RunID, s.config.Assessment.ClusterID).Scan(&w.id, &w.occurrence, &w.asset, &w.at, &w.referenceAt, &w.referenceC, &w.anchor, &w.last, &w.attempt, &w.evidence, &w.snapshot, &w.now)
+ RETURNING d.event_id,d.occurrence_id,d.asset,d.logical_at,coalesce(d.warming_reference_at,d.warming_anchor),coalesce(d.warming_reference_c,0),d.warming_anchor,coalesce(d.warming_known_at,d.warming_anchor),d.warming_last_endpoint,d.warming_attempt,d.warming_comparable,d.evidence,s.snapshot,d.warming_profile,clock_timestamp()`, s.config.Assessment.RunID, s.config.Assessment.ClusterID).Scan(&w.id, &w.occurrence, &w.asset, &w.at, &w.referenceAt, &w.referenceC, &w.anchor, &w.knownAt, &w.last, &w.attempt, &w.comparable, &w.evidence, &w.snapshot, &w.profile, &w.now)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return w, false, nil
 	}
@@ -107,12 +157,44 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
 	if err != nil || !found {
 		return err
 	}
+	if err = w.prepareEntry(); err != nil {
+		return err
+	}
 	assessment, confirmed, err := w.confirmation()
 	if err != nil {
 		return err
 	}
+	if w.comparable && assessment.ComparableLoad != nil {
+		if len(w.profile) > 0 {
+			if err := json.Unmarshal(w.profile, &assessment.HistoricalProfile); err != nil {
+				return err
+			}
+		} else {
+			// Freeze both qualified and unknown history. Subsequent retries
+			// and configuration reloads must use the same as-of reference.
+			if s.warmingProfileLookup != nil {
+				assessment.HistoricalProfile = s.warmingProfileLookup(w.asset, w.knownAt, assessment)
+			}
+			profile, err := json.Marshal(assessment.HistoricalProfile)
+			if err != nil {
+				return err
+			}
+			tag, err := s.pool.Exec(ctx, `UPDATE production_assessment_decisions SET warming_profile=$3::jsonb
+ WHERE event_id=$1 AND warming_attempt=$2 AND warming_profile IS NULL
+ AND closed_at IS NULL AND warming_next_at>clock_timestamp()`, w.id, w.attempt, profile)
+			if err != nil || tag.RowsAffected() == 0 {
+				return err
+			}
+		}
+	}
 	if !confirmed {
-		_, err = s.pool.Exec(ctx, `UPDATE production_assessment_decisions SET warming_next_at=clock_timestamp()+interval '5 seconds' WHERE event_id=$1 AND warming_attempt=$2`, w.id, w.attempt)
+		gate, err := warmingGate(w, assessment, false)
+		if err != nil {
+			return err
+		}
+		_, err = s.pool.Exec(ctx, `UPDATE production_assessment_decisions SET warming_gate=$3,warming_next_at=clock_timestamp()+interval '5 seconds'
+ WHERE event_id=$1 AND warming_attempt=$2 AND closed_at IS NULL AND warming_next_at>clock_timestamp()
+ AND warming_anchor>=clock_timestamp()-interval '10 minutes 45 seconds'`, w.id, w.attempt, gate)
 		return err
 	}
 	body, err := json.Marshal(assessment)
@@ -123,12 +205,36 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
 	action, reason, modelErr := infer(call, body)
 	cancel()
 	if modelErr != nil || action != "WATCH" && action != "NOTIFY" {
-		action = "ERROR"
+		action, reason = "ERROR", ""
 		if modelErr == nil {
 			modelErr = errors.New("invalid warming assessment")
 		}
 	}
 	return errors.Join(modelErr, s.finishWarming(ctx, w, assessment, action, reason))
+}
+
+// Store the small evidence summary used for routing, excluding raw model input
+// and provider errors. Full source evidence remains in the existing ledger.
+func warmingGate(w warmingWork, c cooling.WarmingContext, confirmed bool) ([]byte, error) {
+	status := "awaiting_sustained_crossing"
+	if w.comparable && c.ComparableLoad == nil {
+		status = "missing_comparable_load"
+	}
+	if confirmed {
+		status = "confirmed"
+	}
+	var since *time.Time
+	if confirmed {
+		since = &c.QualifiedSinceAt
+	}
+	return json.Marshal(struct {
+		QualifiedSince *time.Time                 `json:"qualified_since,omitempty"`
+		Status         string                     `json:"status"`
+		CheckedAt      time.Time                  `json:"checked_at"`
+		EndpointC      float64                    `json:"endpoint_c,omitempty"`
+		Comparable     *cooling.WarmingReference  `json:"comparable_load,omitempty"`
+		Historical     *cooling.HistoricalProfile `json:"historical_profile,omitempty"`
+	}{since, status, w.now, c.EndpointC, c.ComparableLoad, c.HistoricalProfile})
 }
 
 func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warmingWork, c cooling.WarmingContext, action, reason string) error {
@@ -147,6 +253,11 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 	if err != nil {
 		return err
 	}
+	gate, err := warmingGate(w, c, true)
+	if err != nil {
+		return err
+	}
+	choice := action
 	if action == "NOTIFY" {
 		// The caller held no database locks during inference. A fresh snapshot
 		// must still corroborate the very same crossing that the model saw.
@@ -164,7 +275,19 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 			action = "DISCARDED"
 		}
 	}
-	tag, err := tx.Exec(ctx, `UPDATE production_assessment_decisions SET warming_result=$4,warming_last_endpoint=CASE WHEN $4='DISCARDED' THEN NULL ELSE $5::timestamptz END,warming_next_at=CASE WHEN $4='NOTIFY' THEN NULL ELSE clock_timestamp()+interval '5 seconds' END WHERE event_id=$1 AND warming_attempt=$2 AND warming_revision=$3 AND closed_at IS NULL AND warming_next_at>clock_timestamp() AND warming_anchor>=clock_timestamp()-interval '10 minutes 45 seconds'`, w.id, w.attempt, revision, action, c.EndpointAt)
+	record, err := json.Marshal(struct {
+		Gate     json.RawMessage `json:"gate"`
+		Endpoint time.Time       `json:"endpoint_at"`
+		Choice   string          `json:"choice"`
+		Result   string          `json:"result"`
+		Reason   string          `json:"reason,omitempty"`
+	}{gate, c.EndpointAt, choice, action, boundedNotificationText(reason, 512)})
+	if err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE production_assessment_decisions SET warming_result=$4,warming_gate=$6,
+ warming_calls=(CASE WHEN jsonb_array_length(warming_calls)>=16 THEN warming_calls - 0 ELSE warming_calls END) || jsonb_build_array($7::jsonb),
+ warming_last_endpoint=CASE WHEN $4='DISCARDED' THEN NULL ELSE $5::timestamptz END,warming_next_at=CASE WHEN $4='NOTIFY' THEN NULL ELSE clock_timestamp()+interval '5 seconds' END WHERE event_id=$1 AND warming_attempt=$2 AND warming_revision=$3 AND closed_at IS NULL AND warming_next_at>clock_timestamp() AND warming_anchor>=clock_timestamp()-interval '10 minutes 45 seconds'`, w.id, w.attempt, revision, action, c.EndpointAt, gate, record)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
@@ -173,7 +296,15 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 		if err != nil {
 			return err
 		}
-		summary := fmt.Sprintf("Investigate sustained GPU warming\nTemperature: %g → %g °C\nConfirmed at: %s UTC\nAssessment: %s", w.referenceC, c.EndpointC, c.EndpointAt.UTC().Format(time.DateTime), reason)
+		summary := fmt.Sprintf("Investigate sustained GPU warming\nTemperature: %g → %g °C\nConfirmed at: %s UTC\nAssessment: %s", c.ReferenceC, c.EndpointC, c.EndpointAt.UTC().Format(time.DateTime), reason)
+		if r := c.ComparableLoad; r != nil {
+			summary += fmt.Sprintf("\nComparable load: %g W, %g °C from %d readings over %.0f s\nRise: +%g °C, confirmed for %.0f s", r.PowerW, r.MedianC, r.Samples, r.Through-r.Start, c.EndpointC-r.MedianC, c.EndpointAt.Sub(c.QualifiedSinceAt).Seconds())
+			if h := c.HistoricalProfile; h != nil && h.Status == "qualified" && h.MedianC != nil && h.P95C != nil {
+				summary += fmt.Sprintf("\n24-day profile near %d W: median %g °C, 95th percentile %g °C (%d days, %d periods)", h.CenterW, *h.MedianC, *h.P95C, h.Days, h.Periods)
+			} else {
+				summary += "\n24-day profile: insufficient or unavailable history"
+			}
+		}
 		message, err := productionMessage(o, "OPEN", c.EndpointAt, summary)
 		if err != nil {
 			return err
@@ -208,8 +339,17 @@ func reviewedRowsUnchanged(review, current cooling.WarmingContext) bool {
 			reviewedGaps = append(reviewedGaps, gap)
 		}
 	}
+	if (review.ComparableLoad == nil) != (current.ComparableLoad == nil) || review.ComparableLoad != nil && *review.ComparableLoad != *current.ComparableLoad {
+		return false
+	}
 	if !slices.Equal(review.UnknownIntervals, reviewedGaps) || len(review.Rows) > len(current.Rows) {
 		return false
+	}
+	if len(current.Rows) > len(review.Rows) {
+		next := current.Rows[len(review.Rows)][0]
+		if next == nil || *next <= review.Now {
+			return false
+		}
 	}
 	for i, row := range review.Rows {
 		for j, old := range row {

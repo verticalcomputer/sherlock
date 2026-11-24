@@ -24,6 +24,8 @@ type WarmingPlateau struct {
 // Rows are [seconds since the initial crossing, degrees C, watts, percent];
 // missing measurements remain JSON null, including unavailable utilization.
 type WarmingContext struct {
+	ComparableLoad      *WarmingReference        `json:"comparable_load,omitempty"`
+	HistoricalProfile   *HistoricalProfile       `json:"historical_profile,omitempty"`
 	EndpointC           float64                  `json:"-"`
 	QualifiedSinceAt    time.Time                `json:"-"`
 	EndpointAt          time.Time                `json:"-"`
@@ -42,10 +44,14 @@ type WarmingContext struct {
 // A broken crossing must independently qualify again. Repeated polls cannot
 // turn old measurements into confirmation.
 func ConfirmedWarming(samples []WarmingSample, referenceAt time.Time, referenceC float64, anchor, asOf, lastCall time.Time, negatives ...WarmingNegative) (WarmingContext, bool) {
-	if referenceAt.IsZero() || anchor.IsZero() || referenceAt.After(anchor) || anchor.After(asOf) || !validSampleValue(Temperature, referenceC) {
+	c, ok := confirmWarming(samples, referenceAt, referenceC, anchor, asOf, lastCall, nil, negatives)
+	if !ok {
 		return WarmingContext{}, false
 	}
-	start := referenceAt.Add(-225 * time.Second)
+	return c, true
+}
+
+func warmingMeasurements(samples []WarmingSample, negatives []WarmingNegative, start, asOf time.Time) (map[time.Time][4]*float64, []time.Time, [4]warmingIntervals) {
 	var unknown [4]warmingIntervals
 	for _, n := range negatives {
 		col := warmingColumn(n.Metric)
@@ -83,15 +89,33 @@ func ConfirmedWarming(samples []WarmingSample, referenceAt time.Time, referenceC
 		times = append(times, t)
 	}
 	slices.SortFunc(times, time.Time.Compare)
-	c := WarmingContext{Now: asOf.Sub(anchor).Seconds(), ReferenceTime: referenceAt.Sub(anchor).Seconds(), ReferenceC: referenceC}
-	for col, metric := range []string{"", Temperature, Power, Utilization} {
+	for col := range unknown {
 		unknown[col] = unknown[col].merged()
+	}
+	return byTime, times, unknown
+}
+
+func confirmWarming(samples []WarmingSample, referenceAt time.Time, referenceC float64, anchor, asOf, lastCall time.Time, reference *WarmingReference, negatives []WarmingNegative) (WarmingContext, bool) {
+	if referenceAt.IsZero() || anchor.IsZero() || referenceAt.After(anchor) || anchor.After(asOf) || !validSampleValue(Temperature, referenceC) {
+		return WarmingContext{}, false
+	}
+	start := referenceAt.Add(-225 * time.Second)
+	byTime, times, unknown := warmingMeasurements(samples, negatives, start, asOf)
+	c := WarmingContext{ComparableLoad: reference, Now: asOf.Sub(anchor).Seconds(), ReferenceTime: referenceAt.Sub(anchor).Seconds(), ReferenceC: referenceC}
+	for col, metric := range []string{"", Temperature, Power, Utilization} {
 		for _, gap := range unknown[col] {
 			c.UnknownIntervals = append(c.UnknownIntervals, WarmingUnknownInterval{metric, gap.from.Sub(anchor).Seconds(), gap.through.Sub(anchor).Seconds()})
 		}
 	}
 	if unknown[1].intersects(referenceAt.Add(-30*time.Second), referenceAt) {
 		return WarmingContext{}, false
+	}
+	if reference != nil {
+		from := anchor.Add(time.Duration(reference.Start * float64(time.Second)))
+		through := anchor.Add(time.Duration(reference.Through * float64(time.Second)))
+		if unknown[1].intersects(from, through) || unknown[2].intersects(from, through) {
+			return WarmingContext{}, false
+		}
 	}
 	var since, last time.Time
 	var temps []point
@@ -106,6 +130,15 @@ func ConfirmedWarming(samples []WarmingSample, referenceAt time.Time, referenceC
 		relative := t.Sub(anchor).Seconds()
 		row[0] = &relative
 		c.Rows = append(c.Rows, row)
+		if reference != nil {
+			// A different load invalidates the crossing, even between two thermal samples.
+			outside := row[2] != nil && math.Abs(*row[2]-reference.PowerW) > comparablePowerBandW
+			if outside || (hasTemp && row[2] == nil) || unknown[2].intersects(t.Add(-30*time.Second), t) {
+				temps = nil
+				since = time.Time{}
+				continue
+			}
+		}
 		if !hasTemp {
 			continue
 		}
@@ -138,13 +171,13 @@ func ConfirmedWarming(samples []WarmingSample, referenceAt time.Time, referenceC
 			since = t
 		}
 	}
-	if unknown[1].intersects(last, asOf) || since.IsZero() || last.Sub(since) < 30*time.Second || asOf.Sub(last) > 45*time.Second || last.Sub(anchor) > 10*time.Minute {
-		return WarmingContext{}, false
+	if unknown[1].intersects(last, asOf) || (reference != nil && unknown[2].intersects(last, asOf)) || since.IsZero() || last.Sub(since) < 30*time.Second || asOf.Sub(last) > 45*time.Second || last.Sub(anchor) > 10*time.Minute {
+		return c, false
 	}
 	// Throttle only within the same uninterrupted crossing. A new crossing
 	// that earns its own confirmation can be reviewed immediately.
 	if !lastCall.IsZero() && (!last.After(lastCall) || (!lastCall.Before(since) && last.Sub(lastCall) < time.Minute)) {
-		return WarmingContext{}, false
+		return c, false
 	}
 	c.QualifiedSinceAt = since
 	c.EndpointAt = last

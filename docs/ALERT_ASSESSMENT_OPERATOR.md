@@ -454,9 +454,9 @@ decision remains eligible for delivery. Enable the scoped Slack workers only aft
 pass. Keep the schema and receipt history in place if the evaluator needs to
 be stopped or the application rolled back.
 
-### Optional OpenRouter decision review for unresolved slow warming
+### Optional OpenRouter decision review for unresolved warming
 
-Apply migration 92 before running this evaluator. Set `warming_triage`
+Apply migrations through 93 before running this evaluator. Set `warming_triage`
 to `true` in the outer production enrollment at a new revision to select this
 route. Stop older evaluator binaries for this enrollment before opting in, since
 they do not recognize the review flag. Supply the evaluator with an OpenRouter credential through `OPENROUTER_API_KEY` and allow HTTPS to `openrouter.ai`. The worker calls the Decisions API with the fixed model `liquid/d1.2-ultra`.
@@ -465,9 +465,14 @@ and follow-ups on existing occurrences retain their original delivery policy.
 Check outstanding intents before enabling the new revision. Older enrollments
 default to their existing routing behavior.
 
-For a nonurgent, unresolved slow-warming incident, the hardware notice waits
+For newly admitted nonurgent unresolved warming, all entry branches use the same
+confirmation. Sherlock retains the incident while the hardware notice waits
 for a 30-second temperature median strictly above 65°C and strictly more than
-5°C above the episode reference. The gate must persist across fresh sensor
+5°C above the earlier temperature at comparable power. Each qualifying
+reading needs corroborating power in the reference band. The worker selects
+paired readings from before a large power dip, or before entry when there was
+no dip. Too little comparable evidence leaves the incident under observation.
+An independent urgent signal continues through the existing urgent route. The gate must persist across fresh sensor
 readings spanning at least 30 seconds. A dip or sampling gap breaks confirmation.
 The worker checks for later crossings during the bounded ten-minute window.
 The existing assessment observation deadline still applies. A confirmed crossing allows the decision model to return `WATCH` or `NOTIFY`. The model
@@ -476,6 +481,51 @@ plus time spans for stable measurements. Missing utilization stays unknown.
 Inference runs separately from assessment transactions and GPU deadlines.
 Only a valid `NOTIFY` can release a held hardware notice to the existing
 scoped Slack outbox. Urgent policy continues to use its own route.
-Downgrade requires disabling the feature and resolving open, held incidents.
+A dated temperature profile can provide the model with additional context after
+local confirmation. Set `SHERLOCK_COOLING_PROFILE_DIR` to the read-only profile
+directory for this enrollment. The worker matches cluster, source, enrollment,
+asset and power band, and uses only profiles already published at entry. Sparse
+or stale history carries a coverage status. The local confirmation rule continues
+when the directory is unset or inaccessible. Profile-only deviations are for
+offline observation. See the [cooling profile guide](#24-day-cooling-profiles).
+
+Before rolling back the application, use a higher enrollment revision to disable
+warming triage and check outstanding held incidents. Resolve open comparable-load
+reviews before applying the migration 93 downgrade. Retain evidence and consult
+the migration guard before removing audit columns.
 For delivery-free verification use a disposable database and a stub model;
 keep the Slack worker stopped and leave the webhook unset.
+
+### 24-day cooling profiles
+
+The optional publisher builds per-GPU references for the warming review worker. A profile cannot start a notification. Temperatures are DCGM core temperatures in °C, and power is board power in watts. Each dated file covers the 24 completed UTC days before its cutoff.
+
+**Placement and credentials.** Run one daily batch job per enrollment on a trusted management host with approved read access to that enrollment's Prometheus instance and central incident database. A separately provisioned read-only connection or authenticated tunnel on the management host can supply the Prometheus endpoint. Use the same reviewed enrollment JSON as the evaluator. Give the publisher a separate libpq service account with SELECT on the scope columns of production_assessment_enrollments and on the scope, asset, opened_at and closed_at columns of production_notification_occurrences. Supply its credential with normal libpq configuration, for example PGSERVICE and a private password file. The script needs Python 3.9+ and psql; it does not start a tunnel or contact a collector. Verify the source maps to the enrolled cluster and source ID when configuring the job. Use TLS or a protected loopback endpoint.
+
+Create one output directory per enrollment. Give the publisher write access and the evaluator read and traverse access, for example a setgid directory owned by the publisher and an evaluator-readable group, mode 2750. The publisher creates files with mode 0640. For a systemd evaluator with a private filesystem, mount that directory read-only using BindReadOnlyPaths and set SHERLOCK_COOLING_PROFILE_DIR to its path inside the service. If the job runs on a separate host, transfer only the completed dated JSON files over the approved management channel and publish them atomically in the destination directory. Exclude the private cache. The evaluator needs no Prometheus connection or publisher credential.
+
+Run the first backfill and a daily job shortly after midnight UTC with the same command. The output directory must already exist.
+
+```sh
+python3 scripts/cooling_profiles.py \
+  --enrollment "$COOLING_ENROLLMENT" --prometheus-url "$COOLING_PROMETHEUS" \
+  build --output-dir "$COOLING_PROFILE_DIR"
+```
+
+Each GPU-day read covers one UTC day with three extra minutes for continuity. It uses four disjoint selectors to support the same Hostname/hostname and UUID/uuid label layouts as cooling collection. GPU instance series are excluded. Conflicting physical aliases cause publication to fail. HTTP queries run sequentially with a 15-second server timeout, a 20-second network timeout and an 8 MiB combined response ceiling per GPU-day. A first backfill takes 24 GPU-day reads (96 HTTP queries) per GPU. A normal daily run fetches the newly completed day and revisits the preceding day for late data. The script retains daily histograms in a private cache for 24 days. It reprocesses cached chunks whose incident exclusion intervals or source identity changed. For an older source correction, use `--refresh-cache` on the next unpublished cutoff. `--max-queries N` limits the GPU-day reads made in one invocation. An interrupted or capped job can resume with the same command and cutoff date. Use `--day YYYY-MM-DD` when resuming across midnight. Schedule one instance at a time and monitor its exit status, runtime and latest published cutoff.
+
+The builder pairs temperature and power on the exact source timestamp for the configured GPU UUID and node. A missing pair, conflicting duplicate, invalid measurement, gap over 30 seconds or a power excursion resets settling. For band centers spaced every 25 W, it includes temperatures only after power remains within ±25 W of the center for 120 seconds. Adjacent bands can overlap. Each band stores the sample-weighted median and nearest-rank 95th percentile, sample count, distinct continuous settled periods, contributing UTC days and last contributing sample time. A period that crosses midnight contributes once to the period count. Missing history contributes zero samples. The publisher excludes intervals from 15 minutes before recorded cooling occurrences through their close, or through cutoff for open incidents. Exclusions cover recorded incidents; undeclared faults can remain in historical data.
+
+The publisher writes YYYY-MM-DD.json once by atomic publication with the actual publication time. Rerunning that date preserves the published bytes, even after late samples or new exclusions. A later snapshot incorporates corrections independently. Prometheus supplies source timestamps; it may expose late or backfilled history. A snapshot built today for an earlier cutoff first becomes available today. Retain the actual dated files to reproduce what the worker could know. Publication errors leave existing dated files readable. The publisher removes snapshots more than 30 days older than the latest successfully built cutoff in its designated directory.
+
+At candidate entry, the worker chooses the newest snapshot published by then, looking back up to two UTC cutoff days. It chooses the nearest 25 W center to the local loaded reference. A band needs at least three periods across three days and a matching sample in the preceding seven days to supply temperatures. Sparse, missing and stale bands report uncertainty. A temporary outage or skipped publication must not prevent local confirmation.
+
+**Observe historical drift.** The comparison command reads one completed day and prints counts per enrolled GPU for settled readings, qualified historical coverage, readings above the historical 95th percentile and sustained temperature deviations. It compares the nearest power band, counts a sustained episode once after 30 seconds strictly above both 65°C and its historical median plus 5°C, and includes only samples at or after snapshot publication. It does not send model requests or Slack messages. Run on held-out days using archived snapshots and join the private output with independently identified hardware incidents to evaluate sensitivity and extra notices before proposing separate delivery authority.
+
+```sh
+python3 scripts/cooling_profiles.py \
+  --enrollment "$COOLING_ENROLLMENT" --prometheus-url "$COOLING_PROMETHEUS" \
+  compare --snapshot "$DATED_PROFILE" --day "$HELD_OUT_UTC_DATE"
+```
+
+For rollback, stop the publisher and remove the optional profile-directory setting at the next evaluator restart. Previously recorded evidence retains the reference selected for its decision.
