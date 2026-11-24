@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"os"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/verticalcomputer/sherlock/internal/adapters/openrouter"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
 	"github.com/verticalcomputer/sherlock/internal/config"
 	storepg "github.com/verticalcomputer/sherlock/internal/store/postgres"
-	"log/slog"
-	"time"
 )
 
 // runProductionAssessment starts no listeners, collectors, investigation,
@@ -53,8 +57,24 @@ func runProductionAssessment(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return errors.New("production assessment admission rejected")
 	}
+	var model *openrouter.Provider
+	if enrollment.WarmingTriage {
+		model, err = openrouter.New(os.Getenv("OPENROUTER_API_KEY"))
+		if err != nil {
+			return err
+		}
+	}
 	if err = store.Start(initCtx); err != nil {
 		return errors.New("production assessment startup rejected")
+	}
+	if model != nil {
+		workerCtx, stop := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runWarmingTriage(workerCtx, store, model.TriageWarming, logger)
+		}()
+		defer func() { stop(); <-done }()
 	}
 	logger.Info("control.production_assessment_started", "notifications_enabled", enrollment.NotificationsEnabled)
 	refreshTick := time.NewTicker(time.Second)
@@ -103,6 +123,30 @@ func runProductionAssessmentLoops(ctx context.Context, store assessmentRefresher
 		case <-ctx.Done():
 			return
 		case <-cleanupTick:
+		}
+	}
+}
+
+type warmingTriageStore interface {
+	ProcessWarmingTriage(context.Context, func(context.Context, json.RawMessage) (string, string, error)) error
+}
+
+// Inference runs independently of the per-GPU and refresh deadlines. A single
+// in-flight request per process bounds model traffic during a correlated event.
+func runWarmingTriage(ctx context.Context, store warmingTriageStore, infer func(context.Context, json.RawMessage) (string, string, error), logger *slog.Logger) {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for ctx.Err() == nil {
+		pass, cancel := context.WithTimeout(ctx, 40*time.Second)
+		err := store.ProcessWarmingTriage(pass, infer)
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			logger.Warn("control.warming_triage_failed")
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
 		}
 	}
 }

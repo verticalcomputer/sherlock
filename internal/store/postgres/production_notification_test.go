@@ -34,7 +34,7 @@ func TestProductionMessageWithoutHistoryURL(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{kind, o.Asset, o.ID, o.IncidentID, "concern_since=2026-11-19T13:55:00Z", "evidence_at=2026-11-19T13:56:00Z", "Investigation required &lt;@everyone&gt;"} {
+		for _, want := range []string{kind, "Node: node-a", "GPU: GPU-a", o.ID, o.IncidentID, "Incident opened: 2026-11-19T13:55:00Z", "Event time: 2026-11-19T13:56:00Z", "Investigation required &lt;@everyone&gt;"} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("missing retained context %q: %s", want, text)
 			}

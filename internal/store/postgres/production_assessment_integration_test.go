@@ -80,7 +80,7 @@ func TestProductionAssessmentWithoutEvidenceOrigin(t *testing.T) {
 	if err := f.admin.QueryRow(t.Context(), `SELECT e.evidence_base_url,o.evidence_url,q.message FROM production_assessment_enrollments e JOIN production_notification_occurrences o ON o.enrollment_id=e.enrollment_id JOIN gp09_alert_outbox q ON q.assessment_occurrence=o.occurrence_id WHERE e.enrollment_id=$1`, c.Assessment.RunID).Scan(&origin, &link, &message); err != nil {
 		t.Fatal(err)
 	}
-	if origin != "" || link != "" || strings.Contains(message, "History:") || strings.Contains(message, "/admin/") || !strings.Contains(message, id) || !strings.Contains(message, c.Assessment.Assets[0].EntityKey) {
+	if origin != "" || link != "" || strings.Contains(message, "History:") || strings.Contains(message, "/admin/") || !strings.Contains(message, id) || (!strings.Contains(message, "Node: "+c.Assessment.Assets[0].NodeID) || !strings.Contains(message, "GPU: "+c.Assessment.Assets[0].GPUUUID)) {
 		t.Fatalf("unexpected no-origin publication: origin=%q link=%q message=%q", origin, link, message)
 	}
 	changed := c
@@ -476,5 +476,76 @@ func TestProductionAssessmentAgedIncrementalLifecycle(t *testing.T) {
 	}
 	if code == "TIME_BUDGET" {
 		t.Fatal("aged incremental budget exhausted")
+	}
+}
+
+// Exercise real discovery and terminal publication using synthetic 15-second samples.
+func TestRealWarmingAssessmentToDurableIntent(t *testing.T) {
+	f, s, c, now := productionStoreFixture(t)
+	ctx := t.Context()
+	s.config.Revision++
+	s.config.WarmingTriage = true
+	if err := s.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	start := now.Add(-14 * time.Minute)
+	e, err := a.NewProductionEngine(ctx, c, start, s.registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset := c.Assessment.Assets[0].EntityKey
+	var observed *a.Candidate
+	// Oscillating power and a gradual rise produce unresolved slow warming.
+	for sec := 0; sec <= 14*60; sec += 15 {
+		at := start.Add(time.Duration(sec) * time.Second)
+		facts := productionStoreSamples(t, c, at)
+		for j, fact := range facts {
+			var sample a.Sample
+			if err := json.Unmarshal(fact.Body, &sample); err != nil {
+				t.Fatal(err)
+			}
+			if sample.Metric == cooling.Temperature {
+				sample.Value = 59 + float64(sec)/96
+			} else {
+				sample.Value = 300 + float64((sec/15)%2)*40
+			}
+			facts[j], err = a.NewFact(c.Assessment.Category, c.Assessment.RunID, asset, "SAMPLE", at, sample)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err = e.Advance(ctx, at, at, at, facts, nil); err != nil {
+			t.Fatal(err)
+		}
+		if len(e.Candidates) > 0 {
+			candidate := e.Candidates[0]
+			if candidate.Phase != "OBSERVING" {
+				t.Fatalf("early disposition %+v", candidate.Terminal)
+			}
+			if at.Add(15 * time.Second).Before(candidate.DueAt) {
+				continue
+			}
+			observed = candidate
+			break
+		}
+	}
+	if observed == nil {
+		t.Fatal("no candidate")
+	}
+	raw, err := e.SnapshotProduction(asset, observed.DueAt.Add(-time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, `UPDATE production_assessment_enrollments SET created_at=$2,notifications_enabled_at=$2 WHERE enrollment_id=$1`, c.Assessment.RunID, start)
+	f.exec(t, `UPDATE production_assessment_states SET snapshot=$3,next_due_at=$4 WHERE enrollment_id=$1 AND asset=$2`, c.Assessment.RunID, asset, raw, observed.DueAt)
+	if err = s.refreshAssetTx(ctx, c.Assessment.Assets[0], true, true, time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	var state, code string
+	if err = f.admin.QueryRow(ctx, `SELECT status,last_code FROM gp09_alert_outbox WHERE assessment_occurrence=$1`, observed.ID).Scan(&state, &code); err != nil {
+		t.Fatal(err)
+	}
+	if state != "DISABLED" || code != "WARMING_REVIEW" {
+		t.Fatalf("unexpected held intent: %s %s", state, code)
 	}
 }

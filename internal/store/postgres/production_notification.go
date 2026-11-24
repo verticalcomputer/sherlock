@@ -22,6 +22,8 @@ import (
 type ProductionAssessmentEvent struct {
 	EnrollmentID, ClusterID, SourceID, Category, Asset, OccurrenceID string
 	EventID, Kind, Summary, EvidenceURL                              string
+	warmingHold                                                      bool
+	slackSummary                                                     string
 	At                                                               time.Time
 	Evidence                                                         json.RawMessage
 	SuppressDelivery                                                 bool
@@ -59,10 +61,17 @@ func boundedNotificationText(s string, n int) string {
 	return s
 }
 func productionMessage(o ProductionOccurrence, kind string, at time.Time, summary string) (string, error) {
-	prefix := fmt.Sprintf("Sherlock cooling %s\ncluster=%s asset=%s\noccurrence=%s incident=%s\nconcern_since=%s evidence_at=%s\n", kind, slackText(o.ClusterID), slackText(o.Asset), slackText(o.ID), slackText(o.IncidentID), o.OpenedAt.UTC().Format(time.RFC3339), at.UTC().Format(time.RFC3339))
-	suffix := ""
+	prefix := fmt.Sprintf("GPU cooling · %s\n", kind)
+	parts := strings.Split(strings.TrimSuffix(o.Asset, "/"), "/")
+	if len(parts) == 4 && parts[1] == "GPU" && parts[0] == o.ClusterID {
+		prefix += fmt.Sprintf("Node: %s   |   GPU: %s\n", slackText(parts[2]), slackText(parts[3]))
+	} else {
+		prefix += "Asset: " + slackText(o.Asset) + "\n"
+	}
+	prefix += "Cluster: " + slackText(o.ClusterID) + "\n\n"
+	suffix := fmt.Sprintf("\n\nIncident opened: %s\nEvent time: %s\nIncident: %s\nOccurrence: %s", o.OpenedAt.UTC().Format(time.RFC3339), at.UTC().Format(time.RFC3339), slackText(o.IncidentID), slackText(o.ID))
 	if o.EvidenceURL != "" {
-		suffix = "\nHistory: " + slackText(o.EvidenceURL)
+		suffix += "\nHistory: " + slackText(o.EvidenceURL)
 	}
 	room := alertdelivery.MaxMessageBytes - len(prefix) - len(suffix)
 	if room < 128 {
@@ -138,15 +147,19 @@ func PublishProductionAssessment(ctx context.Context, tx pgx.Tx, event Productio
 	if _, err = tx.Exec(ctx, `UPDATE production_notification_occurrences SET next_sequence=next_sequence+1,closed_at=CASE WHEN $2='RECOVER' THEN $3 ELSE closed_at END,version=version+1 WHERE occurrence_id=$1`, o.ID, event.Kind, event.At); err != nil {
 		return err
 	}
-	message, err := productionMessage(o, event.Kind, event.At, event.Summary)
+	summary := event.slackSummary
+	if summary == "" {
+		summary = event.Summary
+	}
+	message, err := productionMessage(o, event.Kind, event.At, summary)
 	if err != nil {
 		return err
 	}
 	alertID := "assess-alert-" + monitoringDigest(event.EventID)[:40]
-	if _, err = tx.Exec(ctx, `INSERT INTO gp09_alert_outbox(alert_id,cluster_id,event_key,transition,message,assessment_enrollment,assessment_occurrence,status,last_code) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $8 THEN 'DISABLED' ELSE 'PENDING' END,CASE WHEN $8 THEN 'AUTHORITY_DISABLED' ELSE '' END)`, alertID, o.ClusterID, event.EventID, "ASSESSMENT_"+event.Kind, message, o.EnrollmentID, o.ID, event.SuppressDelivery); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO gp09_alert_outbox(alert_id,cluster_id,event_key,transition,message,assessment_enrollment,assessment_occurrence,status,last_code) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $8 THEN 'DISABLED' ELSE 'PENDING' END,CASE WHEN $9 THEN 'WARMING_REVIEW' WHEN $8 THEN 'AUTHORITY_DISABLED' ELSE '' END)`, alertID, o.ClusterID, event.EventID, "ASSESSMENT_"+event.Kind, message, o.EnrollmentID, o.ID, event.SuppressDelivery || event.warmingHold, event.warmingHold); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO production_notification_intents(alert_id,occurrence_id,first_sequence,last_sequence,oldest_pending_at) VALUES($1,$2,$3,$3,clock_timestamp())`, alertID, o.ID, o.NextSequence); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO production_notification_intents(alert_id,occurrence_id,first_sequence,last_sequence,oldest_pending_at,display_summary) VALUES($1,$2,$3,$3,clock_timestamp(),NULLIF($4,''))`, alertID, o.ID, o.NextSequence, event.slackSummary); err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO production_notification_coverage(alert_id,event_id) VALUES($1,$2)`, alertID, event.EventID)
