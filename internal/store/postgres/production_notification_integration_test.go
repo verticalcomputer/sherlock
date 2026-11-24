@@ -361,7 +361,7 @@ func TestProductionNotificationLeasedSummaryImmutableAndFenced(t *testing.T) {
 	}
 	f.finish(t, retry, alertdelivery.Accepted)
 	recovery := f.claim(t)
-	if !strings.Contains(recovery.Message, "RECOVER") || !strings.Contains(recovery.Message, "incident=") {
+	if !strings.Contains(recovery.Message, "RECOVER") || !strings.Contains(recovery.Message, "Incident: ") {
 		t.Fatal(recovery.Message)
 	}
 }
@@ -625,5 +625,23 @@ func TestProductionNotificationUnexpectedResponseRetainsAmbiguousHistory(t *test
 	var storedStatus, attemptCode string
 	if e = f.p.QueryRow(ctx, `SELECT i.receipt_uncertain,q.status,a.code FROM production_notification_intents i JOIN gp09_alert_outbox q USING(alert_id) JOIN gp09_alert_delivery_attempts a USING(alert_id) WHERE q.alert_id=$1`, claim.ID).Scan(&uncertain, &storedStatus, &attemptCode); e != nil || !uncertain || storedStatus != "DISABLED" || attemptCode != "UNEXPECTED_RESPONSE" {
 		t.Fatalf("uncertain=%v status=%s code=%s err=%v", uncertain, storedStatus, attemptCode, e)
+	}
+}
+
+// Maintenance can coalesce an approved OPEN with its recovery before Slack
+// makes its first claim. The catch-up should still explain the original risk.
+func TestProductionNotificationCatchupKeepsConfirmedWarming(t *testing.T) {
+	f := notificationTestFixture(t)
+	f.publish(t, 1, "OPEN")
+	const summary = "Confirmed warming: 59 → 67 °C\nAssessment: Sustained rise at stable power <@channel>"
+	if _, err := f.p.Exec(t.Context(), `UPDATE production_notification_intents SET display_summary=$1 WHERE occurrence_id='occurrence-1' AND first_sequence=1`, summary); err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, 2, "RECOVER")
+	c := f.claim(t)
+	for _, part := range []string{"CATCHUP", "recovered before this delivery", "59 → 67 °C", "Sustained rise at stable power &lt;@channel&gt;"} {
+		if !strings.Contains(c.Message, part) {
+			t.Fatalf("missing %q in catch-up: %s", part, c.Message)
+		}
 	}
 }

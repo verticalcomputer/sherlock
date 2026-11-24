@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/verticalcomputer/sherlock/internal/adapters/azureopenai"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
 	"github.com/verticalcomputer/sherlock/internal/config"
 	storepg "github.com/verticalcomputer/sherlock/internal/store/postgres"
-	"log/slog"
-	"time"
 )
 
 // runProductionAssessment starts no listeners, collectors, investigation,
@@ -53,8 +56,24 @@ func runProductionAssessment(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return errors.New("production assessment admission rejected")
 	}
+	var model *azureopenai.Provider
+	if enrollment.AzureWarmingTriage {
+		model, err = warmingTriageModel()
+		if err != nil {
+			return err
+		}
+	}
 	if err = store.Start(initCtx); err != nil {
 		return errors.New("production assessment startup rejected")
+	}
+	if model != nil {
+		workerCtx, stop := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runWarmingTriage(workerCtx, store, model.TriageWarming, logger)
+		}()
+		defer func() { stop(); <-done }()
 	}
 	logger.Info("control.production_assessment_started", "notifications_enabled", enrollment.NotificationsEnabled)
 	refreshTick := time.NewTicker(time.Second)
@@ -103,6 +122,47 @@ func runProductionAssessmentLoops(ctx context.Context, store assessmentRefresher
 		case <-ctx.Done():
 			return
 		case <-cleanupTick:
+		}
+	}
+}
+
+func warmingTriageModel() (*azureopenai.Provider, error) {
+	cfg, err := config.LoadModel()
+	if err != nil || cfg.Provider != "azure-openai" {
+		return nil, errors.New("warming triage requires configured Azure inference")
+	}
+	return azureopenai.NewProvider(azureopenai.Config{
+		Endpoint:                    cfg.AzureOpenAIEndpoint,
+		APIKey:                      cfg.AzureOpenAIAPIKey.Reveal(),
+		Deployment:                  cfg.AzureOpenAIDeployment,
+		ConfigurationID:             cfg.ConfigurationID,
+		Timeout:                     min(cfg.Timeout, 30*time.Second),
+		MaxOutputTokens:             min(1200, cfg.MaxOutputTokens),
+		InputTokenMicrosPerMillion:  cfg.InputMicrosPerMillionTokens,
+		OutputTokenMicrosPerMillion: cfg.OutputMicrosPerMillionTokens,
+	})
+}
+
+type warmingTriageStore interface {
+	ProcessWarmingTriage(context.Context, func(context.Context, json.RawMessage) (string, string, error)) error
+}
+
+// Inference runs independently of the per-GPU and refresh deadlines. A single
+// in-flight request per process bounds model traffic during a correlated event.
+func runWarmingTriage(ctx context.Context, store warmingTriageStore, infer func(context.Context, json.RawMessage) (string, string, error), logger *slog.Logger) {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for ctx.Err() == nil {
+		pass, cancel := context.WithTimeout(ctx, 40*time.Second)
+		err := store.ProcessWarmingTriage(pass, infer)
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			logger.Warn("control.warming_triage_failed")
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
 		}
 	}
 }

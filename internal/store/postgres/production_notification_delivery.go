@@ -170,7 +170,9 @@ func consolidateProduction(ctx context.Context, tx pgx.Tx, o ProductionOccurrenc
 		}
 	}
 	id := "assess-catchup-" + monitoringDigest(append([]string{o.ID, "renderer-v1"}, ids...)...)[:40]
-	rows, err := tx.Query(ctx, `SELECT kind,occurred_at,summary FROM production_notification_events WHERE occurrence_id=$1 AND sequence BETWEEN $2 AND $3 ORDER BY sequence LIMIT 64`, o.ID, first, last)
+	rows, err := tx.Query(ctx, `SELECT e.kind,e.occurred_at,coalesce(i.display_summary,e.summary) FROM production_notification_events e
+LEFT JOIN production_notification_intents i ON i.occurrence_id=e.occurrence_id AND NOT i.catchup AND i.first_sequence=e.sequence AND i.last_sequence=e.sequence
+WHERE e.occurrence_id=$1 AND e.sequence BETWEEN $2 AND $3 ORDER BY e.sequence LIMIT 64`, o.ID, first, last)
 	if err != nil {
 		return productionIntent{}, err
 	}
@@ -214,7 +216,7 @@ func consolidateProduction(ctx context.Context, tx pgx.Tx, o ProductionOccurrenc
 	if worsening != "" {
 		summary += fmt.Sprintf("; %d material worsening events; last worsening: %s", worseningCount, boundedNotificationText(worsening, 256))
 	}
-	summary += "; first retained concern: " + boundedNotificationText(original, 256)
+	summary += "\nFirst retained concern: " + boundedNotificationText(original, 1024)
 	if o.MaintenanceReason != "" {
 		summary += "; maintenance: " + boundedNotificationText(o.MaintenanceReason, 128)
 	}

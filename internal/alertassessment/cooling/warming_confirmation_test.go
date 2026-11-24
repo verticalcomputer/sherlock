@@ -117,3 +117,72 @@ func TestWarmingConfirmationRequiresMedian(t *testing.T) {
 		t.Fatal("raw high samples bypassed endpoint median")
 	}
 }
+
+func TestWarmingNegativeIntervals(t *testing.T) {
+	at := func(offset int) time.Time { return warmingAnchor.Add(time.Duration(offset) * time.Second) }
+	ref := at(-600)
+	var rows []WarmingSample
+	for i := -120; i <= 180; i += 15 {
+		rows = append(rows, WarmingSample{Temperature, 68, at(i), at(i)}, WarmingSample{Power, 500, at(i), at(i)}, WarmingSample{Utilization, 90, at(i), at(i)})
+	}
+	check := func(now int, ns ...WarmingNegative) (WarmingContext, bool) {
+		return ConfirmedWarming(rows, ref, 59, warmingAnchor, at(now), time.Time{}, ns...)
+	}
+	for _, metric := range []string{Power, Utilization, Temperature} {
+		gap := WarmingNegative{metric, at(-60), at(-55), at(0)}
+		ctx, ok := check(45, gap)
+		if !ok {
+			t.Fatalf("old %s negative blocked fresh temperature", metric)
+		}
+		for _, row := range ctx.Rows {
+			if *row[0] == -60 && row[warmingColumn(metric)] != nil {
+				t.Fatalf("%s sample in negative interval", metric)
+			}
+		}
+		var groups []WarmingPlateau
+		switch metric {
+		case Temperature:
+			groups = ctx.TemperaturePlateaus
+		case Power:
+			groups = append(ctx.PowerOnly, ctx.JointPowerUtil...)
+		case Utilization:
+			groups = ctx.JointPowerUtil
+		}
+		for _, p := range groups {
+			if p.Start <= -60 && p.Through >= -55 {
+				t.Fatalf("%s plateau spans known gap: %+v", metric, p)
+			}
+		}
+	}
+	gap := WarmingNegative{Temperature, at(5), at(8), at(45)}
+	if _, ok := check(30, gap); !ok {
+		t.Fatal("future coverage vetoed confirmation")
+	}
+	if _, ok := check(45, gap); ok {
+		t.Fatal("newly arrived negative inside rolling endpoint did not break confirmation")
+	}
+	if _, ok := check(75, gap); !ok {
+		t.Fatal("confirmation did not rearm after fresh coverage")
+	}
+	if _, ok := check(75, WarmingNegative{Temperature, ref.Add(-25 * time.Second), ref.Add(-25 * time.Second), at(60)}); ok {
+		t.Fatal("late conflict in reference endpoint was ignored")
+	}
+	if _, ok := check(75, WarmingNegative{Power, ref, ref, at(60)}); !ok {
+		t.Fatal("power conflict invalidated temperature reference")
+	}
+}
+
+func TestAsynchronousWarmingPlateaus(t *testing.T) {
+	at := func(offset int) time.Time { return warmingAnchor.Add(time.Duration(offset) * time.Second) }
+	var rows []WarmingSample
+	for i := -120; i <= 60; i += 15 {
+		rows = append(rows, WarmingSample{Temperature, 68, at(i), at(i)}, WarmingSample{Power, 500, at(i + 2), at(i + 2)}, WarmingSample{Utilization, 90, at(i + 2), at(i + 2)})
+	}
+	ctx, ok := ConfirmedWarming(rows, at(-600), 59, warmingAnchor, at(60), time.Time{}, WarmingNegative{Power, at(-60), at(-60), at(0)})
+	if !ok || len(ctx.TemperaturePlateaus) != 1 || len(ctx.PowerOnly) != 1 || len(ctx.JointPowerUtil) != 1 {
+		t.Fatalf("missing independent plateaus %+v", ctx)
+	}
+	if ctx.TemperaturePlateaus[0].Start != -120 || ctx.TemperaturePlateaus[0].Through != 60 || ctx.PowerOnly[0].Start != -58 || ctx.PowerOnly[0].Through != 47 || ctx.JointPowerUtil[0].Start != -58 {
+		t.Fatalf("invalid asynchronous plateau boundaries %+v", ctx)
+	}
+}
