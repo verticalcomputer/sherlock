@@ -7833,14 +7833,14 @@
     {
       "executable": false,
       "path": "scripts/cooling_profiles.py",
-      "sha256": "68d44626a992066c0dafa6389aebcf046bef338a647cfb505a757db21330a207",
-      "size": 19022
+      "sha256": "75353bcf68772837d69a9ccb160c02aed3603c0c79e96ade6188b465c9e70088",
+      "size": 19035
     },
     {
       "executable": false,
       "path": "scripts/database_cooling_profiles.py",
-      "sha256": "15f02a2ef62153d2ca697aedbeecd97bbadbce98ad4648a089e0c9129b1f3411",
-      "size": 9580
+      "sha256": "79bef7e878d83a05f2720e1a19db642feac5f209fbf70e15040a9987ad7b2c25",
+      "size": 9800
     },
     {
       "executable": false,
@@ -7971,8 +7971,8 @@
     {
       "executable": false,
       "path": "scripts/test_cooling_profiles.py",
-      "sha256": "a605635debf6019aa01dd71edca3b306e3cb2be1dd04ccfdafa54d52433ab1ba",
-      "size": 10064
+      "sha256": "e39028306fde08144eda77d73e6ee8cb569546c2341b895a30b0b14833d4cf69",
+      "size": 10928
     },
     {
       "executable": false,
@@ -8019,7 +8019,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "092641dbd01a23e69ad4809ff0abf848cefb93d524e75d3dccf3c8749ba4fba7",
+      "sha256": "fbe7c60433f60c3264558420b1bf0b218d244180b793e485323044a260414317",
       "size": 16457
     },
     {
