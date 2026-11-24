@@ -78,7 +78,7 @@ func (s *ProductionAssessmentStore) claimWarming(ctx context.Context) (w warming
 	err = tx.QueryRow(ctx, `WITH due AS (
  SELECT d.event_id FROM production_assessment_decisions d
  JOIN production_assessment_enrollments e USING(enrollment_id)
- WHERE e.enrollment_id=$1 AND e.cluster_id=$2 AND e.notifications_enabled AND e.azure_warming_triage
+ WHERE e.enrollment_id=$1 AND e.cluster_id=$2 AND e.notifications_enabled AND e.warming_triage
  AND d.warming_revision=e.revision AND d.closed_at IS NULL AND d.warming_next_at<=clock_timestamp()
  AND d.warming_anchor>=clock_timestamp()-interval '10 minutes 45 seconds'
  ORDER BY d.warming_next_at,d.event_id FOR UPDATE OF d SKIP LOCKED LIMIT 1
@@ -100,7 +100,7 @@ func (s *ProductionAssessmentStore) claimWarming(ctx context.Context) (w warming
 // ProcessWarmingTriage checks one live occurrence. Errors and WATCH never
 // release an outbox row. All retries are bounded by the original source horizon.
 func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, infer func(context.Context, json.RawMessage) (string, string, error)) error {
-	if !s.config.AzureWarmingTriage || infer == nil {
+	if !s.config.WarmingTriage || infer == nil {
 		return a.ErrInvalid
 	}
 	w, found, err := s.claimWarming(ctx)
@@ -140,7 +140,7 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 	// Lock scope authority in host/Slack lock order, then atomically fence the
 	// result against disable/re-enable, recovery and a superseding claim.
 	var revision int64
-	err = tx.QueryRow(ctx, `SELECT revision FROM production_assessment_enrollments WHERE enrollment_id=$1 AND cluster_id=$2 AND notifications_enabled AND azure_warming_triage FOR SHARE`, s.config.Assessment.RunID, s.config.Assessment.ClusterID).Scan(&revision)
+	err = tx.QueryRow(ctx, `SELECT revision FROM production_assessment_enrollments WHERE enrollment_id=$1 AND cluster_id=$2 AND notifications_enabled AND warming_triage FOR SHARE`, s.config.Assessment.RunID, s.config.Assessment.ClusterID).Scan(&revision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

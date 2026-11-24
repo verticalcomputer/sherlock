@@ -21,7 +21,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 			f, s, c, now := productionStoreFixture(t)
 			ctx := t.Context()
 			s.config.Revision++
-			s.config.AzureWarmingTriage = true
+			s.config.WarmingTriage = true
 			if err := s.Start(ctx); err != nil {
 				t.Fatal(err)
 			}

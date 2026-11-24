@@ -454,13 +454,12 @@ decision remains eligible for delivery. Enable the scoped Slack workers only aft
 pass. Keep the schema and receipt history in place if the evaluator needs to
 be stopped or the application rolled back.
 
-### Optional Azure review for unresolved slow warming
+### Optional OpenRouter decision review for unresolved slow warming
 
-Apply migration 92 before running this evaluator. Set `azure_warming_triage`
+Apply migration 92 before running this evaluator. Set `warming_triage`
 to `true` in the outer production enrollment at a new revision to select this
 route. Stop older evaluator binaries for this enrollment before opting in, since
-they do not recognize the review flag. Configure the evaluator with the existing Azure model settings, including
-the deployment, endpoint, API key, model configuration ID and token rates.
+they do not recognize the review flag. Supply the evaluator with an OpenRouter credential through `OPENROUTER_API_KEY` and allow HTTPS to `openrouter.ai`. The worker calls the Decisions API with the fixed model `liquid/d1.2-ultra`.
 The option applies to newly opened occurrences. Previously admitted notices
 and follow-ups on existing occurrences retain their original delivery policy.
 Check outstanding intents before enabling the new revision. Older enrollments
@@ -471,7 +470,7 @@ for a 30-second temperature median strictly above 65°C and strictly more than
 5°C above the episode reference. The gate must persist across fresh sensor
 readings spanning at least 30 seconds. A dip or sampling gap breaks confirmation.
 The worker checks for later crossings during the bounded ten-minute window.
-The existing assessment observation deadline still applies. A confirmed crossing allows Azure to return `WATCH` or `NOTIFY`. The model
+The existing assessment observation deadline still applies. A confirmed crossing allows the decision model to return `WATCH` or `NOTIFY`. The model
 receives relative times, temperature, board power and available utilization,
 plus time spans for stable measurements. Missing utilization stays unknown.
 Inference runs separately from assessment transactions and GPU deadlines.

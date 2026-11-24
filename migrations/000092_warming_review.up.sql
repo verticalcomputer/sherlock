@@ -1,7 +1,7 @@
 SET LOCAL lock_timeout = '1s';
 -- Enrollment opt-in and bounded work attached to already retained decisions.
 ALTER TABLE production_assessment_enrollments
-    ADD COLUMN azure_warming_triage boolean NOT NULL DEFAULT false;
+    ADD COLUMN warming_triage boolean NOT NULL DEFAULT false;
 ALTER TABLE production_assessment_decisions
     ADD COLUMN warming_revision bigint,
     ADD COLUMN warming_reference_at timestamptz,

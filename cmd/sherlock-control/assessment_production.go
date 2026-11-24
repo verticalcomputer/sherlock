@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/verticalcomputer/sherlock/internal/adapters/azureopenai"
+	"github.com/verticalcomputer/sherlock/internal/adapters/openrouter"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
 	"github.com/verticalcomputer/sherlock/internal/config"
@@ -56,9 +57,9 @@ func runProductionAssessment(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return errors.New("production assessment admission rejected")
 	}
-	var model *azureopenai.Provider
-	if enrollment.AzureWarmingTriage {
-		model, err = warmingTriageModel()
+	var model *openrouter.Provider
+	if enrollment.WarmingTriage {
+		model, err = openrouter.New(os.Getenv("OPENROUTER_API_KEY"))
 		if err != nil {
 			return err
 		}
@@ -124,23 +125,6 @@ func runProductionAssessmentLoops(ctx context.Context, store assessmentRefresher
 		case <-cleanupTick:
 		}
 	}
-}
-
-func warmingTriageModel() (*azureopenai.Provider, error) {
-	cfg, err := config.LoadModel()
-	if err != nil || cfg.Provider != "azure-openai" {
-		return nil, errors.New("warming triage requires configured Azure inference")
-	}
-	return azureopenai.NewProvider(azureopenai.Config{
-		Endpoint:                    cfg.AzureOpenAIEndpoint,
-		APIKey:                      cfg.AzureOpenAIAPIKey.Reveal(),
-		Deployment:                  cfg.AzureOpenAIDeployment,
-		ConfigurationID:             cfg.ConfigurationID,
-		Timeout:                     min(cfg.Timeout, 30*time.Second),
-		MaxOutputTokens:             min(1200, cfg.MaxOutputTokens),
-		InputTokenMicrosPerMillion:  cfg.InputMicrosPerMillionTokens,
-		OutputTokenMicrosPerMillion: cfg.OutputMicrosPerMillionTokens,
-	})
 }
 
 type warmingTriageStore interface {

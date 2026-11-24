@@ -63,19 +63,19 @@ func (s *ProductionAssessmentStore) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO production_assessment_enrollments(enrollment_id,cluster_id,source_id,category,config,config_hash,revision,notifications_enabled,notifications_enabled_at,evidence_base_url,azure_warming_triage)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8 THEN clock_timestamp() END,$9,$10) ON CONFLICT(enrollment_id) DO NOTHING`, c.RunID, c.ClusterID, c.SourceID, c.Category, body, hash, s.config.Revision, s.config.NotificationsEnabled, s.config.EvidenceBaseURL, s.config.AzureWarmingTriage)
+	_, err = tx.Exec(ctx, `INSERT INTO production_assessment_enrollments(enrollment_id,cluster_id,source_id,category,config,config_hash,revision,notifications_enabled,notifications_enabled_at,evidence_base_url,warming_triage)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8 THEN clock_timestamp() END,$9,$10) ON CONFLICT(enrollment_id) DO NOTHING`, c.RunID, c.ClusterID, c.SourceID, c.Category, body, hash, s.config.Revision, s.config.NotificationsEnabled, s.config.EvidenceBaseURL, s.config.WarmingTriage)
 	if err != nil {
 		return err
 	}
 	var storedHash, baseURL string
 	var revision int64
 	var enabled, triage bool
-	err = tx.QueryRow(ctx, `SELECT config_hash,revision,notifications_enabled,evidence_base_url,azure_warming_triage FROM production_assessment_enrollments WHERE enrollment_id=$1 FOR UPDATE`, c.RunID).Scan(&storedHash, &revision, &enabled, &baseURL, &triage)
+	err = tx.QueryRow(ctx, `SELECT config_hash,revision,notifications_enabled,evidence_base_url,warming_triage FROM production_assessment_enrollments WHERE enrollment_id=$1 FOR UPDATE`, c.RunID).Scan(&storedHash, &revision, &enabled, &baseURL, &triage)
 	if err != nil {
 		return err
 	}
-	if storedHash != hash || baseURL != s.config.EvidenceBaseURL || revision > s.config.Revision || revision == s.config.Revision && (enabled != s.config.NotificationsEnabled || triage != s.config.AzureWarmingTriage || baseURL != s.config.EvidenceBaseURL) {
+	if storedHash != hash || baseURL != s.config.EvidenceBaseURL || revision > s.config.Revision || revision == s.config.Revision && (enabled != s.config.NotificationsEnabled || triage != s.config.WarmingTriage || baseURL != s.config.EvidenceBaseURL) {
 		return fmt.Errorf("production enrollment configuration/revision conflict")
 	}
 	if revision < s.config.Revision {
@@ -84,7 +84,7 @@ func (s *ProductionAssessmentStore) Start(ctx context.Context) error {
 				return err
 			}
 		}
-		_, err = tx.Exec(ctx, `UPDATE production_assessment_enrollments SET revision=$2,notifications_enabled=$3,notifications_enabled_at=CASE WHEN $3 AND NOT notifications_enabled THEN clock_timestamp() ELSE notifications_enabled_at END,evidence_base_url=$4,azure_warming_triage=$5,updated_at=clock_timestamp() WHERE enrollment_id=$1`, c.RunID, s.config.Revision, s.config.NotificationsEnabled, s.config.EvidenceBaseURL, s.config.AzureWarmingTriage)
+		_, err = tx.Exec(ctx, `UPDATE production_assessment_enrollments SET revision=$2,notifications_enabled=$3,notifications_enabled_at=CASE WHEN $3 AND NOT notifications_enabled THEN clock_timestamp() ELSE notifications_enabled_at END,evidence_base_url=$4,warming_triage=$5,updated_at=clock_timestamp() WHERE enrollment_id=$1`, c.RunID, s.config.Revision, s.config.NotificationsEnabled, s.config.EvidenceBaseURL, s.config.WarmingTriage)
 		if err != nil {
 			return err
 		}
@@ -218,11 +218,11 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 	var revision int64
 	var baseURL string
 	var eventCount, retainedBytes int64
-	err = tx.QueryRow(ctx, `SELECT created_at,clock_timestamp(),notifications_enabled_at,notifications_enabled,revision,evidence_base_url,retained_events,retained_bytes,azure_warming_triage FROM production_assessment_enrollments WHERE enrollment_id=$1 FOR UPDATE`, c.RunID).Scan(&start, &now, &enabledAt, &enabled, &revision, &baseURL, &eventCount, &retainedBytes, &triage)
+	err = tx.QueryRow(ctx, `SELECT created_at,clock_timestamp(),notifications_enabled_at,notifications_enabled,revision,evidence_base_url,retained_events,retained_bytes,warming_triage FROM production_assessment_enrollments WHERE enrollment_id=$1 FOR UPDATE`, c.RunID).Scan(&start, &now, &enabledAt, &enabled, &revision, &baseURL, &eventCount, &retainedBytes, &triage)
 	if err != nil {
 		return err
 	}
-	if revision < s.config.Revision || triage != s.config.AzureWarmingTriage {
+	if revision < s.config.Revision || triage != s.config.WarmingTriage {
 		return fmt.Errorf("production control revision or triage policy conflict")
 	}
 	var raw []byte
@@ -446,7 +446,7 @@ func (s *ProductionAssessmentStore) Cleanup(ctx context.Context) (count int, res
 	if _, err := s.pool.Exec(ctx, `WITH expired AS (
  SELECT d.event_id FROM production_assessment_decisions d JOIN production_assessment_enrollments e USING(enrollment_id)
  WHERE d.enrollment_id=$1 AND d.warming_next_at IS NOT NULL AND d.closed_at IS NULL
- AND (d.warming_anchor<clock_timestamp()-interval '10 minutes 45 seconds' OR d.warming_revision<>e.revision OR NOT e.azure_warming_triage OR NOT e.notifications_enabled)
+ AND (d.warming_anchor<clock_timestamp()-interval '10 minutes 45 seconds' OR d.warming_revision<>e.revision OR NOT e.warming_triage OR NOT e.notifications_enabled)
  ORDER BY d.warming_next_at,d.event_id LIMIT 100 FOR UPDATE OF d SKIP LOCKED
 ) UPDATE production_assessment_decisions d SET warming_next_at=NULL FROM expired WHERE d.event_id=expired.event_id`, s.config.Assessment.RunID); err != nil {
 		return 0, err

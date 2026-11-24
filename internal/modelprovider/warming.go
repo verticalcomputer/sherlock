@@ -1,22 +1,41 @@
 package modelprovider
 
 import (
-	"fmt"
+	"encoding/json"
+	"errors"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+	"time"
 )
 
-// DecodeWarmingDecision accepts a routing decision only after checking the
-// complete output document. An invalid response cannot authorize a notification.
-func DecodeWarmingDecision(data []byte) (action, reason string, err error) {
-	var fields map[string]string
-	if err := decodeStrict(data, &fields); err != nil {
-		return "", "", &ResponseValidationError{Stage: ResponseStructuredDecode, err: err}
+// DecodeWarmingChoice checks the complete document for ambiguous JSON and reads
+// the exact action field. Usage, probability and confidence are informational.
+func DecodeWarmingChoice(data []byte, model string) (string, error) {
+	invalid := errors.New("invalid warming decision response")
+	var envelope map[string]json.RawMessage
+	if decodeStrict(data, &envelope) != nil || envelope["error"] != nil {
+		return "", invalid
 	}
-	action, reason = fields["action"], fields["reason"]
-	if len(fields) != 2 || (action != "WATCH" && action != "NOTIFY") || !validText(reason, 1024) || !utf8.Valid(data) || strings.IndexFunc(reason, unicode.IsControl) >= 0 {
-		return "", "", &ResponseValidationError{Stage: ResponseSemanticValidation, err: fmt.Errorf("invalid warming decision")}
+	var name string
+	if json.Unmarshal(envelope["model"], &name) != nil {
+		return "", invalid
 	}
-	return action, reason, nil
+	if name != model {
+		suffix, ok := strings.CutPrefix(name, model+"-")
+		if !ok {
+			return "", invalid
+		}
+		if _, err := time.Parse("20060102", suffix); err != nil {
+			return "", invalid
+		}
+	}
+	var answers map[string]map[string]json.RawMessage
+	if json.Unmarshal(envelope["answers"], &answers) != nil || len(answers) != 1 {
+		return "", invalid
+	}
+	var kind, choice string
+	action := answers["action"]
+	if json.Unmarshal(action["type"], &kind) != nil || kind != "choice" || json.Unmarshal(action["choice"], &choice) != nil || (choice != "NOTIFY" && choice != "WATCH") {
+		return "", invalid
+	}
+	return choice, nil
 }

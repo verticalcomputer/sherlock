@@ -19,7 +19,7 @@ const ProductionSnapshotLimit = 16 << 20
 type ProductionConfig struct {
 	Schema               int64  `json:"schema"`
 	Revision             int64  `json:"revision"`
-	AzureWarmingTriage   bool   `json:"azure_warming_triage,omitempty"`
+	WarmingTriage        bool   `json:"warming_triage,omitempty"`
 	NotificationsEnabled bool   `json:"notifications_enabled"`
 	EvidenceBaseURL      string `json:"evidence_base_url,omitempty"`
 	Assessment           Config `json:"assessment"`
@@ -38,8 +38,8 @@ func NormalizeProductionConfig(ctx context.Context, c ProductionConfig, r *Regis
 	}
 	// Slack notifications can carry their own investigation context without a
 	// public evidence origin. A configured origin still has the same restrictions.
-	if c.AzureWarmingTriage && c.Assessment.Category != "gpu_cooling" {
-		return c, fmt.Errorf("azure warming triage requires a cooling enrollment")
+	if c.WarmingTriage && c.Assessment.Category != "gpu_cooling" {
+		return c, fmt.Errorf("warming triage requires a cooling enrollment")
 	}
 	if c.EvidenceBaseURL != "" {
 		u, err := url.Parse(c.EvidenceBaseURL)
