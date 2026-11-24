@@ -64,11 +64,15 @@ def advance(asset, cols, start, windows):
         hist.update(stats["hist"])
         n = sum(hist.values())
         last = p.parse_time(prev["last_at"]) if prev else None
-        new_day = last is None or datetime.fromtimestamp(last, IST).date() != datetime.fromtimestamp(start, IST).date()
+        # A four-hour window can include two calendar dates. Count only
+        # dates with qualifying samples, excluding a date already represented.
+        dates = {datetime.fromtimestamp(stats[key], IST).date() for key in ("first", "last")}
+        if last is not None:
+            dates.discard(datetime.fromtimestamp(last, IST).date())
         continuing = last is not None and stats["carry"] == last
         bands[center] = dict(center_w=center, histogram_c=dict(hist), samples=n,
             median_c=(p.quantile(hist,(n+1)//2)+p.quantile(hist,(n+2)//2))/2,
-            p95_c=p.quantile(hist,(95*n+99)//100), days=(prev["days"] if prev else 0)+int(new_day),
+            p95_c=p.quantile(hist,(95*n+99)//100), days=(prev["days"] if prev else 0)+len(dates),
             periods=(prev["periods"] if prev else 0)+stats["periods"]-int(continuing),last_at=p.stamp(stats["last"]))
     return dict(paired=asset["paired"]+paired, intervals_with_pairs=asset["intervals_with_pairs"]+int(paired>0),
                 bands=list(bands.values()))
