@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/verticalcomputer/sherlock/internal/adapters/coolingprofile"
 	"github.com/verticalcomputer/sherlock/internal/adapters/openrouter"
 	a "github.com/verticalcomputer/sherlock/internal/alertassessment"
 	"github.com/verticalcomputer/sherlock/internal/alertassessment/cooling"
@@ -59,6 +60,10 @@ func runProductionAssessment(ctx context.Context, logger *slog.Logger) error {
 	}
 	var model *openrouter.Provider
 	if enrollment.WarmingTriage {
+		if dir := os.Getenv("SHERLOCK_COOLING_PROFILE_DIR"); dir != "" {
+			profile := coolingprofile.NewReader(dir, enrollment.Assessment.ClusterID, enrollment.Assessment.SourceID, enrollment.Assessment.RunID)
+			store.SetWarmingProfileLookup(profile.Lookup)
+		}
 		model, err = openrouter.New(os.Getenv("OPENROUTER_API_KEY"))
 		if err != nil {
 			return err

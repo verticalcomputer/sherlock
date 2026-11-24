@@ -19,10 +19,17 @@ import (
 // ProductionAssessmentStore has no collection or workload execution interface.
 // It consumes admitted receipts and publishes atomically via the shared outbox.
 type ProductionAssessmentStore struct {
-	pool           *pgxpool.Pool
-	registry       *a.Registry
-	config         a.ProductionConfig
-	orderedCooling bool
+	pool                 *pgxpool.Pool
+	registry             *a.Registry
+	config               a.ProductionConfig
+	orderedCooling       bool
+	warmingProfileLookup func(string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile
+}
+
+// SetWarmingProfileLookup installs an optional read-only lookup before the
+// worker starts. It runs outside the GPU pass and outside database transactions.
+func (s *ProductionAssessmentStore) SetWarmingProfileLookup(lookup func(string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile) {
+	s.warmingProfileLookup = lookup
 }
 
 func NewProductionAssessmentStore(ctx context.Context, pool *pgxpool.Pool, r *a.Registry, c a.ProductionConfig) (*ProductionAssessmentStore, error) {
@@ -343,6 +350,15 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 			}
 		}
 
+		// Critical GPU/HBM evidence already has an independent urgent publisher.
+		// Invalidate a held model claim atomically without creating a duplicate
+		// urgent page or enabling a later recovery for the suppressed OPEN.
+		if d.Action == "URGENT" && d.Kind == "UPDATE" {
+			if err = retireWarmingForUrgent(ctx, tx, c.RunID, d); err != nil {
+				return err
+			}
+		}
+
 		kind := ""
 		if d.Kind == "TERMINAL" && d.Action == "INVESTIGATE" {
 			kind = "OPEN"
@@ -373,14 +389,14 @@ func (s *ProductionAssessmentStore) refreshAssetTx(ctx context.Context, asset a.
 
 		hold := false
 		if !exists && kind == "OPEN" && triage {
-			hold, err = queueWarming(ctx, tx, d, entryState, revision)
+			hold, err = queueWarming(ctx, tx, d, entryState, entered, revision)
 			if err != nil {
 				return err
 			}
 		} else if exists {
 			// An unchecked warming OPEN cannot leak through a subsequent
 			// nonurgent escalation or measured recovery notification.
-			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM production_assessment_decisions WHERE enrollment_id=$1 AND occurrence_id=$2 AND warming_revision IS NOT NULL AND warming_result IS DISTINCT FROM 'NOTIFY')`, c.RunID, d.CandidateID).Scan(&hold)
+			hold, err = warmingOpenHeld(ctx, tx, c.RunID, d.CandidateID)
 			if err != nil {
 				return err
 			}
@@ -444,11 +460,14 @@ func (s *ProductionAssessmentStore) Cleanup(ctx context.Context) (count int, res
 	// Retire expired or revoked work even if the model worker is disabled or
 	// was offline when the confirmation window elapsed.
 	if _, err := s.pool.Exec(ctx, `WITH expired AS (
- SELECT d.event_id FROM production_assessment_decisions d JOIN production_assessment_enrollments e USING(enrollment_id)
+ SELECT d.event_id, CASE WHEN d.warming_revision<>e.revision OR NOT e.warming_triage OR NOT e.notifications_enabled THEN 'revoked' ELSE 'window_expired' END AS cause
+ FROM production_assessment_decisions d JOIN production_assessment_enrollments e USING(enrollment_id)
  WHERE d.enrollment_id=$1 AND d.warming_next_at IS NOT NULL AND d.closed_at IS NULL
  AND (d.warming_anchor<clock_timestamp()-interval '10 minutes 45 seconds' OR d.warming_revision<>e.revision OR NOT e.warming_triage OR NOT e.notifications_enabled)
  ORDER BY d.warming_next_at,d.event_id LIMIT 100 FOR UPDATE OF d SKIP LOCKED
-) UPDATE production_assessment_decisions d SET warming_next_at=NULL FROM expired WHERE d.event_id=expired.event_id`, s.config.Assessment.RunID); err != nil {
+) UPDATE production_assessment_decisions d SET warming_next_at=NULL,
+ warming_gate=coalesce(warming_gate,'{}'::jsonb) || jsonb_build_object('closed_by',expired.cause)
+ FROM expired WHERE d.event_id=expired.event_id`, s.config.Assessment.RunID); err != nil {
 		return 0, err
 	}
 	tag, err := s.pool.Exec(ctx, `DELETE FROM production_assessment_decisions WHERE event_id IN (SELECT d.event_id FROM production_assessment_decisions d WHERE d.enrollment_id=$1 AND d.closed_at<clock_timestamp()-interval '90 days' AND NOT EXISTS(SELECT 1 FROM production_notification_occurrences o WHERE o.occurrence_id=d.occurrence_id) ORDER BY d.closed_at,d.event_id LIMIT 100)`, s.config.Assessment.RunID)
