@@ -204,7 +204,7 @@ def day_stats(columns, start, windows):
     bands = {}
     for ts, c, _, center, previous in settled(columns, start, windows):
         if center not in bands:
-            bands[center] = {"hist": Counter(), "periods": 1, "carry": previous, "last": ts}
+            bands[center] = {"hist": Counter(), "periods": 1, "carry": previous, "first": ts, "last": ts}
         elif previous is None:
             bands[center]["periods"] += 1
         band = bands[center]

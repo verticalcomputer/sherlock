@@ -128,8 +128,20 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				f.exec(t, `UPDATE production_assessment_decisions SET warming_comparable=false,warming_reference_c=70,warming_reference_at=$2 WHERE event_id=$1`, d.ID, anchor.Add(-10*time.Minute))
 			}
 			lookups := 0
-			if mode == "notify" || mode == "rebound" || mode == "delayed entry receipt" {
-				s.SetWarmingProfileLookup(func(gpu string, at time.Time, c cooling.WarmingContext) *cooling.HistoricalProfile {
+			if mode == "notify" || mode == "watch" {
+				schema, err := os.ReadFile("../../../deploy/cooling-baseline/schema.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				f.exec(t, string(schema))
+				cut := entered.Add(-time.Hour)
+				f.exec(t, `INSERT INTO cooling_history.refresh VALUES ($1,$2,$3,$4,$5,'seed',$6,1)`, c.Assessment.RunID, cut, cut.Add(-24*24*time.Hour), c.Assessment.ClusterID, c.Assessment.SourceID, cut.Add(time.Minute))
+				f.exec(t, `INSERT INTO cooling_history.gpu VALUES ($1,$2,$3,10,1)`, c.Assessment.RunID, cut, asset)
+				f.exec(t, `INSERT INTO cooling_history.temperature_band VALUES ($1,$2,$3,200,69,72,10,8,9,$4,'{}')`, c.Assessment.RunID, cut, asset, cut.Add(-time.Minute))
+				f.exec(t, `INSERT INTO cooling_history.available_refresh VALUES ($1,$2,$3)`, c.Assessment.RunID, cut, cut.Add(2*time.Minute))
+				s.UseDatabaseWarmingProfiles()
+			} else if mode == "rebound" || mode == "delayed entry receipt" {
+				s.SetWarmingProfileLookup(func(_ context.Context, gpu string, at time.Time, c cooling.WarmingContext) *cooling.HistoricalProfile {
 					lookups++
 					if gpu != asset || !at.Equal(entered) || c.ComparableLoad == nil {
 						t.Fatal("incorrect profile lookup")
@@ -144,7 +156,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				if strings.Contains(string(raw), asset) || !strings.Contains(string(raw), `"reference_c":70`) {
 					t.Fatal("unsafe or incomplete model input")
 				}
-				if (mode == "notify" || mode == "delayed entry receipt") && !strings.Contains(string(raw), `"historical_profile":{"status":"qualified"`) {
+				if (mode == "notify" || mode == "watch" || mode == "delayed entry receipt") && !strings.Contains(string(raw), `"historical_profile":{"status":"qualified"`) {
 					t.Fatal("profile unavailable in model request")
 				}
 				switch mode {
@@ -248,7 +260,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				if !strings.Contains(string(audit), `"comparable_load"`) {
 					t.Fatalf("reference not audited: %s", audit)
 				}
-				if mode == "notify" && (!strings.Contains(message, "24-day profile near 200 W") || !strings.Contains(string(audit), `"historical_profile"`)) {
+				if mode == "notify" && (!strings.Contains(message, "Historical profile near 200 W") || !strings.Contains(string(audit), `"historical_profile"`)) {
 					t.Fatal("historical context missing")
 				}
 			}

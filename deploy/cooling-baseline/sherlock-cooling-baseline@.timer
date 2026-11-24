@@ -1,0 +1,10 @@
+[Unit]
+Description=Four-hour Sherlock cooling baseline refresh for %i
+
+[Timer]
+OnCalendar=*-*-* 00,04,08,12,16,20:12:00 Asia/Kolkata
+RandomizedDelaySec=180
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import urllib.parse
 
 import cooling_profiles as p
+import database_cooling_profiles as dbp
 
 
 class FakeProm:
@@ -31,6 +32,22 @@ class ProfileTests(unittest.TestCase):
     scope = {"cluster_id": "c", "source_id": "prom", "enrollment_id": "e"}
     assets = {"GPU-fixture": ("n", "c/GPU/n/GPU-fixture/")}
     day = date(2024, 3, 2)
+
+    def test_four_hour_updates_count_qualifying_dates_across_midnight(self):
+        from datetime import datetime
+
+        start = int(datetime(2026, 1, 1, 22, tzinfo=dbp.IST).timestamp())
+        def update(previous, offset, minutes):
+            times = [start + offset + 60*m + n for m in minutes for n in range(0, 181, 15)]
+            columns = {p.TEMP: dict.fromkeys(times, 62), p.POWER: dict.fromkeys(times, 500)}
+            return dbp.advance(previous, columns, start + offset, [])
+
+        state = dict(bands=[], paired=0, intervals_with_pairs=0)
+        state = update(state, 0, [50, 130])
+        for day in range(1, 4):
+            state = update(state, day*p.DAY, [130])
+        band = next(b for b in state["bands"] if b["center_w"] == 500)
+        self.assertEqual((band["days"], band["periods"]), (5, 5))
 
     def test_settling_gaps_exclusions_and_changes(self):
         cols = {p.TEMP: {}, p.POWER: {}}

@@ -496,6 +496,25 @@ the migration guard before removing audit columns.
 For delivery-free verification use a disposable database and a stub model;
 keep the Slack worker stopped and leave the webhook unset.
 
+### Database cooling baselines
+
+The four-hour publisher runs on the database host. It uses the existing observations, joined by GPU identity, source and source timestamp. Conflicting values, missing pairs, unsettled power and recorded incident windows do not contribute. Historical coverage begins at the seed's actual first readings. Each scheduled update extends the cumulative histogram without expiring old days.
+
+Apply deploy/cooling-baseline/schema.sql to the Sherlock database. Provision the scheduler with the login role in deploy/cooling-baseline/grants.sql. It can insert and read baseline rows, and read the required source columns. Its runtime credential is a libpq password file provided through systemd credentials. Run database_cooling_profiles.py with the matching enrollment and cumulative seed before enabling the timer. The unit expects both Python publisher scripts in /opt/sherlock-cooling-baseline/current.
+
+One transaction publishes the cutoff, GPU coverage and all power bands for an enrollment. The database key and enrollment lock protect against duplicate and concurrent execution. With no data for a whole fleet, the latest interval stays pending for one additional interval before it is recorded as a gap during catch-up. Previously published cutoffs are immutable. Data arriving after publication is excluded from that version. A corrected historical backfill requires a deliberate revision. Enrollment membership changes require reconciliation.
+
+The timer runs after each four-hour IST boundary and allows time for uploads. Query cooling_history.latest_temperature_band for current medians, percentiles, contributing days, periods and sample counts. Query cooling_history.refresh for the latest successful cutoff, or cooling_history.gpu for per-GPU coverage. Stop the timer to pause future refreshes. Historical rows remain available. This publisher has no authority to send notifications or change alert thresholds.
+
+To supply these summaries to the warming evaluator, apply scripts/cooling-profile-reader-grants.sql after the schema and production assessment role exist. Set SHERLOCK_COOLING_PROFILE_SOURCE=postgres on the enrolled evaluator. Leave SHERLOCK_COOLING_PROFILE_DIR unset. The warming worker looks up the nearest 25 W band in the latest scoped snapshot published by candidate entry. It freezes that context across retries. Missing, stale, sparse or unreadable history supplies no quantiles. The urgent path runs independently.
+
+The publisher records when a separate transaction first observed a committed refresh. Readers require this marker at or before candidate entry. On upgrade, mark existing snapshots at the current verification time using the following idempotent statement.
+
+```sql
+INSERT INTO cooling_history.available_refresh (enrollment_id,cutoff)
+SELECT enrollment_id,cutoff FROM cooling_history.refresh ON CONFLICT DO NOTHING;
+```
+
 ### 24-day cooling profiles
 
 The optional publisher builds per-GPU references for the warming review worker. A profile cannot start a notification. Temperatures are DCGM core temperatures in °C, and power is board power in watts. Each dated file covers the 24 completed UTC days before its cutoff.

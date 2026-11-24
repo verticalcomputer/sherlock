@@ -23,12 +23,12 @@ type ProductionAssessmentStore struct {
 	registry             *a.Registry
 	config               a.ProductionConfig
 	orderedCooling       bool
-	warmingProfileLookup func(string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile
+	warmingProfileLookup func(context.Context, string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile
 }
 
 // SetWarmingProfileLookup installs an optional read-only lookup before the
 // worker starts. It runs outside the GPU pass and outside database transactions.
-func (s *ProductionAssessmentStore) SetWarmingProfileLookup(lookup func(string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile) {
+func (s *ProductionAssessmentStore) SetWarmingProfileLookup(lookup func(context.Context, string, time.Time, cooling.WarmingContext) *cooling.HistoricalProfile) {
 	s.warmingProfileLookup = lookup
 }
 

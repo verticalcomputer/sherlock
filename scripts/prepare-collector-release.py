@@ -70,7 +70,8 @@ def deployment_source_files(source):
         r"migrations/[0-9]{6}_[a-z0-9_]+\.(?:up|down)\.sql", name) for name in files),
         "collector_invalid_migration_inventory")
     runtime_inputs = {"scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql",
-                     "scripts/cooling_profiles.py"}
+                     "scripts/cooling_profiles.py", "scripts/cooling-profile-reader-grants.sql",
+                 "scripts/database_cooling_profiles.py", "deploy/cooling-baseline/schema.sql", "deploy/cooling-baseline/grants.sql"}
     for name in files | runtime_inputs:
         require((source / name).is_file() and not (source / name).is_symlink()
                 and (source / name).stat().st_size <= 8 << 20,

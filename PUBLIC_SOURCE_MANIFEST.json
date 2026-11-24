@@ -405,8 +405,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/assessment_production.go",
-      "sha256": "64a01b6bed275dba76cfa54debf808dd0f7244cbaa73e1298575c04ec511343d",
-      "size": 5540
+      "sha256": "54fb5f3f41926e69365cf451f4cba5474d1e0b8de9a84b3bb7979f6bb29abcd2",
+      "size": 5924
     },
     {
       "executable": false,
@@ -764,6 +764,30 @@
     },
     {
       "executable": false,
+      "path": "deploy/cooling-baseline/grants.sql",
+      "sha256": "956b695d8ae26c8ba1121b27520be22f3b63494967fb1b5a8d0ebf86f3444251",
+      "size": 786
+    },
+    {
+      "executable": false,
+      "path": "deploy/cooling-baseline/schema.sql",
+      "sha256": "9e005e62dffc1d491c75114239472dabbf4f1a1ae0e44db8d62406a5ab26076d",
+      "size": 2476
+    },
+    {
+      "executable": false,
+      "path": "deploy/cooling-baseline/sherlock-cooling-baseline@.service",
+      "sha256": "5409376c79cfbf3f085ec0882d916a33360a70069e46d49dd8e987ea8f2ee6b5",
+      "size": 927
+    },
+    {
+      "executable": false,
+      "path": "deploy/cooling-baseline/sherlock-cooling-baseline@.timer",
+      "sha256": "5a08b4bd67131370a72b88f9ef3a8098357975c2c807981cecd552f37188e06e",
+      "size": 206
+    },
+    {
+      "executable": false,
       "path": "deploy/m15/database-role-v1.down.sql",
       "sha256": "cf842b57c6eee92f00639f41a8654256ee54892272678fa899425a826e81672f",
       "size": 899
@@ -993,8 +1017,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "85d9fbd1a605aff6f04ddabc826b354b8263278ea1715c9c526d431361b0e396",
-      "size": 44684
+      "sha256": "8c61bc1b4ef044ab313ee3ae44372644938fdc079e0f9989bda0ea61bf0582be",
+      "size": 47575
     },
     {
       "executable": false,
@@ -1347,8 +1371,8 @@
     {
       "executable": false,
       "path": "internal/adapters/openrouter/instructions.go",
-      "sha256": "ac0fb0deda5df575383d8f2734b781a77816e12b962f9ee516d77e3e78cb6595",
-      "size": 2004
+      "sha256": "39f98d92a5deb62d9ab8c45d67a1fa6d9a3044d0760e56781603bc0c7ab14827",
+      "size": 2025
     },
     {
       "executable": false,
@@ -5805,8 +5829,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment.go",
-      "sha256": "faa113eec0d65bd6763f81d2ab97c30228e0b1a8d0e12597585fb7cb538bf97f",
-      "size": 29405
+      "sha256": "d628fd0e383966d468f290a4afeedd03b89c5929fc5aec328d1c8b6ac32198ff",
+      "size": 29439
     },
     {
       "executable": false,
@@ -5913,14 +5937,26 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming.go",
-      "sha256": "c4fb9bcf7b71d76f579027211da36950a924ddf2ee73f2b13e99fa8ef4cded2f",
-      "size": 16882
+      "sha256": "b9dfd8fcf14c38f4c3f698b4650d0130351d6108ca446a13f9e20d79a6132bbe",
+      "size": 16895
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming_integration_test.go",
-      "sha256": "110acdaf9c42c390e21c6c7bb9b31e9c3fb1501098d94b5b4cdf69eef8d0db82",
-      "size": 14435
+      "sha256": "686ee13e64e0ddf6994a3b08eedb0ba050c3c900f645f8efeb28010b1b5fc47f",
+      "size": 15334
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_warming_profile.go",
+      "sha256": "6aceba7418dadca814b244c2f8fd7cc88fc04dea90b2d461be0a660c62c219cc",
+      "size": 2521
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_warming_profile_integration_test.go",
+      "sha256": "3a4e7172dfa4e4362dc362b5da568184780b1a0f8f617c93f3766bb81c2e6da4",
+      "size": 3549
     },
     {
       "executable": false,
@@ -7784,6 +7820,12 @@
     },
     {
       "executable": false,
+      "path": "scripts/cooling-profile-reader-grants.sql",
+      "sha256": "3dc3308d344ffcfbd6ba12f4d050c98e1dfb57993f674a8b1160b3ed29893019",
+      "size": 540
+    },
+    {
+      "executable": false,
       "path": "scripts/cooling-upload-grants.sql",
       "sha256": "08930d6285de475c4cc919f5ab0447bfef18a36c4c3e807bc0a7500e591ca2ae",
       "size": 1039
@@ -7791,8 +7833,14 @@
     {
       "executable": false,
       "path": "scripts/cooling_profiles.py",
-      "sha256": "68d44626a992066c0dafa6389aebcf046bef338a647cfb505a757db21330a207",
-      "size": 19022
+      "sha256": "75353bcf68772837d69a9ccb160c02aed3603c0c79e96ade6188b465c9e70088",
+      "size": 19035
+    },
+    {
+      "executable": false,
+      "path": "scripts/database_cooling_profiles.py",
+      "sha256": "79bef7e878d83a05f2720e1a19db642feac5f209fbf70e15040a9987ad7b2c25",
+      "size": 9800
     },
     {
       "executable": false,
@@ -7845,8 +7893,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "c1a654a3ed77a54a1b4a5394e7eaae6143a997fe62ae2707c00e7144cb9aefac",
-      "size": 20123
+      "sha256": "bab88f06643c5e7ca6c33b55fd4784bcf80a6ac2de6dbeb3d3261a7a138c4d11",
+      "size": 20301
     },
     {
       "executable": false,
@@ -7917,14 +7965,14 @@
     {
       "executable": false,
       "path": "scripts/test_collector_release.py",
-      "sha256": "28cc421787dec9931d7240ac84ab453600bebcfd6a85cc1cb42ecde729820e18",
-      "size": 23842
+      "sha256": "ba99e20efdd51c184be62bfbb0b51f0c4a5ce31b25ac1dc011244334ffddb600",
+      "size": 24085
     },
     {
       "executable": false,
       "path": "scripts/test_cooling_profiles.py",
-      "sha256": "a605635debf6019aa01dd71edca3b306e3cb2be1dd04ccfdafa54d52433ab1ba",
-      "size": 10064
+      "sha256": "e39028306fde08144eda77d73e6ee8cb569546c2341b895a30b0b14833d4cf69",
+      "size": 10928
     },
     {
       "executable": false,
@@ -7971,7 +8019,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "611498e5740ed15fe14ff35af18e69e10db43fd46a24bb06d5165b1dd0fdc6cd",
+      "sha256": "fbe7c60433f60c3264558420b1bf0b218d244180b793e485323044a260414317",
       "size": 16457
     },
     {
