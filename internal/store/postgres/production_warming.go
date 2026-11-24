@@ -173,7 +173,7 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
 			// Freeze both qualified and unknown history. Subsequent retries
 			// and configuration reloads must use the same as-of reference.
 			if s.warmingProfileLookup != nil {
-				assessment.HistoricalProfile = s.warmingProfileLookup(w.asset, w.knownAt, assessment)
+				assessment.HistoricalProfile = s.warmingProfileLookup(ctx, w.asset, w.knownAt, assessment)
 			}
 			profile, err := json.Marshal(assessment.HistoricalProfile)
 			if err != nil {
@@ -300,9 +300,9 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 		if r := c.ComparableLoad; r != nil {
 			summary += fmt.Sprintf("\nComparable load: %g W, %g °C from %d readings over %.0f s\nRise: +%g °C, confirmed for %.0f s", r.PowerW, r.MedianC, r.Samples, r.Through-r.Start, c.EndpointC-r.MedianC, c.EndpointAt.Sub(c.QualifiedSinceAt).Seconds())
 			if h := c.HistoricalProfile; h != nil && h.Status == "qualified" && h.MedianC != nil && h.P95C != nil {
-				summary += fmt.Sprintf("\n24-day profile near %d W: median %g °C, 95th percentile %g °C (%d days, %d periods)", h.CenterW, *h.MedianC, *h.P95C, h.Days, h.Periods)
+				summary += fmt.Sprintf("\nHistorical profile near %d W: median %g °C, 95th percentile %g °C (%d days, %d periods)", h.CenterW, *h.MedianC, *h.P95C, h.Days, h.Periods)
 			} else {
-				summary += "\n24-day profile: insufficient or unavailable history"
+				summary += "\nHistorical profile: insufficient or unavailable history"
 			}
 		}
 		message, err := productionMessage(o, "OPEN", c.EndpointAt, summary)

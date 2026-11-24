@@ -328,9 +328,11 @@ class CollectorReleaseTests(unittest.TestCase):
         source = self.root / "source"
         (source / "migrations").mkdir(parents=True)
         (source / "scripts").mkdir()
+        (source / "deploy/cooling-baseline").mkdir(parents=True)
         names = {"migrations/000084_continuous_cooling_upload.up.sql", "migrations/000084_continuous_cooling_upload.down.sql",
                  "scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql",
-                 "scripts/cooling_profiles.py"}
+                 "scripts/cooling_profiles.py", "scripts/cooling-profile-reader-grants.sql",
+                 "scripts/database_cooling_profiles.py", "deploy/cooling-baseline/schema.sql", "deploy/cooling-baseline/grants.sql"}
         for name in names:
             (source / name).write_text("-- synthetic reviewed SQL")
         (source / "scripts/private.env").write_text("must not ship")

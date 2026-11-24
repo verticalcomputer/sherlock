@@ -60,9 +60,17 @@ func runProductionAssessment(ctx context.Context, logger *slog.Logger) error {
 	}
 	var model *openrouter.Provider
 	if enrollment.WarmingTriage {
-		if dir := os.Getenv("SHERLOCK_COOLING_PROFILE_DIR"); dir != "" {
+		dir := os.Getenv("SHERLOCK_COOLING_PROFILE_DIR")
+		switch source := os.Getenv("SHERLOCK_COOLING_PROFILE_SOURCE"); {
+		case source == "postgres" && dir == "":
+			store.UseDatabaseWarmingProfiles()
+		case source != "":
+			return errors.New("invalid or conflicting cooling profile configuration")
+		case dir != "":
 			profile := coolingprofile.NewReader(dir, enrollment.Assessment.ClusterID, enrollment.Assessment.SourceID, enrollment.Assessment.RunID)
-			store.SetWarmingProfileLookup(profile.Lookup)
+			store.SetWarmingProfileLookup(func(_ context.Context, asset string, at time.Time, c cooling.WarmingContext) *cooling.HistoricalProfile {
+				return profile.Lookup(asset, at, c)
+			})
 		}
 		model, err = openrouter.New(os.Getenv("OPENROUTER_API_KEY"))
 		if err != nil {

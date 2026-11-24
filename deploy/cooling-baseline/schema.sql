@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS cooling_history.temperature_band (
   PRIMARY KEY (enrollment_id, cutoff, asset, power_w),
   FOREIGN KEY (enrollment_id, cutoff, asset) REFERENCES cooling_history.gpu
 );
+-- A separate transaction records when a reader first observed committed data.
+CREATE TABLE IF NOT EXISTS cooling_history.available_refresh (
+ enrollment_id text NOT NULL, cutoff timestamptz NOT NULL,
+ available_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY (enrollment_id,cutoff),
+ FOREIGN KEY (enrollment_id,cutoff) REFERENCES cooling_history.refresh
+);
 CREATE OR REPLACE VIEW cooling_history.latest_temperature_band AS
 SELECT r.cluster_id, r.source_id, r.start_at, r.published_at, b.*
 FROM (SELECT DISTINCT ON (enrollment_id) * FROM cooling_history.refresh

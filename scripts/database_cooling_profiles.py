@@ -109,6 +109,15 @@ COMMIT;
     db(sql.getvalue(),meta)
 
 
+def mark_available(scope, end):
+    # A crash after the data commit can only delay availability. Retry keeps the
+    # first durable observation time. Never backdate the marker to the data cutoff.
+    db("""INSERT INTO cooling_history.available_refresh(enrollment_id,cutoff)
+SELECT enrollment_id,cutoff FROM cooling_history.refresh WHERE enrollment_id=:'enrollment_id'
+AND cluster_id=:'cluster_id' AND source_id=:'source_id' AND cutoff=to_timestamp(:end)
+ON CONFLICT DO NOTHING;""", {**scope, "end": end})
+
+
 def load_previous(scope, end):
     sql = """SELECT json_build_array(g.asset,g.paired_samples,g.covered_intervals,coalesce(
 json_agg(json_build_object('center_w',b.power_w,'median_c',b.median_c,'p95_c',b.p95_c,
@@ -149,12 +158,14 @@ def main():
                 asset["bands"].sort(key=lambda band: band["center_w"])
             if load_previous(scope, end) != seed["assets"]:
                 raise ValueError("published seed differs")
+        mark_available(scope,end)
         return
     result=read("""SELECT extract(epoch from start_at)::bigint,extract(epoch from cutoff)::bigint
 FROM cooling_history.refresh WHERE enrollment_id=:'enrollment_id' AND cluster_id=:'cluster_id' AND source_id=:'source_id'
 ORDER BY cutoff DESC LIMIT 1;""",scope)
     if not result:raise ValueError("seed required")
     origin,start=map(int,result[0].split("|"))
+    mark_available(scope,start)
     # Ten minutes of receipt grace. Advance only completed half-open windows.
     target=origin+int((time.time()-600-origin)//STEP)*STEP
     while start<target:
@@ -168,6 +179,7 @@ ORDER BY cutoff DESC LIMIT 1;""",scope)
             raise ValueError("no paired readings in this fleet interval; checkpoint retained")
         publish(scope,origin,start+STEP,"sherlock",prior,start)
         start+=STEP
+        mark_available(scope,start)
     print("current through",p.stamp(start))
 
 
