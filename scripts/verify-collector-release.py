@@ -17,9 +17,9 @@ SPEC.loader.exec_module(release)
 require = release.require
 
 # Exact reviewed source and hashes from two independent clean Linux-target builds.
-SOURCE = "0d5d2d7975b29a666d89a45d79eb7b3a81d726db"
-TREE = "a8fb1b83158734472e376cb35d2ac6503e147c21"
-BINARY_SHA = "104bc1b825187af0f3e074ec6980d1aa0dfd77793d1a5c39c9947b10155e3a33"
+SOURCE = "491f5acfe1d050763dd6106507198b9c25400c49"
+TREE = "ba26dee78b1b5847f1a44a06ae72f402697137b4"
+BINARY_SHA = "e83ac8216f8c72e51d78c65c28aa4a41b25d7c08a81267cd83ece8ae0a2be493"
 INTAKE_SHA = "368397138187e6e5eda7864c4ecae4ba905e9cceca7965fba574fe8efea88687"
 # Every executable is pinned independently; approval must cover all seven.
 ALERT_WORKER_SHA = "123f1f31969e32425a1d6047b659cbcc9d976d2b2b4cccd60999198ca9956920"
