@@ -1,0 +1,9 @@
+# Database cooling baselines
+
+The four-hour publisher runs on the database host. It uses the existing observations, joined by GPU identity, source and source timestamp. Conflicting values, missing pairs, unsettled power and recorded incident windows do not contribute. Historical coverage begins at the seed's actual first readings. Each scheduled update extends the cumulative histogram without expiring old days.
+
+Apply schema.sql to the Sherlock database. Provision the scheduler with the login role in grants.sql. It can insert and read baseline rows, and read the required source columns. Its runtime credential is a libpq password file provided through systemd credentials. Run database_cooling_profiles.py with the matching enrollment and cumulative seed before enabling the timer. The unit expects both Python publisher scripts in /opt/sherlock-cooling-baseline/current.
+
+One transaction publishes the cutoff, GPU coverage and all power bands for an enrollment. The database key and enrollment lock protect against duplicate and concurrent execution. With no data for a whole fleet, the latest interval stays pending for one additional interval before it is recorded as a gap during catch-up. Previously published cutoffs are immutable. Data arriving after publication is excluded from that version. A corrected historical backfill requires a deliberate revision. Enrollment membership changes require reconciliation.
+
+The timer runs after each four-hour IST boundary and allows time for uploads. Query cooling_history.latest_temperature_band for current medians, percentiles, contributing days, periods and sample counts. Query cooling_history.refresh for the latest successful cutoff, or cooling_history.gpu for per-GPU coverage. Stop the timer to pause future refreshes. Historical rows remain available. This publisher has no authority to send notifications or change alert thresholds.
