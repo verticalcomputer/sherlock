@@ -69,14 +69,15 @@ def deployment_source_files(source):
     require(0 < len(files) <= 1024 and all(re.fullmatch(
         r"migrations/[0-9]{6}_[a-z0-9_]+\.(?:up|down)\.sql", name) for name in files),
         "collector_invalid_migration_inventory")
-    grants = {"scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql"}
-    for name in files | grants:
+    runtime_inputs = {"scripts/production-assessment-grants.sql", "scripts/cooling-upload-grants.sql",
+                     "scripts/cooling_profiles.py"}
+    for name in files | runtime_inputs:
         require((source / name).is_file() and not (source / name).is_symlink()
                 and (source / name).stat().st_size <= 8 << 20,
                 "collector_unsafe_deployment_source")
-    require(sum((source / name).stat().st_size for name in files | grants) <= 16 << 20,
+    require(sum((source / name).stat().st_size for name in files | runtime_inputs) <= 16 << 20,
             "collector_deployment_source_too_large")
-    return files | grants
+    return files | runtime_inputs
 
 
 def build(repo, output, proxy, workflow_commit, tag, *, verify_pins=True):

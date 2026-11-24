@@ -9,8 +9,8 @@
     {
       "executable": false,
       "path": ".github/workflows/ci.yml",
-      "sha256": "6d7256b80e3618003f4d4faa6b4aad9080f4aab6ce81fd2e8983d3af777b17af",
-      "size": 5469
+      "sha256": "438ed2bb51ed15be34fc51e9aade30bbe8394db61954b2b983fc4b1df0b8d8f9",
+      "size": 5598
     },
     {
       "executable": false,
@@ -63,8 +63,8 @@
     {
       "executable": false,
       "path": "Makefile",
-      "sha256": "aebca96c91a4403ac85892bb9c7902ce51e5fc052301ea8034a79f8bedda65fd",
-      "size": 2061
+      "sha256": "b368703ae8038217ed732a13b3facf8e7a30e3b19257d3f1d23e2a1f2a2dddc7",
+      "size": 2133
     },
     {
       "executable": false,
@@ -405,8 +405,8 @@
     {
       "executable": false,
       "path": "cmd/sherlock-control/assessment_production.go",
-      "sha256": "36f573fcaa072fb41c22fa38dee8b81e40163ff13df654e4616697bc072ded4e",
-      "size": 5209
+      "sha256": "64a01b6bed275dba76cfa54debf808dd0f7244cbaa73e1298575c04ec511343d",
+      "size": 5540
     },
     {
       "executable": false,
@@ -993,8 +993,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "5ef010b26588ecbedb138fcb2252bdb64e0257ca23515d73e4e4d310b090e47e",
-      "size": 36976
+      "sha256": "85d9fbd1a605aff6f04ddabc826b354b8263278ea1715c9c526d431361b0e396",
+      "size": 44684
     },
     {
       "executable": false,
@@ -1145,6 +1145,18 @@
       "path": "internal/adapters/azureopenai/testdata/partial-xid-context.json",
       "sha256": "93deb6648d942c618373f8577670970eec38a63672a2bd765c13684c7e07d939",
       "size": 4395
+    },
+    {
+      "executable": false,
+      "path": "internal/adapters/coolingprofile/reader.go",
+      "sha256": "f656419695df4f45034300486b28ad76cf29b91a6ecb4180455282963fc1297c",
+      "size": 3991
+    },
+    {
+      "executable": false,
+      "path": "internal/adapters/coolingprofile/reader_test.go",
+      "sha256": "be19ee0dd27737932e0701e60c1456be29fe44b6e847675443974751b64401c8",
+      "size": 3748
     },
     {
       "executable": false,
@@ -1335,8 +1347,8 @@
     {
       "executable": false,
       "path": "internal/adapters/openrouter/instructions.go",
-      "sha256": "3cb23864285bd26753c7abbbc4943b6e76d575c6df32860b2fceb6545ba793d1",
-      "size": 1369
+      "sha256": "ac0fb0deda5df575383d8f2734b781a77816e12b962f9ee516d77e3e78cb6595",
+      "size": 2004
     },
     {
       "executable": false,
@@ -2198,6 +2210,12 @@
     },
     {
       "executable": false,
+      "path": "internal/alertassessment/cooling/historical_profile.go",
+      "sha256": "667e7ce87256cd25e234677d48f1cc1f94d80a56146f89ffb67671cc5f15b054",
+      "size": 621
+    },
+    {
+      "executable": false,
       "path": "internal/alertassessment/cooling/notice.go",
       "sha256": "e57a8e7faef191dbfe6f060c05e705f70d9340a258cc72b74263306f849d6fa9",
       "size": 1133
@@ -2229,8 +2247,8 @@
     {
       "executable": false,
       "path": "internal/alertassessment/cooling/warming_confirmation.go",
-      "sha256": "e8d10dabe41c9042f02546a64c07edd1a4b1875f5c599f23f667e3ff7eda59f9",
-      "size": 7256
+      "sha256": "6d0e44c28ee7aa64492138237c73febd79c31a97befd2a030208311d6250cc43",
+      "size": 8818
     },
     {
       "executable": false,
@@ -2249,6 +2267,18 @@
       "path": "internal/alertassessment/cooling/warming_input_test.go",
       "sha256": "aa466e0898d822fbc6ada9ea5f4866e04f94a04ffce503eae67b3f3804593dda",
       "size": 1190
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/warming_reference.go",
+      "sha256": "74f98f9ea2b6fb586b786202f38d23d6c53b5e1e8ef61ec8a5b707da875c15ec",
+      "size": 4427
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/warming_reference_test.go",
+      "sha256": "e6cd8a89530d9cd1f583c6f9a5f6ff9d43d5572b734391c6c57c6e441b1b224c",
+      "size": 7201
     },
     {
       "executable": false,
@@ -5775,8 +5805,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment.go",
-      "sha256": "bf9aee6febe6249aeb316738930aca8dfc9122dfbe107194736c1aca577dbd2f",
-      "size": 28505
+      "sha256": "faa113eec0d65bd6763f81d2ab97c30228e0b1a8d0e12597585fb7cb538bf97f",
+      "size": 29405
     },
     {
       "executable": false,
@@ -5883,14 +5913,14 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming.go",
-      "sha256": "cd461c4fea94b56acd25b2bb59985d0b12338ca962e1ae57131a1732f394ea01",
-      "size": 10378
+      "sha256": "c4fb9bcf7b71d76f579027211da36950a924ddf2ee73f2b13e99fa8ef4cded2f",
+      "size": 16882
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming_integration_test.go",
-      "sha256": "e1b616b769a29b3fbafc2bbfc6825a086507a94936536005a4e14b1f4027befa",
-      "size": 7531
+      "sha256": "110acdaf9c42c390e21c6c7bb9b31e9c3fb1501098d94b5b4cdf69eef8d0db82",
+      "size": 14435
     },
     {
       "executable": false,
@@ -7706,6 +7736,18 @@
     },
     {
       "executable": false,
+      "path": "migrations/000093_warming_comparable_load.down.sql",
+      "sha256": "ba6f4fc3588686274f2644441e9212b36717ff046a4a88c9b823be5bf856eab4",
+      "size": 557
+    },
+    {
+      "executable": false,
+      "path": "migrations/000093_warming_comparable_load.up.sql",
+      "sha256": "ca8095dcae27044172fb2cd202762cf287a0daff45cc8ea6f4d9698f2f18c788",
+      "size": 594
+    },
+    {
+      "executable": false,
       "path": "next.md",
       "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
       "size": 7098
@@ -7745,6 +7787,12 @@
       "path": "scripts/cooling-upload-grants.sql",
       "sha256": "08930d6285de475c4cc919f5ab0447bfef18a36c4c3e807bc0a7500e591ca2ae",
       "size": 1039
+    },
+    {
+      "executable": false,
+      "path": "scripts/cooling_profiles.py",
+      "sha256": "68d44626a992066c0dafa6389aebcf046bef338a647cfb505a757db21330a207",
+      "size": 19022
     },
     {
       "executable": false,
@@ -7797,8 +7845,8 @@
     {
       "executable": false,
       "path": "scripts/prepare-collector-release.py",
-      "sha256": "20c2d4f5bcd3e4da3802c9182ed66500a6930c9a9ba429add3d89cca4a1fe6f1",
-      "size": 20039
+      "sha256": "c1a654a3ed77a54a1b4a5394e7eaae6143a997fe62ae2707c00e7144cb9aefac",
+      "size": 20123
     },
     {
       "executable": false,
@@ -7869,8 +7917,14 @@
     {
       "executable": false,
       "path": "scripts/test_collector_release.py",
-      "sha256": "922cdd02eecb3190c3915bbc3c69c85b5c899e78071d9c981f256b3f1a03a267",
-      "size": 23794
+      "sha256": "28cc421787dec9931d7240ac84ab453600bebcfd6a85cc1cb42ecde729820e18",
+      "size": 23842
+    },
+    {
+      "executable": false,
+      "path": "scripts/test_cooling_profiles.py",
+      "sha256": "a605635debf6019aa01dd71edca3b306e3cb2be1dd04ccfdafa54d52433ab1ba",
+      "size": 10064
     },
     {
       "executable": false,
@@ -7917,7 +7971,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "774c48f1bfb475d7fddebc2b1914d2a583205f154aaf68d52fce59fbc1e6fc4a",
+      "sha256": "611498e5740ed15fe14ff35af18e69e10db43fd46a24bb06d5165b1dd0fdc6cd",
       "size": 16457
     },
     {
