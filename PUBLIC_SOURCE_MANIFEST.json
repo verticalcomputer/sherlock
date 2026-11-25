@@ -1017,8 +1017,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "8c61bc1b4ef044ab313ee3ae44372644938fdc079e0f9989bda0ea61bf0582be",
-      "size": 47575
+      "sha256": "94ed21ba5e4e90b17b25f62f5421af62dab7ceb90f2acf511ff78d780c0fe8ae",
+      "size": 48347
     },
     {
       "executable": false,
@@ -1371,20 +1371,20 @@
     {
       "executable": false,
       "path": "internal/adapters/openrouter/instructions.go",
-      "sha256": "39f98d92a5deb62d9ab8c45d67a1fa6d9a3044d0760e56781603bc0c7ab14827",
-      "size": 2025
+      "sha256": "9990498994df47e0dfc0409a1cb80170890ecef74a344f6c6f5700d7c0b02908",
+      "size": 3044
     },
     {
       "executable": false,
       "path": "internal/adapters/openrouter/warming.go",
-      "sha256": "2cdc1bc0697a4cb840ee4dcb4aeb96d746a35ec37c97ed8f0aafa86d2f51b2da",
-      "size": 2345
+      "sha256": "8764cf373dbac35c496e86665a264cc5fde2b80a8835181e4b032d0ab3fe0d67",
+      "size": 2639
     },
     {
       "executable": false,
       "path": "internal/adapters/openrouter/warming_test.go",
-      "sha256": "bc117c41340a914b21a6dcaafcde2c5c43e5177b4709766ccbe0b94bfbc11763",
-      "size": 2996
+      "sha256": "06c0e7750613992a26bbe9ee6beadf823a3f4dba9fe5e675a7d5ee4ea0d32603",
+      "size": 3874
     },
     {
       "executable": false,
@@ -2252,6 +2252,12 @@
     },
     {
       "executable": false,
+      "path": "internal/alertassessment/cooling/peers.go",
+      "sha256": "4508feea691ba89a212fd3422e950bbc81fcec58bd1b4796f6c949de076a18f0",
+      "size": 679
+    },
+    {
+      "executable": false,
       "path": "internal/alertassessment/cooling/policy.go",
       "sha256": "c0646520cc465883a0795a389e27167f508e0e78e1294f62416e5678b139bfbf",
       "size": 9733
@@ -2270,9 +2276,21 @@
     },
     {
       "executable": false,
+      "path": "internal/alertassessment/cooling/suspected_context.go",
+      "sha256": "aaf7af6a42efe0a281c7386dea306c77783439abf11a741d9eda382468402197",
+      "size": 4091
+    },
+    {
+      "executable": false,
+      "path": "internal/alertassessment/cooling/suspected_context_test.go",
+      "sha256": "4f2d31d129c7c21bd5160b4bb611c9f691a3e0515911ff96208be275925a12f9",
+      "size": 2875
+    },
+    {
+      "executable": false,
       "path": "internal/alertassessment/cooling/warming_confirmation.go",
-      "sha256": "6d0e44c28ee7aa64492138237c73febd79c31a97befd2a030208311d6250cc43",
-      "size": 8818
+      "sha256": "61ff48ccfabe3dec141a92fd2502f02e866dd86383a8bae8177b8edb4ef3095d",
+      "size": 9111
     },
     {
       "executable": false,
@@ -5937,20 +5955,38 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming.go",
-      "sha256": "b9dfd8fcf14c38f4c3f698b4650d0130351d6108ca446a13f9e20d79a6132bbe",
-      "size": 16895
+      "sha256": "a7d69750634f19f621fd776e18710cba7a5ffaa128dc38df62539240edcaa999",
+      "size": 19250
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming_integration_test.go",
-      "sha256": "686ee13e64e0ddf6994a3b08eedb0ba050c3c900f645f8efeb28010b1b5fc47f",
-      "size": 15334
+      "sha256": "b8fa1e9ee3d9a464e0375d126316064350638558c11447db06c0ddd3a9b58668",
+      "size": 16974
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_warming_peers.go",
+      "sha256": "81c9cc206022a06ec1064ef10d43408968d976aa5edb7769c2930a8346904947",
+      "size": 6909
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_warming_peers_integration_test.go",
+      "sha256": "505bb6246425b61f6be21df639ae8dc255ecfed2ea82210abfe5e915240c14ac",
+      "size": 5999
+    },
+    {
+      "executable": false,
+      "path": "internal/store/postgres/production_warming_peers_test.go",
+      "sha256": "f44266c9f3686d7d63ab7ad6bcae572479fc4f06d777fba42b5611882400aa85",
+      "size": 1174
     },
     {
       "executable": false,
       "path": "internal/store/postgres/production_warming_profile.go",
-      "sha256": "6aceba7418dadca814b244c2f8fd7cc88fc04dea90b2d461be0a660c62c219cc",
-      "size": 2521
+      "sha256": "4ed974820dd1ecb730180c319186a45695478f3097ddb80fa7372e36d4cfb1db",
+      "size": 2627
     },
     {
       "executable": false,
@@ -8019,7 +8055,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "fbe7c60433f60c3264558420b1bf0b218d244180b793e485323044a260414317",
+      "sha256": "1fc3ca2771cf4dd6892d372451f4828a81991a771717b527196282f935e12456",
       "size": 16457
     },
     {
