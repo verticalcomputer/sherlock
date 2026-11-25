@@ -549,3 +549,75 @@ func TestRealWarmingAssessmentToDurableIntent(t *testing.T) {
 		t.Fatalf("unexpected held intent: %s %s", state, code)
 	}
 }
+
+func TestClosedEvidenceAdmissionAccounting(t *testing.T) {
+	f, _, c, _ := productionStoreFixture(t)
+	ctx := t.Context()
+	run := c.Assessment.RunID
+	asset := c.Assessment.Assets[0].EntityKey
+	migrate := func(direction string) {
+		t.Helper()
+		sql, err := os.ReadFile("../../../migrations/000094_active_evidence_budget." + direction + ".sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.exec(t, string(sql))
+	}
+	check := func(active, closed int64) {
+		t.Helper()
+		var got [4]int64
+		if err := f.admin.QueryRow(ctx, "SELECT retained_events, retained_bytes, closed_events, closed_bytes FROM production_assessment_enrollments WHERE enrollment_id=$1", run).Scan(&got[0], &got[1], &got[2], &got[3]); err != nil {
+			t.Fatal(err)
+		}
+		if got != [4]int64{active, active * 5, closed, closed * 5} {
+			t.Fatalf("unexpected counters %v", got)
+		}
+	}
+	insert := `INSERT INTO production_assessment_decisions(event_id,enrollment_id,occurrence_id,asset,kind,logical_at,evidence,evidence_hash) VALUES(repeat($3,64),$1,repeat('c',64),$2,'TERMINAL',now(),'proof',repeat('e',64)) ON CONFLICT DO NOTHING`
+	migrate("down")
+	f.exec(t, insert, run, asset, "a")
+	f.exec(t, insert, run, asset, "b")
+	f.exec(t, "UPDATE production_assessment_decisions SET closed_at=now() WHERE event_id=repeat('a',64)")
+	migrate("up")
+	check(1, 1)
+	f.exec(t, insert, run, asset, "a")
+	f.exec(t, "UPDATE production_assessment_decisions SET closed_at=now() WHERE enrollment_id=$1", run)
+	check(0, 2)
+	f.exec(t, "UPDATE production_assessment_decisions SET closed_at=now() WHERE enrollment_id=$1", run)
+	check(0, 2)
+	status, err := ReadProductionAssessmentStatus(ctx, f.admin, c.Assessment.ClusterID, run)
+	if err != nil || status.RetainedBytes != 10 || status.ActiveBytes != 0 {
+		t.Fatalf("status %+v, %v", status, err)
+	}
+	migrate("down")
+	migrate("up")
+	check(0, 2)
+	f.exec(t, "DELETE FROM production_assessment_decisions WHERE enrollment_id=$1", run)
+	check(0, 0)
+	// Exercise the live admission boundary with real sized proofs under the old
+	// schema. Two repeated digests form a valid event identifier in this fixture.
+	migrate("down")
+	f.exec(t, `INSERT INTO production_assessment_decisions(event_id,enrollment_id,occurrence_id,asset,kind,logical_at,closed_at,evidence,evidence_hash)
+		SELECT repeat(md5(i::text),2),$1,repeat('c',64),$2,'RECOVER',now(),now(),repeat('x',4194304)::bytea,repeat('e',64)
+		FROM generate_series(1,97) i`, run, asset)
+	var admitted bool
+	admission := func() bool {
+		t.Helper()
+		if err := f.admin.QueryRow(ctx, "SELECT retained_bytes < 402653184 AND retained_events < 9968 FROM production_assessment_enrollments WHERE enrollment_id=$1", run).Scan(&admitted); err != nil {
+			t.Fatal(err)
+		}
+		return admitted
+	}
+	if admission() {
+		t.Fatal("old admission unexpectedly allowed")
+	}
+	migrate("up")
+	if !admission() {
+		t.Fatal("closed proof history still blocks discovery")
+	}
+	var count, bytes int64
+	if err := f.admin.QueryRow(ctx, "SELECT count(*),sum(octet_length(evidence)) FROM production_assessment_decisions WHERE enrollment_id=$1", run).Scan(&count, &bytes); err != nil || count != 97 || bytes != 97*4194304 {
+		t.Fatalf("proofs after migration: %d %d %v", count, bytes, err)
+	}
+
+}

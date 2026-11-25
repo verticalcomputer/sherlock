@@ -325,6 +325,8 @@ cannot inspect the history. The page includes events, proof, delivery and
 operator audit with bounded pagination. CLI `--after` and `--after-audit` provide
 the same event/audit continuation without dropping older history.
 
+Migration 94 charges only decisions whose occurrence is still open to the admission allowance (9,968 events or 384 MiB). Closing an occurrence transfers its proofs to the history counters in the same transaction. The database keeps the same rows, evidence hashes and notification references. Status reports total retained evidence and the active subset. Older status clients reading the legacy database columns directly see the active subset after migration. Monitor disk reserves separately for the retained history.
+
 Closed occurrence evidence is retained for 90 days. Pending, leased, failed or
 ambiguous delivery prevents automatic history cleanup. Active evaluation reads
 only its rolling 15-minute evidence plus referenced proof, not 90 days of history.

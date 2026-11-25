@@ -17,13 +17,13 @@ SPEC.loader.exec_module(release)
 require = release.require
 
 # Exact reviewed source and hashes from two independent clean Linux-target builds.
-SOURCE = "b73246c9953546f5adaab783f343892c8c4553dc"
-TREE = "757bc08c17203de580fecfdc538f48c728188185"
-BINARY_SHA = "baac33a24f894dc073a7465da2095d2bc37cf6ca98781ea3800a033f2dc9a9df"
+SOURCE = "ac9b4bbcde7df4b2be727c12d56366983820bf78"
+TREE = "815eca818639473403474d519ecd33efb205e1fc"
+BINARY_SHA = "d424aa6c66ad084fd72cd6debb30303e7b10957da9fa44c0a09121134c8f36aa"
 INTAKE_SHA = "6a5951f92cc134213bfce72d41681c155b6724384773106b9b0b1d1abfc8c292"
 # Every executable is pinned independently; approval must cover all seven.
 ALERT_WORKER_SHA = "d9ad0e092ddf8f96d1ff71708a55af8ab588832d35dacd95506514edc08f8642"
-ADMIN_SHA = "79dd8715d1b7487de6e24f773cd05498b1676176d058962962bf660a9e50f3d7"
+ADMIN_SHA = "9ecb6abe1bc0fe41eef9b97efec3ceabe1b24b335503ca0276850573f5c8b6d1"
 API_SHA = "0585e652022959a2fa8d000d8088ca95dbc4d04515755a54b21789ec4d7342e4"
 ADMIN_UI_SHA = "9f0e4531dc2f6b28765ff2043150007545902f033990d131391987a20026d83b"
 MIGRATE_SHA = "98acdbaec86cbeb0faa257224a6fd633dbf69140f7db473251516b70e3df8fd0"

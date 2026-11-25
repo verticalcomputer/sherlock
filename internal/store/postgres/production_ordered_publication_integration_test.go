@@ -270,7 +270,7 @@ func runOrderedRecoveryAtomicRestart(t *testing.T, priorOpen, atCapacity bool) {
 			if atCapacity {
 				// Active recovery already committed using the reserve; allow the
 				// next acquisition to read the correction from the source.
-				f.exec(t, `UPDATE production_assessment_enrollments SET retained_events=(SELECT count(*) FROM production_assessment_decisions WHERE enrollment_id=$1) WHERE enrollment_id=$1`, run)
+				f.exec(t, `UPDATE production_assessment_enrollments SET retained_events=(SELECT count(*) FROM production_assessment_decisions WHERE enrollment_id=$1 AND closed_at IS NULL) WHERE enrollment_id=$1`, run)
 			}
 			if err = lockTx.Rollback(ctx); err != nil {
 				t.Fatal(err)

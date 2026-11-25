@@ -15,6 +15,8 @@ type ProductionAssessmentStatus struct {
 	EnabledAt            *time.Time                        `json:"enabled_at,omitempty"`
 	RetainedEvents       int64                             `json:"retained_events"`
 	RetainedBytes        int64                             `json:"retained_bytes"`
+	ActiveEvents         int64                             `json:"active_events"`
+	ActiveBytes          int64                             `json:"active_bytes"`
 	Assets               []ProductionAssessmentAssetStatus `json:"assets"`
 }
 type ProductionAssessmentAssetStatus struct {
@@ -38,7 +40,7 @@ func ReadProductionAssessmentStatus(ctx context.Context, pool *pgxpool.Pool, clu
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	err := pool.QueryRow(ctx, `SELECT enrollment_id,cluster_id,revision,notifications_enabled,notifications_enabled_at,retained_events,retained_bytes FROM production_assessment_enrollments WHERE cluster_id=$1 AND enrollment_id=$2`, cluster, enrollment).Scan(&s.EnrollmentID, &s.ClusterID, &s.Revision, &s.NotificationsEnabled, &s.EnabledAt, &s.RetainedEvents, &s.RetainedBytes)
+	err := pool.QueryRow(ctx, `SELECT enrollment_id,cluster_id,revision,notifications_enabled,notifications_enabled_at,retained_events+closed_events,retained_bytes+closed_bytes,retained_events,retained_bytes FROM production_assessment_enrollments WHERE cluster_id=$1 AND enrollment_id=$2`, cluster, enrollment).Scan(&s.EnrollmentID, &s.ClusterID, &s.Revision, &s.NotificationsEnabled, &s.EnabledAt, &s.RetainedEvents, &s.RetainedBytes, &s.ActiveEvents, &s.ActiveBytes)
 	if err != nil {
 		return s, err
 	}

@@ -1017,8 +1017,8 @@
     {
       "executable": false,
       "path": "docs/ALERT_ASSESSMENT_OPERATOR.md",
-      "sha256": "94ed21ba5e4e90b17b25f62f5421af62dab7ceb90f2acf511ff78d780c0fe8ae",
-      "size": 48347
+      "sha256": "e0f02553ead344cb5332ae63741cc7a3fd701554c4ddbce0ce7741def2d64b07",
+      "size": 48866
     },
     {
       "executable": false,
@@ -5883,8 +5883,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_integration_test.go",
-      "sha256": "881dc244effeeea77e0eafbd7b8a654a2900a7e78d811c4b012237286abcbb82",
-      "size": 23099
+      "sha256": "40971d264b195f852ae700c100869ef030d553ba1f1cb1ef238f85bb04952d23",
+      "size": 26280
     },
     {
       "executable": false,
@@ -5895,8 +5895,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_assessment_status.go",
-      "sha256": "f00d4465e59ab27fe165992fa6afa2cac1e09c0b84ab07781102542d90102bcd",
-      "size": 3067
+      "sha256": "623ebd6c0395a586788624911156ca032854a7bfb479708b823247dc0d972946",
+      "size": 3315
     },
     {
       "executable": false,
@@ -5943,8 +5943,8 @@
     {
       "executable": false,
       "path": "internal/store/postgres/production_ordered_publication_integration_test.go",
-      "sha256": "4fc2aa4d371c8fb6a8db4b8ba6fd3f1498a549413dc5ef537ddf86457e2978fb",
-      "size": 25386
+      "sha256": "a864508625d6d458fcca66158966fa48be20af45f1c5c0aa0c3a8563b83d9938",
+      "size": 25408
     },
     {
       "executable": false,
@@ -7820,6 +7820,18 @@
     },
     {
       "executable": false,
+      "path": "migrations/000094_active_evidence_budget.down.sql",
+      "sha256": "2306823def317cd92628c26fc2598266f530a75c4af5d73591f40c838c6c6ca6",
+      "size": 1170
+    },
+    {
+      "executable": false,
+      "path": "migrations/000094_active_evidence_budget.up.sql",
+      "sha256": "51d96218c9dba134836a679142498a7fe5cabd99aa928d982db0f8ad3acdeec4",
+      "size": 2377
+    },
+    {
+      "executable": false,
       "path": "next.md",
       "sha256": "6691abcbe35cdb88d10131b91970158cb8aa26487e8eba29499f8d5b8ba1dd1a",
       "size": 7098
@@ -8055,7 +8067,7 @@
     {
       "executable": false,
       "path": "scripts/verify-collector-release.py",
-      "sha256": "1fc3ca2771cf4dd6892d372451f4828a81991a771717b527196282f935e12456",
+      "sha256": "3bf0975717b2cd9b87e1b1c0e0b6ad4f6f5d3f69f2e45791a202d33deb5f1f46",
       "size": 16457
     },
     {
