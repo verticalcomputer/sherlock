@@ -5,6 +5,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ import (
 // Use the same retained facts and outbox as the evaluator. All model actions
 // are injected, and no delivery worker or webhook exists in this test.
 func TestProductionWarmingReviewFence(t *testing.T) {
-	for _, mode := range []string{"notify", "watch", "disable during inference", "expired claim", "recover during inference", "dip during inference", "conflict during inference", "coverage during inference", "power gap between scrapes", "stale during inference", "unchanged crossing", "fallback", "missing reference", "rapid", "mixed", "rebound", "urgent during inference", "legacy", "first worsening", "delayed tail", "delayed entry receipt"} {
+	for _, mode := range []string{"notify", "watch", "disable during inference", "expired claim", "recover during inference", "dip during inference", "conflict during inference", "coverage during inference", "power gap between scrapes", "stale during inference", "unchanged crossing", "fallback", "missing reference", "rapid", "mixed", "rebound", "urgent during inference", "legacy", "first worsening", "delayed tail", "delayed entry receipt", "suspected notify", "suspected watch", "suspected error", "suspected cooling during inference"} {
 		t.Run(mode, func(t *testing.T) {
 			f, s, c, now := productionStoreFixture(t)
 			ctx := t.Context()
@@ -35,6 +36,11 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				anchor = now.Add(-70 * time.Second)
 			}
 			d := a.Decision{ID: strings.Repeat("a", 64), CandidateID: strings.Repeat("b", 64), Asset: asset, LogicalAt: now, Kind: "TERMINAL", Action: "INVESTIGATE", Outcome: "gpu_cooling/UNRESOLVED_WARMING", TerminalEndpoint: &a.FeatureRef{SourceAt: now, Value: 80}}
+			suspected := strings.HasPrefix(mode, "suspected ")
+			if suspected {
+				d.Outcome = "gpu_cooling/COOLING_SUSPECTED"
+				d.LogicalAt = anchor
+			}
 			if mode == "first worsening" {
 				d.Kind, d.Outcome, d.Codes = "UPDATE", "", []string{"higher_temperature"}
 				d.LogicalAt, d.TerminalEndpoint = anchor, nil
@@ -56,7 +62,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 			for i := -10; i <= 2; i++ {
 				at := anchor.Add(time.Duration(i) * 15 * time.Second)
 				group := productionStoreSamples(t, c, at)
-				if i < -1 && mode != "rebound" && mode != "missing reference" {
+				if suspected || i < -1 && mode != "rebound" && mode != "missing reference" {
 					for j, fact := range group {
 						var sample a.Sample
 						if err := json.Unmarshal(fact.Body, &sample); err != nil {
@@ -66,6 +72,11 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 							continue
 						}
 						sample.Value = 70
+						if suspected {
+							// An already-qualified suspected OPEN gets a model verdict
+							// even below the unresolved-warming temperature threshold.
+							sample.Value = 55
+						}
 						var err error
 						group[j], err = a.NewFact(c.Assessment.Category, c.Assessment.RunID, asset, "SAMPLE", at, sample)
 						if err != nil {
@@ -85,7 +96,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				facts = append(facts, group...)
 			}
 			entryThrough := len(facts) - 6 // Immutable entry history plus the warm endpoint before crossing.
-			proof, _ := json.Marshal(map[string]any{"facts": facts[:entryThrough]})
+			proof, _ := json.Marshal(map[string]any{"facts": facts[:entryThrough], "decision": map[string]string{"outcome": d.Outcome}})
 			snapshot, _ := json.Marshal(map[string]any{"facts": facts[entryThrough:]})
 			st := cooling.State{Schema: 1, Branches: []string{"SLOW"}, Reference: &a.FeatureRef{SourceAt: anchor.Add(-10 * time.Minute), Value: 70}, EntryEndpoint: &a.FeatureRef{SourceAt: anchor, Value: 80}}
 			switch mode {
@@ -153,8 +164,11 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 			calls := 0
 			infer := func(ctx context.Context, raw json.RawMessage) (string, string, error) {
 				calls++
-				if strings.Contains(string(raw), asset) || !strings.Contains(string(raw), `"reference_c":70`) {
+				if strings.Contains(string(raw), asset) || (!suspected && !strings.Contains(string(raw), `"reference_c":70`)) {
 					t.Fatal("unsafe or incomplete model input")
+				}
+				if suspected && (!strings.Contains(string(raw), `"review_kind":"cooling_suspected"`) || !strings.Contains(string(raw), `"no_enrolled_peers"`)) {
+					t.Fatal("missing suspected decision or explicit peer availability")
 				}
 				if (mode == "notify" || mode == "watch" || mode == "delayed entry receipt") && !strings.Contains(string(raw), `"historical_profile":{"status":"qualified"`) {
 					t.Fatal("profile unavailable in model request")
@@ -173,13 +187,13 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 					if err = tx.Commit(ctx); err != nil {
 						t.Fatal(err)
 					}
-				case "dip during inference", "unchanged crossing", "delayed tail":
+				case "dip during inference", "suspected cooling during inference", "unchanged crossing", "delayed tail":
 					source := anchor.Add(45 * time.Second)
 					if mode == "unchanged crossing" {
 						source = time.Now().UTC()
 					}
 					fresh := productionStoreSamples(t, c, source)
-					if mode == "dip during inference" {
+					if mode == "dip during inference" || mode == "suspected cooling during inference" {
 						for i, fact := range fresh {
 							var sample a.Sample
 							if err := json.Unmarshal(fact.Body, &sample); err != nil {
@@ -218,7 +232,9 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				case "stale during inference":
 					// The final source endpoint was already 40s old when claimed.
 					time.Sleep(5200 * time.Millisecond)
-				case "watch":
+				case "suspected error":
+					return "", "", errors.New("injected provider error")
+				case "watch", "suspected watch":
 					return "WATCH", "Cooling", nil
 				case "disable during inference":
 					if _, err := SetProductionAssessmentNotifications(ctx, s.pool, c.Assessment.ClusterID, c.Assessment.RunID, s.config.Revision, false, "test"); err != nil {
@@ -231,8 +247,8 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				}
 				return "NOTIFY", "Sustained increase", nil
 			}
-			if err = s.ProcessWarmingTriage(ctx, infer); err != nil {
-				t.Fatal(err)
+			if err = s.ProcessWarmingTriage(ctx, infer); (err != nil) != (mode == "suspected error") {
+				t.Fatalf("unexpected worker result %v", err)
 			}
 			expectedCalls := 1
 			if mode == "missing reference" || mode == "rebound" {
@@ -248,6 +264,10 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 			if mode == "notify" || mode == "unchanged crossing" || mode == "fallback" || mode == "rapid" || mode == "mixed" || mode == "legacy" || mode == "first worsening" || mode == "delayed entry receipt" {
 				if status != "PENDING" || !strings.Contains(message, "70 → 80") || !strings.Contains(message, "Sustained increase") {
 					t.Fatalf("unexpected notification %s %q", status, message)
+				}
+			} else if mode == "suspected notify" {
+				if status != "PENDING" || !strings.Contains(message, "Reviewed temperature: 55 °C") || strings.Contains(message, "above the confirmation thresholds") {
+					t.Fatalf("suspected notification %q %q", status, message)
 				}
 			} else if status != "DISABLED" {
 				t.Fatalf("unexpected delivery %s", status)
@@ -280,10 +300,15 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 					t.Fatalf("held rebound audit %s: %v", gate, err)
 				}
 			}
+			if mode == "suspected watch" || mode == "suspected error" {
+				// Even after the scheduler revisits this held OPEN, the same
+				// evidence cannot be presented as a fresh model reassessment.
+				f.exec(t, `UPDATE production_assessment_decisions SET warming_next_at=clock_timestamp() WHERE event_id=$1`, d.ID)
+			}
 			if err = s.ProcessWarmingTriage(ctx, infer); err != nil || calls != expectedCalls {
 				t.Fatalf("duplicate call %d %v", calls, err)
 			}
-			if mode == "rebound" || mode == "urgent during inference" || mode == "notify" {
+			if mode == "rebound" || mode == "urgent during inference" || mode == "notify" || suspected {
 				// Exercise the follow-up path using the same predicate and publisher
 				// as the assessment pass. A recovery must follow the original intent.
 				tx, err := beginProductionAssessmentTx(ctx, s.pool)
@@ -292,7 +317,7 @@ func TestProductionWarmingReviewFence(t *testing.T) {
 				}
 				defer rollbackMonitoringTx(tx)
 				held, err := warmingOpenHeld(ctx, tx, c.Assessment.RunID, d.CandidateID)
-				if err != nil || held != (mode != "notify") {
+				if err != nil || held != (mode != "notify" && mode != "suspected notify") {
 					t.Fatalf("follow-up hold %t: %v", held, err)
 				}
 				recoveryID := strings.Repeat("9", 64)

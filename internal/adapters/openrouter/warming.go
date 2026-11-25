@@ -34,8 +34,18 @@ func (p *Provider) TriageWarming(ctx context.Context, state json.RawMessage) (st
 	if len(state) == 0 || len(state) > sizeLimit || state[0] != '{' || !json.Valid(state) {
 		return "", "", errors.New("invalid warming evidence")
 	}
+	instructions := warmingInstructions
+	var kind struct {
+		ReviewKind string `json:"review_kind"`
+	}
+	if err := json.Unmarshal(state, &kind); err != nil {
+		return "", "", errors.New("invalid warming evidence")
+	}
+	if kind.ReviewKind == "cooling_suspected" {
+		instructions += suspectedInstructions
+	}
 	body, err := json.Marshal(map[string]any{"model": model, "state": state, "questions": map[string]any{"action": map[string]any{
-		"type": "choice", "instructions": warmingInstructions, "criteria": map[string]string{"WATCH": "Continue observation and reassess.", "NOTIFY": "Notify the hardware team now for investigation."},
+		"type": "choice", "instructions": instructions, "criteria": map[string]string{"WATCH": "Continue observation and reassess.", "NOTIFY": "Notify the hardware team now for investigation."},
 	}}})
 	if err != nil {
 		return "", "", err

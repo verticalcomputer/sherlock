@@ -24,6 +24,10 @@ type WarmingPlateau struct {
 // Rows are [seconds since the initial crossing, degrees C, watts, percent];
 // missing measurements remain JSON null, including unavailable utilization.
 type WarmingContext struct {
+	OpenPeerRows        [][4]*float64            `json:"-"`
+	ReviewKind          string                   `json:"review_kind,omitempty"`
+	ReviewPowerW        *float64                 `json:"open_power_w,omitempty"`
+	Peers               *PeerContext             `json:"same_node_peers,omitempty"`
 	ComparableLoad      *WarmingReference        `json:"comparable_load,omitempty"`
 	HistoricalProfile   *HistoricalProfile       `json:"historical_profile,omitempty"`
 	EndpointC           float64                  `json:"-"`

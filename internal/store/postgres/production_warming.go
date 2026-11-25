@@ -18,15 +18,16 @@ import (
 func queueWarming(ctx context.Context, tx pgx.Tx, d a.Decision, initial a.Payload, entered time.Time, revision int64) (bool, error) {
 	hostFallback := d.DecisionSource == "HOST_FALLBACK" && d.HostCause == "DEADLINE_FALLBACK" && d.Outcome == ""
 	unresolved := d.Kind == "TERMINAL" && (hostFallback || d.Outcome == cooling.CategoryID+"/UNRESOLVED_WARMING")
+	suspected := d.Kind == "TERMINAL" && d.Outcome == cooling.CategoryID+"/COOLING_SUSPECTED"
 	firstWorsening := d.Kind == "UPDATE" && slices.Contains(d.Codes, "higher_temperature")
-	if d.Action != "INVESTIGATE" || len(d.UrgentOccurrences) != 0 || (!unresolved && !firstWorsening) {
+	if d.Action != "INVESTIGATE" || len(d.UrgentOccurrences) != 0 || (!unresolved && !suspected && !firstWorsening) {
 		return false, nil
 	}
 	var anchor *time.Time
-	if firstWorsening {
-		// UPDATE carries no terminal endpoint. The engine's logical boundary
-		// is when its proof first established actionable worsening. Use that
-		// proof and time even if the original benign entry is long past.
+	if suspected || firstWorsening {
+		// This decision is the first actionable proof (including an UPDATE
+		// after a benign terminal). Freeze the review and load comparison
+		// at the decision's logical time.
 		anchor = &d.LogicalAt
 		entered = d.LogicalAt
 	} else {
@@ -64,7 +65,7 @@ type warmingWork struct {
 	referenceC                            float64
 	last                                  *time.Time
 	attempt                               int64
-	comparable                            bool
+	comparable, suspected                 bool
 	evidence, snapshot, profile           []byte
 	entryIDs                              map[string]struct{}
 	entrySamples                          []cooling.WarmingSample
@@ -75,11 +76,15 @@ type warmingWork struct {
 // transaction. It is the only source allowed to establish the entry baseline.
 func (w *warmingWork) prepareEntry() error {
 	var ledger struct {
-		Facts []a.Fact `json:"facts"`
+		Facts    []a.Fact `json:"facts"`
+		Decision struct {
+			Outcome string `json:"outcome"`
+		} `json:"decision"`
 	}
 	if err := json.Unmarshal(w.evidence, &ledger); err != nil {
 		return err
 	}
+	w.suspected = ledger.Decision.Outcome == cooling.CategoryID+"/COOLING_SUSPECTED"
 	w.entryIDs = make(map[string]struct{}, len(ledger.Facts))
 	for _, f := range ledger.Facts {
 		if f.Asset == w.asset && f.ID != "" {
@@ -108,6 +113,10 @@ func (w warmingWork) confirmation() (cooling.WarmingContext, bool, error) {
 	var last time.Time
 	if w.last != nil {
 		last = *w.last
+	}
+	if w.suspected {
+		payload, ok := cooling.SuspectedWarmingContextFromEvidence(w.entrySamples, w.entryNegatives, samples, negatives, w.anchor, w.now, last)
+		return payload, ok, nil
 	}
 	if w.comparable {
 		payload, ok := cooling.ConfirmedComparableWarmingFromEvidence(w.entrySamples, w.entryNegatives, samples, w.anchor, w.knownAt, w.now, last, negatives...)
@@ -164,7 +173,7 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
 	if err != nil {
 		return err
 	}
-	if w.comparable && assessment.ComparableLoad != nil {
+	if w.comparable && (assessment.ComparableLoad != nil || w.suspected && assessment.ReviewPowerW != nil) {
 		if len(w.profile) > 0 {
 			if err := json.Unmarshal(w.profile, &assessment.HistoricalProfile); err != nil {
 				return err
@@ -197,6 +206,13 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
  AND warming_anchor>=clock_timestamp()-interval '10 minutes 45 seconds'`, w.id, w.attempt, gate)
 		return err
 	}
+	if w.suspected {
+		// Peers are evidence for the OPEN. Retried model calls can include
+		// newer target rows but cannot backfill the original peer comparison.
+		atOpen := assessment
+		atOpen.Rows = assessment.OpenPeerRows
+		assessment.Peers = s.suspectedPeers(ctx, w.asset, w.at, atOpen)
+	}
 	body, err := json.Marshal(assessment)
 	if err != nil {
 		return err
@@ -208,6 +224,12 @@ func (s *ProductionAssessmentStore) ProcessWarmingTriage(ctx context.Context, in
 		action, reason = "ERROR", ""
 		if modelErr == nil {
 			modelErr = errors.New("invalid warming assessment")
+		}
+	}
+	if w.suspected && action != "ERROR" {
+		reason = "The decision model selected continued observation."
+		if action == "NOTIFY" {
+			reason = "The decision model selected hardware investigation."
 		}
 	}
 	return errors.Join(modelErr, s.finishWarming(ctx, w, assessment, action, reason))
@@ -223,6 +245,12 @@ func warmingGate(w warmingWork, c cooling.WarmingContext, confirmed bool) ([]byt
 	if confirmed {
 		status = "confirmed"
 	}
+	if w.suspected {
+		status = "awaiting_fresh_evidence"
+		if confirmed {
+			status = "suspected_cooling_review"
+		}
+	}
 	var since *time.Time
 	if confirmed {
 		since = &c.QualifiedSinceAt
@@ -234,7 +262,9 @@ func warmingGate(w warmingWork, c cooling.WarmingContext, confirmed bool) ([]byt
 		EndpointC      float64                    `json:"endpoint_c,omitempty"`
 		Comparable     *cooling.WarmingReference  `json:"comparable_load,omitempty"`
 		Historical     *cooling.HistoricalProfile `json:"historical_profile,omitempty"`
-	}{since, status, w.now, c.EndpointC, c.ComparableLoad, c.HistoricalProfile})
+		Peers          *cooling.PeerContext       `json:"peers,omitempty"`
+		ReviewPowerW   *float64                   `json:"review_power_w,omitempty"`
+	}{since, status, w.now, c.EndpointC, c.ComparableLoad, c.HistoricalProfile, c.Peers, c.ReviewPowerW})
 }
 
 func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warmingWork, c cooling.WarmingContext, action, reason string) error {
@@ -271,7 +301,10 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 		if err != nil {
 			return err
 		}
-		if !ok || w.now.Sub(c.EndpointAt) > 45*time.Second || current.EndpointAt.Before(c.EndpointAt) || !current.QualifiedSinceAt.Equal(c.QualifiedSinceAt) || !reviewedRowsUnchanged(c, current) {
+		// A suspected OPEN has no fixed crossing threshold. Reassess when
+		// subsequent telemetry materially cooled while inference was in flight.
+		cooled := w.suspected && c.EndpointC-current.EndpointC > cooling.DefaultPolicy().ReferenceToleranceC
+		if !ok || cooled || w.now.Sub(c.EndpointAt) > 45*time.Second || current.EndpointAt.Before(c.EndpointAt) || !current.QualifiedSinceAt.Equal(c.QualifiedSinceAt) || !reviewedRowsUnchanged(c, current) {
 			action = "DISCARDED"
 		}
 	}
@@ -297,12 +330,29 @@ func (s *ProductionAssessmentStore) finishWarming(ctx context.Context, w warming
 			return err
 		}
 		summary := fmt.Sprintf("Investigate sustained GPU warming\nTemperature: %g → %g °C\nConfirmed at: %s UTC\nAssessment: %s", c.ReferenceC, c.EndpointC, c.EndpointAt.UTC().Format(time.DateTime), reason)
+		if w.suspected {
+			summary = fmt.Sprintf("Investigate GPU cooling\nReviewed temperature: %g °C at %s UTC\nAssessment: %s", c.EndpointC, c.EndpointAt.UTC().Format(time.DateTime), reason)
+		}
 		if r := c.ComparableLoad; r != nil {
-			summary += fmt.Sprintf("\nComparable load: %g W, %g °C from %d readings over %.0f s\nRise: +%g °C, confirmed for %.0f s", r.PowerW, r.MedianC, r.Samples, r.Through-r.Start, c.EndpointC-r.MedianC, c.EndpointAt.Sub(c.QualifiedSinceAt).Seconds())
+			summary += fmt.Sprintf("\nComparable load: %g W, %g °C from %d readings over %.0f s", r.PowerW, r.MedianC, r.Samples, r.Through-r.Start)
+			if !w.suspected {
+				summary += fmt.Sprintf("\nRise: +%g °C, confirmed for %.0f s", c.EndpointC-r.MedianC, c.EndpointAt.Sub(c.QualifiedSinceAt).Seconds())
+			}
+		}
+		if c.ComparableLoad != nil || w.suspected {
 			if h := c.HistoricalProfile; h != nil && h.Status == "qualified" && h.MedianC != nil && h.P95C != nil {
 				summary += fmt.Sprintf("\nHistorical profile near %d W: median %g °C, 95th percentile %g °C (%d days, %d periods)", h.CenterW, *h.MedianC, *h.P95C, h.Days, h.Periods)
 			} else {
 				summary += "\nHistorical profile: insufficient or unavailable history"
+			}
+		}
+		if peers := c.Peers; peers != nil && peers.Status == "available" {
+			for i := len(peers.Rows) - 1; i >= 0; i-- {
+				row := peers.Rows[i]
+				if row.Peers >= 2 {
+					summary += fmt.Sprintf("\nAt OPEN: GPU %g °C near %.0f W, %d same-load peers, median %g °C, hottest %g °C", row.TargetC, row.TargetW, row.Peers, row.MedianC, row.MaxC)
+					break
+				}
 			}
 		}
 		message, err := productionMessage(o, "OPEN", c.EndpointAt, summary)
@@ -338,6 +388,9 @@ func reviewedRowsUnchanged(review, current cooling.WarmingContext) bool {
 			gap.Through = min(gap.Through, review.Now)
 			reviewedGaps = append(reviewedGaps, gap)
 		}
+	}
+	if (review.ReviewPowerW == nil) != (current.ReviewPowerW == nil) || review.ReviewPowerW != nil && *review.ReviewPowerW != *current.ReviewPowerW {
+		return false
 	}
 	if (review.ComparableLoad == nil) != (current.ComparableLoad == nil) || review.ComparableLoad != nil && *review.ComparableLoad != *current.ComparableLoad {
 		return false
