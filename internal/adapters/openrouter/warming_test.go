@@ -75,3 +75,26 @@ func TestRedirectCannotForwardCredential(t *testing.T) {
 		t.Fatal("redirect must fail closed")
 	}
 }
+
+func TestSuspectedReviewUsesPeerInstructions(t *testing.T) {
+	p, err := New("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.client.Transport = transportFunc(func(r *http.Request) (*http.Response, error) {
+		var req struct {
+			Questions map[string]struct{ Instructions string }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		if req.Questions["action"].Instructions != warmingInstructions+suspectedInstructions {
+			t.Fatal("missing suspected cooling instructions")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"model":"liquid/d1.2-ultra","answers":{"action":{"type":"choice","choice":"WATCH"}}}`))}, nil
+	})
+	got, _, err := p.TriageWarming(context.Background(), []byte(`{"review_kind":"cooling_suspected","rows":[]}`))
+	if err != nil || got != "WATCH" {
+		t.Fatalf("choice: %s, %v", got, err)
+	}
+}

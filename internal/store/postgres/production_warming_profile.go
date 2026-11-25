@@ -27,10 +27,18 @@ func (s *ProductionAssessmentStore) UseDatabaseWarmingProfiles() {
 
 func (s *ProductionAssessmentStore) databaseWarmingProfile(ctx context.Context, asset string, at time.Time, c cooling.WarmingContext) *cooling.HistoricalProfile {
 	out := &cooling.HistoricalProfile{Status: "unavailable"}
-	if c.ComparableLoad == nil || at.IsZero() {
+	if at.IsZero() {
 		return out
 	}
-	w := c.ComparableLoad.PowerW
+	var w float64
+	switch {
+	case c.ReviewPowerW != nil:
+		w = *c.ReviewPowerW
+	case c.ComparableLoad != nil:
+		w = c.ComparableLoad.PowerW
+	default:
+		return out
+	}
 	if math.IsNaN(w) || math.IsInf(w, 0) || w <= 0 || w > 2000 {
 		return out
 	}

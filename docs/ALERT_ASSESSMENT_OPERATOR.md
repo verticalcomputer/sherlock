@@ -454,7 +454,7 @@ decision remains eligible for delivery. Enable the scoped Slack workers only aft
 pass. Keep the schema and receipt history in place if the evaluator needs to
 be stopped or the application rolled back.
 
-### Optional OpenRouter decision review for unresolved warming
+### Optional OpenRouter decision review for nonurgent cooling
 
 Apply migrations through 93 before running this evaluator. Set `warming_triage`
 to `true` in the outer production enrollment at a new revision to select this
@@ -464,6 +464,17 @@ The option applies to newly opened occurrences. Previously admitted notices
 and follow-ups on existing occurrences retain their original delivery policy.
 Check outstanding intents before enabling the new revision. Older enrollments
 default to their existing routing behavior.
+
+For a newly admitted nonurgent `COOLING_SUSPECTED` OPEN, the worker requests
+a decision as soon as it has fresh target temperature evidence. This includes
+lower-temperature OPENs. The request includes the target's recent temperature,
+power and available utilization, earlier readings at comparable power, and
+available historical and same-node peer comparisons at OPEN. Missing evidence
+is explicit. The model receives relative times and numeric summaries. Each
+peer contributes at most one reading per comparison. A WATCH holds delivery
+and permits reassessment on fresh readings roughly once per minute during the
+bounded review window. A valid, rechecked NOTIFY releases the existing notice.
+Provider errors hold delivery and the independent urgent route stays active.
 
 For newly admitted nonurgent unresolved warming, all entry branches use the same
 confirmation. Sherlock retains the incident while the hardware notice waits
